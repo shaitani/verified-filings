@@ -1,0 +1,142 @@
+[
+  {
+    "cik": "CIK0001652044",
+    "ticker": "GOOGL",
+    "company_name": "Alphabet Inc.",
+    "sic": "7370",
+    "sic_description": "Services-Computer Programming, Data Processing, Etc."
+  },
+  {
+    "cik": "CIK0000320193",
+    "ticker": "AAPL",
+    "company_name": "Apple Inc.",
+    "sic": "3571",
+    "sic_description": "Electronic Computers"
+  },
+  {
+    "cik": "CIK0001326801",
+    "ticker": "META",
+    "company_name": "Meta Platforms, Inc.",
+    "sic": "7370",
+    "sic_description": "Services-Computer Programming, Data Processing, Etc."
+  },
+  {
+    "cik": "CIK0000789019",
+    "ticker": "MSFT",
+    "company_name": "MICROSOFT CORP",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0001045810",
+    "ticker": "NVDA",
+    "company_name": "NVIDIA CORP",
+    "sic": "3674",
+    "sic_description": "Semiconductors & Related Devices"
+  },
+  {
+    "cik": "CIK0001318605",
+    "ticker": "TSLA",
+    "company_name": "Tesla, Inc.",
+    "sic": "3711",
+    "sic_description": "Motor Vehicles & Passenger Car Bodies"
+  },
+  {
+    "cik": "CIK0001018724",
+    "ticker": "AMZN",
+    "company_name": "AMAZON COM INC",
+    "sic": "5961",
+    "sic_description": "Retail-Catalog & Mail-Order Houses"
+  },
+  {
+    "cik": "CIK0001283699",
+    "ticker": "TMUS",
+    "company_name": "T-Mobile US, Inc.",
+    "sic": "4812",
+    "sic_description": "Radiotelephone Communications"
+  },
+  {
+    "cik": "CIK0000723125",
+    "ticker": "MU",
+    "company_name": "MICRON TECHNOLOGY INC",
+    "sic": "3674",
+    "sic_description": "Semiconductors & Related Devices"
+  },
+  {
+    "cik": "CIK0000002488",
+    "ticker": "AMD",
+    "company_name": "ADVANCED MICRO DEVICES INC",
+    "sic": "3674",
+    "sic_description": "Semiconductors & Related Devices"
+  },
+  {
+    "cik": "CIK0000050863",
+    "ticker": "INTC",
+    "company_name": "INTEL CORP",
+    "sic": "3674",
+    "sic_description": "Semiconductors & Related Devices"
+  },
+  {
+    "cik": "CIK0000804328",
+    "ticker": "QCOM",
+    "company_name": "QUALCOMM INC/DE",
+    "sic": "3663",
+    "sic_description": "Radio & Tv Broadcasting & Communications Equipment"
+  },
+  {
+    "cik": "CIK0001122904",
+    "ticker": "NTGR",
+    "company_name": "NETGEAR, INC.",
+    "sic": "3576",
+    "sic_description": "Computer Communications Equipment"
+  },
+  {
+    "cik": "CIK0001341439",
+    "ticker": "ORCL",
+    "company_name": "ORACLE CORP",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0000070858",
+    "ticker": "BAC",
+    "company_name": "BANK OF AMERICA CORP /DE/",
+    "sic": "6021",
+    "sic_description": "National Commercial Banks"
+  },
+  {
+    "cik": "CIK0000093410",
+    "ticker": "CVX",
+    "company_name": "CHEVRON CORP",
+    "sic": "2911",
+    "sic_description": "Petroleum Refining"
+  },
+  {
+    "cik": "CIK0000200406",
+    "ticker": "JNJ",
+    "company_name": "JOHNSON & JOHNSON",
+    "sic": "2834",
+    "sic_description": "Pharmaceutical Preparations"
+  },
+  {
+    "cik": "CIK0000909832",
+    "ticker": "COST",
+    "company_name": "COSTCO WHOLESALE CORP /NEW",
+    "sic": "5331",
+    "sic_description": "Retail-Variety Stores"
+  },
+  {
+    "cik": "CIK0000019617",
+    "ticker": "JPM",
+    "company_name": "JPMORGAN CHASE & CO",
+    "sic": "6021",
+    "sic_description": "National Commercial Banks"
+  },
+  {
+    "cik": "CIK0000731766",
+    "ticker": "UNH",
+    "company_name": "UNITEDHEALTH GROUP INC",
+    "sic": "6324",
+    "sic_description": "Hospital & Medical Service Plans"
+  }
+]

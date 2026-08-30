@@ -1,0 +1,47 @@
+[project]
+name = "verified-filings"
+version = "0.1.0"
+description = "SEC filing retrieval and claim verification CLI"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.27",
+    "sqlalchemy>=2.0.52",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+sec-retriever = "app.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# Pinned explicitly so the effective rule set doesn't drift when ruff
+# changes its defaults between releases.
+#   E, F  - pyflakes + pycodestyle (ruff's historical default)
+#   I     - import sorting (isort)
+#   UP    - pyupgrade: modernize syntax to the target-version floor (py313)
+#   B     - flake8-bugbear: likely-bug patterns
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# Fold "import x as y" into the same "from x import ..." block instead of
+# emitting a second statement for the renamed import.
+combine-as-imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

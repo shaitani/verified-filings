@@ -1,0 +1,278 @@
+{
+  "source": "SEC company_tickers.json",
+  "corpus_list": "Company Corpus List.txt",
+  "resolved_count": 20,
+  "excluded_count": 0,
+  "companies": [
+    {
+      "input_name": "Google",
+      "title": "Alphabet Inc.",
+      "ticker": "GOOGL",
+      "cik": 1652044,
+      "cik_padded": "0001652044",
+      "all_tickers": [
+        "GOOG",
+        "GOOGL",
+        "GOOGM",
+        "GOOGN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001652044.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001652044.json"
+    },
+    {
+      "input_name": "Apple",
+      "title": "Apple Inc.",
+      "ticker": "AAPL",
+      "cik": 320193,
+      "cik_padded": "0000320193",
+      "all_tickers": [
+        "AAPL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000320193.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"
+    },
+    {
+      "input_name": "Facebook",
+      "title": "Meta Platforms, Inc.",
+      "ticker": "META",
+      "cik": 1326801,
+      "cik_padded": "0001326801",
+      "all_tickers": [
+        "META"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001326801.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001326801.json"
+    },
+    {
+      "input_name": "Microsoft",
+      "title": "MICROSOFT CORP",
+      "ticker": "MSFT",
+      "cik": 789019,
+      "cik_padded": "0000789019",
+      "all_tickers": [
+        "MSFT"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000789019.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"
+    },
+    {
+      "input_name": "Nvidia",
+      "title": "NVIDIA CORP",
+      "ticker": "NVDA",
+      "cik": 1045810,
+      "cik_padded": "0001045810",
+      "all_tickers": [
+        "NVDA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001045810.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001045810.json"
+    },
+    {
+      "input_name": "Tesla",
+      "title": "Tesla, Inc.",
+      "ticker": "TSLA",
+      "cik": 1318605,
+      "cik_padded": "0001318605",
+      "all_tickers": [
+        "TSLA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001318605.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001318605.json"
+    },
+    {
+      "input_name": "Amazon",
+      "title": "AMAZON COM INC",
+      "ticker": "AMZN",
+      "cik": 1018724,
+      "cik_padded": "0001018724",
+      "all_tickers": [
+        "AMZN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001018724.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001018724.json"
+    },
+    {
+      "input_name": "T-Mobile",
+      "title": "T-Mobile US, Inc.",
+      "ticker": "TMUS",
+      "cik": 1283699,
+      "cik_padded": "0001283699",
+      "all_tickers": [
+        "TMUS",
+        "TMUSI",
+        "TMUSL",
+        "TMUSZ"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001283699.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001283699.json"
+    },
+    {
+      "input_name": "Micron",
+      "title": "MICRON TECHNOLOGY INC",
+      "ticker": "MU",
+      "cik": 723125,
+      "cik_padded": "0000723125",
+      "all_tickers": [
+        "MU"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000723125.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000723125.json"
+    },
+    {
+      "input_name": "AMD",
+      "title": "ADVANCED MICRO DEVICES INC",
+      "ticker": "AMD",
+      "cik": 2488,
+      "cik_padded": "0000002488",
+      "all_tickers": [
+        "AMD"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000002488.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000002488.json"
+    },
+    {
+      "input_name": "Intel",
+      "title": "INTEL CORP",
+      "ticker": "INTC",
+      "cik": 50863,
+      "cik_padded": "0000050863",
+      "all_tickers": [
+        "INTC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000050863.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000050863.json"
+    },
+    {
+      "input_name": "QUALCOMM Inc (QCOM)",
+      "title": "QUALCOMM INC/DE",
+      "ticker": "QCOM",
+      "cik": 804328,
+      "cik_padded": "0000804328",
+      "all_tickers": [
+        "QCOM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000804328.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000804328.json",
+      "substituted_for": "Samsung",
+      "substitution_reason": "Samsung Electronics is listed on the Korea Exchange and is not an SEC registrant \u2014 no CIK, no EDGAR filings, no XBRL facts. QCOM keeps the semiconductor slot with a full 10-K/10-Q history."
+    },
+    {
+      "input_name": "Netgear",
+      "title": "NETGEAR, INC.",
+      "ticker": "NTGR",
+      "cik": 1122904,
+      "cik_padded": "0001122904",
+      "all_tickers": [
+        "NTGR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001122904.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001122904.json"
+    },
+    {
+      "input_name": "Oracle",
+      "title": "ORACLE CORP",
+      "ticker": "ORCL",
+      "cik": 1341439,
+      "cik_padded": "0001341439",
+      "all_tickers": [
+        "ORCL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001341439.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001341439.json"
+    },
+    {
+      "input_name": "Bank Of America",
+      "title": "BANK OF AMERICA CORP /DE/",
+      "ticker": "BAC",
+      "cik": 70858,
+      "cik_padded": "0000070858",
+      "all_tickers": [
+        "BAC",
+        "BACRP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000070858.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000070858.json"
+    },
+    {
+      "input_name": "Chevron Corp (CVX)",
+      "title": "CHEVRON CORP",
+      "ticker": "CVX",
+      "cik": 93410,
+      "cik_padded": "0000093410",
+      "all_tickers": [
+        "CVX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000093410.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000093410.json",
+      "substituted_for": "Exxon Mobile",
+      "substitution_reason": "XOM now resolves to CIK 2115436 (ExxonMobil Holdings Corp), a newer holding-company entity; the historical filings sit under CIK 34088, which is absent from this ticker file. CVX is an integrated US supermajor on one stable CIK with a clean 10-K history.",
+      "note": "Energy. Expect large impairment and asset-retirement-obligation line items, and revenue split across sales vs equity-affiliate income. Good stress test for CONCEPT_MAP fallback ordering."
+    },
+    {
+      "input_name": "Johnson & Johnson",
+      "title": "JOHNSON & JOHNSON",
+      "ticker": "JNJ",
+      "cik": 200406,
+      "cik_padded": "0000200406",
+      "all_tickers": [
+        "JNJ"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000200406.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000200406.json"
+    },
+    {
+      "input_name": "Costco",
+      "title": "COSTCO WHOLESALE CORP /NEW",
+      "ticker": "COST",
+      "cik": 909832,
+      "cik_padded": "0000909832",
+      "all_tickers": [
+        "COST"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000909832.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000909832.json"
+    },
+    {
+      "input_name": "JPMorgan Chase & Co (JPM)",
+      "title": "JPMORGAN CHASE & CO",
+      "ticker": "JPM",
+      "cik": 19617,
+      "cik_padded": "0000019617",
+      "all_tickers": [
+        "JPM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000019617.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000019617.json",
+      "substituted_for": "HSBC Holdings",
+      "substitution_reason": "HSBC is a foreign private issuer: files 20-F, not 10-K/10-Q, and tags XBRL under IFRS rather than us-gaap. JPM is a US bank with the same sector role and us-gaap tagging.",
+      "note": "Bank. Income statement has no revenue/COGS/gross-margin structure \u2014 expect net interest income and noninterest revenue instead. Your CONCEPT_MAP needs financial-sector entries (same is true for BAC)."
+    },
+    {
+      "input_name": "United Health",
+      "title": "UNITEDHEALTH GROUP INC",
+      "ticker": "UNH",
+      "cik": 731766,
+      "cik_padded": "0000731766",
+      "all_tickers": [
+        "UNH"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000731766.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000731766.json"
+    }
+  ],
+  "excluded": [],
+  "substitutions": {
+    "Samsung": {
+      "replaced_with": "QUALCOMM Inc (QCOM)",
+      "reason": "Samsung Electronics is listed on the Korea Exchange and is not an SEC registrant \u2014 no CIK, no EDGAR filings, no XBRL facts. QCOM keeps the semiconductor slot with a full 10-K/10-Q history."
+    },
+    "Exxon Mobile": {
+      "replaced_with": "Chevron Corp (CVX)",
+      "reason": "XOM now resolves to CIK 2115436 (ExxonMobil Holdings Corp), a newer holding-company entity; the historical filings sit under CIK 34088, which is absent from this ticker file. CVX is an integrated US supermajor on one stable CIK with a clean 10-K history."
+    },
+    "HSBC Holdings": {
+      "replaced_with": "JPMorgan Chase & Co (JPM)",
+      "reason": "HSBC is a foreign private issuer: files 20-F, not 10-K/10-Q, and tags XBRL under IFRS rather than us-gaap. JPM is a US bank with the same sector role and us-gaap tagging."
+    }
+  }
+}

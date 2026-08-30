@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.cache/
+/data/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Office temp/lock files
+~$*
