@@ -1,5 +1,8 @@
 """SQLAlchemy 2.0 ORM models for the curated SEC XBRL data (PostgreSQL target).
 
+Full design rationale, source-field -> column reference, and guidance for the
+not-yet-written Pydantic schemas: see ``app/db/DESIGN.md``.
+
 Source of the data
 ------------------
 One row per fact in ``data/xbrl/<TICKER>.json`` (written by
@@ -20,16 +23,25 @@ All tables and the three enum types live in a dedicated PostgreSQL schema
 called ``xbrl`` (see ``Base.metadata`` below), not ``public``. The schema is
 created automatically on ``metadata.create_all`` via a ``before_create`` DDL
 hook, guarded to PostgreSQL. ``DROP SCHEMA xbrl CASCADE`` wipes everything for
-a clean re-ingest.
+a clean reload.
 
-Ingest-time unit filter -- IMPORTANT
-------------------------------------
+Two steps, two vocabularies
+---------------------------
+* **retrieval** -- SEC cloud -> ``data/xbrl/<TICKER>.json`` on disk. Code in
+  ``app/ingest/`` (sec-retriever.md's name for this layer). Already built.
+  The file carries its own ``retrieved`` timestamp.
+* **load** -- ``data/xbrl/*.json`` -> rows in these tables. Code in
+  ``app/db/loader.py`` (not written yet). Recorded per run in ``LoadRun``.
+This module says "load", never "ingest", for the second step.
+
+Load-time unit filter -- IMPORTANT
+----------------------------------
 ``Fact`` rows are only created when the XBRL unit is in ``ALLOWED_UNITS``.
 Every other unit seen in the source (custom units such as ``warehouse``,
 ``Plaintiff``, ``judicialCase``, ``MWh``, segment counts, ...) tags a
 disclosure count, not financial-statement data, and is deliberately dropped.
 Each load records the allow-list it applied and how many facts it skipped in
-``IngestRun`` (``units_allowlist`` / ``facts_dropped_unit``), so a later
+``LoadRun`` (``units_allowlist`` / ``facts_dropped_unit``), so a later
 "why is this value missing" question is answerable. Widen ``ALLOWED_UNITS``
 to bring more in. This is a load-time policy, not a schema constraint: the
 column itself is a plain string.
@@ -56,17 +68,12 @@ Key choices (see the module conversation for the full rationale)
   via ``primary_key=True``. Column string lengths are bounded from observed
   data (see per-column comments); genuinely long prose is ``Text``.
 
-Future work (not in this folder yet)
-------------------------------------
-* Alembic lives at the *project root*: ``alembic.ini`` + ``migrations/``
-  (``env.py`` imports ``app.db.Base`` for ``target_metadata``). Not under
-  ``app/``.
-* Pydantic schemas go in ``app/db/schemas.py`` -- a single module until it
-  outgrows a file -- for validating the source ``data/xbrl/*.json`` on ingest
-  and shaping model data. Only introduce ``app/api/`` if a real HTTP API is
-  added, and keep those request/response DTOs there, out of ``db/``.
-* Engine + ``sessionmaker`` wiring goes in ``app/db/session.py`` alongside the
-  Alembic work.
+Future work (not written yet) -- see ``app/db/DESIGN.md`` section 5
+-----------------------------------------------------------------
+* Pydantic schemas -> ``app/schemas/`` (per sec-retriever.md section 3).
+* The load step -> ``app/db/loader.py``.
+* Alembic -> ``app/db/migrations/`` (scripts) + ``alembic.ini`` at repo root.
+* Engine + ``sessionmaker`` -> ``app/db/session.py``.
 """
 
 from __future__ import annotations
@@ -98,11 +105,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # --------------------------------------------------------------------------- #
-# Ingest-time policy constant (kept beside the schema it filters into)
+# Load-time policy constant (kept beside the schema it filters into)
 # --------------------------------------------------------------------------- #
 #: XBRL units a ``Fact`` row is allowed to have. Everything else is a
-#: non-financial disclosure count and is dropped at ingest -- the drop is
-#: recorded per run in ``IngestRun``. Widen this set to capture more.
+#: non-financial disclosure count and is dropped during the load step -- the
+#: drop is recorded per run in ``LoadRun``. Widen this set to capture more.
 ALLOWED_UNITS: frozenset[str] = frozenset(
     {"USD", "shares", "pure", "USD/shares", "Rate", "EUR"}
 )
@@ -184,7 +191,7 @@ class Company(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    ingest_runs: Mapped[list[IngestRun]] = relationship(
+    load_runs: Mapped[list[LoadRun]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -291,8 +298,8 @@ class Fact(Base):
         nullable=False,
     )
 
-    #: Plain string (no lookup table). Constrained to ``ALLOWED_UNITS`` at
-    #: ingest, not in the schema.
+    #: Plain string (no lookup table). Constrained to ``ALLOWED_UNITS`` by the
+    #: load step, not in the schema.
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
 
     #: ``period_start`` NULL  -> instant (balance-sheet) fact
@@ -309,8 +316,8 @@ class Fact(Base):
 
     #: True iff this is the most-recently-filed value for its
     #: ``(company_cik, concept_id, unit, period_start, period_end)`` group.
-    #: Maintained at ingest -- loading a newer filing flips older rows False.
-    #: Restated periods keep every row; analytics filter on ``is_latest``.
+    #: Maintained by the load step -- loading a newer filing flips older rows
+    #: False. Restated periods keep every row; analytics filter on ``is_latest``.
     is_latest: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
@@ -362,10 +369,14 @@ class Fact(Base):
 
 
 # --------------------------------------------------------------------------- #
-# IngestRun  (provenance, idempotency, audit of what was dropped)
+# LoadRun  (provenance, idempotency, audit of what was dropped)
+#
+# One row per run of the *load* step: reading one curated data/xbrl/<TICKER>.json
+# file and writing its rows into these tables. Distinct from *retrieval* (the
+# SEC-to-disk fetch in app/ingest/), whose timestamp is `retrieved_at` below.
 # --------------------------------------------------------------------------- #
-class IngestRun(Base):
-    __tablename__ = "ingest_run"
+class LoadRun(Base):
+    __tablename__ = "load_run"
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
 
@@ -377,8 +388,11 @@ class IngestRun(Base):
 
     #: From the top of the source file (always the companyfacts URL).
     source_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: When retrieval fetched the source file from SEC (from the file's own
+    #: ``retrieved`` field), NOT when this load ran -- see ``loaded_at``.
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ingested_at: Mapped[datetime] = mapped_column(
+    #: When this load ran.
+    loaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
@@ -397,10 +411,10 @@ class IngestRun(Base):
         Integer, nullable=False, server_default=text("0")
     )
 
-    company: Mapped[Company] = relationship(back_populates="ingest_runs")
+    company: Mapped[Company] = relationship(back_populates="load_runs")
 
     def __repr__(self) -> str:  # pragma: no cover - convenience only
         return (
-            f"IngestRun(id={self.id}, company_cik={self.company_cik}, "
-            f"ingested_at={self.ingested_at!r})"
+            f"LoadRun(id={self.id}, company_cik={self.company_cik}, "
+            f"loaded_at={self.loaded_at!r})"
         )

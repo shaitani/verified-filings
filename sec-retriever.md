@@ -449,7 +449,17 @@ stderr note, and `write_store=False`.
 ### 7.3 Not yet built
 
 - Anything in `app/schemas/`, `app/semantic/`, `app/retrieval/`,
-  `app/verify/`, `app/api/`, `app/db/`.
+  `app/verify/`, `app/api/`.
+- `app/db/` — **partly built (2026-08-30):** SQLAlchemy 2.0 ORM models for the
+  curated XBRL-data store (`app/db/models.py`, `app/db/__init__.py`), in a
+  dedicated PostgreSQL schema `xbrl`. Full rationale in `app/db/DESIGN.md`.
+  Still to do there: the **load step** (`app/db/loader.py` — reads
+  `data/xbrl/*.json` into the tables), **Alembic** (`app/db/migrations/` +
+  `alembic.ini` at repo root), and **engine/session** wiring
+  (`app/db/session.py`). Note: "retrieval" = the SEC→disk fetch in `app/ingest/`
+  (§7.2); "load" = disk→DB. "Ingest" is avoided as a verb for the DB step.
+- Pydantic schemas (`app/schemas/`, per §3) for validating a `data/xbrl/*.json`
+  file before the load step. `pydantic` is a dependency; design in progress.
 - ~~Recreating `sic_numbers.json`~~ **Done (2026-08-26).** Rebuilt from
   live SEC data and now maintained automatically by `get_submissions()`
   via `sic_index.update_sic_index()` — see §5.1 and the `sic_index.py`
