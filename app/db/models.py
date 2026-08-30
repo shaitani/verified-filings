@@ -110,9 +110,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 #: XBRL units a ``Fact`` row is allowed to have. Everything else is a
 #: non-financial disclosure count and is dropped during the load step -- the
 #: drop is recorded per run in ``LoadRun``. Widen this set to capture more.
-ALLOWED_UNITS: frozenset[str] = frozenset(
-    {"USD", "shares", "pure", "USD/shares", "Rate", "EUR"}
-)
+ALLOWED_UNITS: frozenset[str] = frozenset({"USD", "shares", "pure", "USD/shares", "Rate", "EUR"})
 
 #: PostgreSQL schema (namespace) that owns every table and enum type here.
 SCHEMA = "xbrl"
@@ -261,13 +259,9 @@ class Concept(Base):
     # passive_deletes="all": never null out fact.concept_id from the ORM side.
     # Concepts are shared reference data and should not be deleted while facts
     # point at them; the DB's ON DELETE RESTRICT is what enforces that.
-    facts: Mapped[list[Fact]] = relationship(
-        back_populates="concept", passive_deletes="all"
-    )
+    facts: Mapped[list[Fact]] = relationship(back_populates="concept", passive_deletes="all")
 
-    __table_args__ = (
-        UniqueConstraint("taxonomy", "name", name="uq_concept_taxonomy_name"),
-    )
+    __table_args__ = (UniqueConstraint("taxonomy", "name", name="uq_concept_taxonomy_name"),)
 
     def __repr__(self) -> str:  # pragma: no cover - convenience only
         return f"Concept(id={self.id}, taxonomy={self.taxonomy!r}, name={self.name!r})"
@@ -318,9 +312,7 @@ class Fact(Base):
     #: ``(company_cik, concept_id, unit, period_start, period_end)`` group.
     #: Maintained by the load step -- loading a newer filing flips older rows
     #: False. Restated periods keep every row; analytics filter on ``is_latest``.
-    is_latest: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
+    is_latest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
     company: Mapped[Company] = relationship(back_populates="facts")
     filing: Mapped[Filing] = relationship(back_populates="facts")
@@ -415,6 +407,5 @@ class LoadRun(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - convenience only
         return (
-            f"LoadRun(id={self.id}, company_cik={self.company_cik}, "
-            f"loaded_at={self.loaded_at!r})"
+            f"LoadRun(id={self.id}, company_cik={self.company_cik}, loaded_at={self.loaded_at!r})"
         )

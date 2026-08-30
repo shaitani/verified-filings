@@ -383,65 +383,46 @@ Full index list:
 
 ---
 
-## 5. Not built yet — where things go
+## 5. Where things go — layout follows `sec-retriever.md` §3
 
-Layout follows `sec-retriever.md` §3.
-
-| thing | location | notes |
+| thing | location | status |
 |---|---|---|
-| **Pydantic schemas** | `app/schemas/` | per §3 ("Pydantic models — the single source of truth"). Start with one module, e.g. `app/schemas/xbrl.py`, for validating a `data/xbrl/*.json` file before the load step. See §6. |
-| **The load step** | `app/db/loader.py` | reads `data/xbrl/*.json` (with `json.loads(..., parse_float=Decimal)`), validates via the schemas, upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. Imports `ALLOWED_UNITS` from `app.db`. |
-| **Alembic** | `app/db/migrations/` (scripts) + `alembic.ini` at repo root | per §3 ("SQLAlchemy models + Alembic migrations" under `db/`). `alembic.ini` at root is just where the `alembic` command looks by default; `script_location = app/db/migrations`. `env.py` imports `app.db.Base` for `target_metadata`. User will ask for help when ready. |
-| **Engine + `sessionmaker`** | `app/db/session.py` | do alongside the Alembic work. |
-| **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. This project is currently a CLI. |
+| **Pydantic schemas** | `app/schemas/xbrl.py` (+ `DESIGN.md`, `tests/test_xbrl_schema.py`) | **built 2026-08-30.** Inbound validation of one `data/xbrl/*.json` file. See §6 and `app/schemas/DESIGN.md`. |
+| **The load step** | `app/db/loader.py` | not written. Reads a file (`json.loads(..., parse_float=Decimal)`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. |
+| **Alembic** | `app/db/migrations/` (scripts) + `alembic.ini` at repo root | not written. `alembic.ini` at root is just the default lookup location; `script_location = app/db/migrations`. `env.py` imports `app.db.Base` for `target_metadata`. User will ask for help when ready. |
+| **Engine + `sessionmaker`** | `app/db/session.py` | not written. Do alongside the Alembic work. |
+| **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. Currently a CLI. |
 
-Dependency direction is always **schemas → models** and **loader → (schemas,
-models)**, never the reverse (no import cycle). The load step's nested-JSON walk
-helper lives in `app/ingest/` for now (see §6) — it may migrate to
-`app/db/loader.py` when that is written.
+Dependency direction is always **schemas → nothing in the app** and **loader →
+(schemas, models)**, never the reverse. The nested-JSON walk is
+`CompanyFactsFile.iter_facts()` — a method on the schema, not a separate module
+(see `app/schemas/DESIGN.md` §4.14).
 
 ---
 
-## 6. Notes for writing the Pydantic schemas
+## 6. Pydantic schemas — built
 
-> Status: **design in progress** with the user — this section is a sketch, not
-> final. `pydantic>=2.13.5` is already a dependency. Target location:
-> `app/schemas/` (see §5).
+`app/schemas/xbrl.py` (2026-08-30). Inbound validation of one
+`data/xbrl/<TICKER>.json` file before the load step. Classes: `CompanyFactsFile`
+(top), `ScopeIn`, `CountsIn`, `ConceptIn`, `FactIn`. Every rationale — the seven
+signed-off decisions plus the micro-choices — is in
+**[`app/schemas/DESIGN.md`](../schemas/DESIGN.md)**. Tests:
+`tests/test_xbrl_schema.py` (all 20 real store files validate).
 
-Firm points so far:
+What the load step (`app/db/loader.py`, TBD) must know:
 
-- **`json.loads(text, parse_float=Decimal)`** in the loader when reading a file,
-  so `val` reaches `FactIn` as an exact `Decimal`, never a binary `float`
-  (`0.047` must not become `0.046999…`). The `Numeric(30,6)` column is exact;
-  feed it exact values.
-- The **nested-JSON walk helper** — one generator yielding
-  `(taxonomy, concept_name, ConceptIn, unit, FactIn)` tuples — goes in
-  `app/ingest/` for now (user's call), so the loop is written and tested once.
-- These are **inbound-validation only**. Outbound / read DTOs are deferred until
-  there's an API or structured CLI output (§7-style, `from_attributes=True`,
-  separate classes — never reuse the `*In` models).
+- Read files with **`json.loads(text, parse_float=Decimal)`** so `FactIn.val`
+  arrives as an exact `Decimal`, never a binary `float`.
+- Walk facts via **`CompanyFactsFile.iter_facts()`** — yields
+  `(taxonomy, concept_name, ConceptIn, unit, FactIn)`. Don't re-implement the loop.
+- Schema field names mirror the **source JSON** (`start`/`end`/`val`); the loader
+  renames to the ORM names (`period_start`/`period_end`/`value`).
+- Apply `ALLOWED_UNITS` in the loader — the schema accepts any unit key.
+- `LoadRun.taxonomy_count` / `concept_count` / `fact_count` can be taken straight
+  from `CountsIn` (the schema already checksums them against the facts tree).
 
-The natural set of "in" models mirrors the source JSON (validate a raw
-`data/xbrl/*.json` before it becomes rows):
-
-- `CompanyFactsFile` — top object: `cik`, `ticker`, `entity_name`, `source_url`,
-  `retrieved` (datetime), `scope: ScopeIn`, `counts: CountsIn`,
-  `facts: dict[str, dict[str, ConceptIn]]`
-- `ScopeIn` — `forms: list[str]`, `fiscal_years: list[int]`
-- `CountsIn` — `taxonomies: int`, `concepts: int`, `facts: int`
-- `ConceptIn` — `label: str | None`, `description: str | None`,
-  `units: dict[str, list[FactIn]]`
-- `FactIn` — `end: date`, `val: Decimal`, `accn: str`, `fy: int`,
-  `fp: Literal["FY","Q1","Q2","Q3"]`, `form: Literal["10-K","10-Q"]`,
-  `filed: date`, `start: date | None = None`, `frame: str | None = None`
-
-Things the validator should catch: unexpected `fp` / `form` values (scope filter
-should have removed them), `val` that isn't numeric, `frame` format drift, a
-taxonomy outside `{dei, us-gaap, srt}`.
-
-"Out" / read DTOs (if/when there's an API or structured CLI output) should be
-separate classes with `model_config = ConfigDict(from_attributes=True)` so they
-can be built from ORM instances — do **not** reuse the "in" models for output.
+Outbound / read DTOs are still deferred — separate classes with
+`from_attributes=True`, never reuse the `*In` models.
 
 ---
 

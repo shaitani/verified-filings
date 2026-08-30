@@ -448,8 +448,14 @@ stderr note, and `write_store=False`.
 
 ### 7.3 Not yet built
 
-- Anything in `app/schemas/`, `app/semantic/`, `app/retrieval/`,
-  `app/verify/`, `app/api/`.
+- Anything in `app/semantic/`, `app/retrieval/`, `app/verify/`, `app/api/`.
+- `app/schemas/` — **partly built (2026-08-30):** `app/schemas/xbrl.py` —
+  Pydantic v2 schemas validating one curated `data/xbrl/<TICKER>.json` file on
+  the way in (inbound only). `CompanyFactsFile` / `ScopeIn` / `CountsIn` /
+  `ConceptIn` / `FactIn`; `frozen`, `extra="forbid"`, `Literal` fp/form/taxonomy,
+  `val` mirrors `Numeric(30,6)`, counts-vs-tree checksum. Rationale in
+  `app/schemas/DESIGN.md`; tests in `tests/test_xbrl_schema.py` (all 20 real
+  store files validate). Outbound / read DTOs still deferred.
 - `app/db/` — **partly built (2026-08-30):** SQLAlchemy 2.0 ORM models for the
   curated XBRL-data store (`app/db/models.py`, `app/db/__init__.py`), in a
   dedicated PostgreSQL schema `xbrl`. Full rationale in `app/db/DESIGN.md`.
@@ -458,8 +464,6 @@ stderr note, and `write_store=False`.
   `alembic.ini` at repo root), and **engine/session** wiring
   (`app/db/session.py`). Note: "retrieval" = the SEC→disk fetch in `app/ingest/`
   (§7.2); "load" = disk→DB. "Ingest" is avoided as a verb for the DB step.
-- Pydantic schemas (`app/schemas/`, per §3) for validating a `data/xbrl/*.json`
-  file before the load step. `pydantic` is a dependency; design in progress.
 - ~~Recreating `sic_numbers.json`~~ **Done (2026-08-26).** Rebuilt from
   live SEC data and now maintained automatically by `get_submissions()`
   via `sic_index.update_sic_index()` — see §5.1 and the `sic_index.py`
