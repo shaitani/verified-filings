@@ -41,8 +41,12 @@ A **CLI tool** that:
 - **Dependency management:** `uv`
 - **Lint/format:** `ruff`
 - **Testing:** `pytest`
-- **Database:** SQLAlchemy 2.0 + `pgvector-python` (Postgres w/ pgvector)
-- **Migrations:** Alembic
+- **Database:** SQLAlchemy 2.0 (async) + `pgvector-python` (Postgres w/ pgvector).
+  Driver is **`asyncpg`** (not psycopg) — URL scheme `postgresql+asyncpg://`;
+  everything touching Postgres is async. `greenlet` is installed for SQLAlchemy's
+  async bridge.
+- **Migrations:** Alembic — scaffolded with its **async template**
+  (`alembic init -t async app/db/migrations`). Not yet a dependency.
 - **HTTP client:** `httpx` (explicitly **not** `requests`) — chosen for native
   async support (needed to respect the global rate limit while still being
   able to issue many SEC requests efficiently), HTTP/2 support, and modern

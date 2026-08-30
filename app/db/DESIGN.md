@@ -385,13 +385,32 @@ Full index list:
 
 ## 5. Where things go — layout follows `sec-retriever.md` §3
 
+**Database driver: `asyncpg`, not psycopg** (user's call, 2026-09). Everything
+that touches Postgres is async:
+
+- SQLAlchemy URL scheme is `postgresql+asyncpg://user:pass@host:5432/dbname`.
+- `app/db/session.py` uses `create_async_engine` + `async_sessionmaker` +
+  `AsyncSession` (not the sync `Engine` / `sessionmaker`). `greenlet` (already
+  installed) is what SQLAlchemy needs for this.
+- Alembic is scaffolded with its **async template**
+  (`alembic init -t async app/db/migrations`) — its `env.py` runs migrations via
+  `asyncio.run(...)` over an async engine.
+- `app/db/loader.py` is `async def`; any CLI path that calls it does so via
+  `asyncio.run` (same pattern as the existing `app/cli.py`).
+- The `before_create` / `after_drop` `DDL(...).execute_if(dialect="postgresql")`
+  hooks in `models.py` work unchanged under asyncpg.
+
 | thing | location | status |
 |---|---|---|
 | **Pydantic schemas** | `app/schemas/xbrl.py` (+ `DESIGN.md`, `tests/test_xbrl_schema.py`) | **built 2026-08-30.** Inbound validation of one `data/xbrl/*.json` file. See §6 and `app/schemas/DESIGN.md`. |
-| **The load step** | `app/db/loader.py` | not written. Reads a file (`json.loads(..., parse_float=Decimal)`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. |
-| **Alembic** | `app/db/migrations/` (scripts) + `alembic.ini` at repo root | not written. `alembic.ini` at root is just the default lookup location; `script_location = app/db/migrations`. `env.py` imports `app.db.Base` for `target_metadata`. User will ask for help when ready. |
-| **Engine + `sessionmaker`** | `app/db/session.py` | not written. Do alongside the Alembic work. |
+| **The load step** | `app/db/loader.py` | not written. `async def`. Reads a file (`json.loads(..., parse_float=Decimal)`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. |
+| **Alembic** | `app/db/migrations/` (scripts) + `alembic.ini` at repo root | not written. Use the **async template**. `alembic.ini` at root is just the default lookup location; `script_location = app/db/migrations`. `env.py` imports `app.db.Base` for `target_metadata`, reads the URL from the environment, passes `include_schemas=True`. User will ask for help when ready. |
+| **Engine + async `sessionmaker`** | `app/db/session.py` | not written. Async engine/session (see the driver note above). Do alongside the Alembic work. |
 | **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. Currently a CLI. |
+
+Not yet a dependency: **`alembic`** (`uv add alembic` when starting that work).
+Consider switching the `sqlalchemy` dependency to `sqlalchemy[asyncio]` so
+`greenlet` is declared rather than incidental.
 
 Dependency direction is always **schemas → nothing in the app** and **loader →
 (schemas, models)**, never the reverse. The nested-JSON walk is
