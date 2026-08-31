@@ -392,25 +392,59 @@ that touches Postgres is async:
 - `app/db/session.py` uses `create_async_engine` + `async_sessionmaker` +
   `AsyncSession` (not the sync `Engine` / `sessionmaker`). `greenlet` (already
   installed) is what SQLAlchemy needs for this.
-- Alembic is scaffolded with its **async template**
-  (`alembic init -t async app/db/migrations`) — its `env.py` runs migrations via
-  `asyncio.run(...)` over an async engine.
 - `app/db/loader.py` is `async def`; any CLI path that calls it does so via
   `asyncio.run` (same pattern as the existing `app/cli.py`).
 - The `before_create` / `after_drop` `DDL(...).execute_if(dialect="postgresql")`
-  hooks in `models.py` work unchanged under asyncpg.
+  hooks in `models.py` work unchanged under asyncpg. Note Alembic does **not**
+  fire them — the first migration creates the `xbrl` schema explicitly.
 
 | thing | location | status |
 |---|---|---|
 | **Pydantic schemas** | `app/schemas/xbrl.py` (+ `DESIGN.md`, `tests/test_xbrl_schema.py`) | **built 2026-08-30.** Inbound validation of one `data/xbrl/*.json` file. See §6 and `app/schemas/DESIGN.md`. |
+| **Config** | `app/config.py` | **built.** `pydantic-settings` `Settings`; exposes `settings.database_url` from `.env`. |
+| **Engine + async session** | `app/db/session.py` | **built.** `engine` + `SessionLocal` (`async_sessionmaker`, `expire_on_commit=False`), from `settings.database_url`. |
+| **Alembic** | `alembic.ini` (repo root) + `app/db/migrations/` (async template) | **scaffolded + wired.** `env.py` pulls the URL from `app.config.settings`, sets `target_metadata = Base.metadata`, restricts autogenerate to the `xbrl` schema, keeps `alembic_version` in `public`. `app/db/migrations/` is excluded from ruff. |
 | **The load step** | `app/db/loader.py` | not written. `async def`. Reads a file (`json.loads(..., parse_float=Decimal)`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. |
-| **Alembic** | `app/db/migrations/` (scripts) + `alembic.ini` at repo root | not written. Use the **async template**. `alembic.ini` at root is just the default lookup location; `script_location = app/db/migrations`. `env.py` imports `app.db.Base` for `target_metadata`, reads the URL from the environment, passes `include_schemas=True`. User will ask for help when ready. |
-| **Engine + async `sessionmaker`** | `app/db/session.py` | not written. Async engine/session (see the driver note above). Do alongside the Alembic work. |
 | **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. Currently a CLI. |
 
-Not yet a dependency: **`alembic`** (`uv add alembic` when starting that work).
-Consider switching the `sqlalchemy` dependency to `sqlalchemy[asyncio]` so
-`greenlet` is declared rather than incidental.
+### 5.1 Changing the schema later — the migration loop
+
+After editing anything in `models.py` (new table, new column, changed type,
+new index …), from the **repo root**:
+
+```
+uv run alembic revision --autogenerate -m "short description"
+```
+
+This only **writes** a new file under `app/db/migrations/versions/` describing
+the diff — it does not touch the database. Then:
+
+1. **Open the generated file and read it.** Autogenerate is not trustworthy for
+   this schema — it reliably misses / mishandles:
+   - the `xbrl` schema itself (only the very first migration needs
+     `op.execute("CREATE SCHEMA IF NOT EXISTS xbrl")` / `DROP SCHEMA` — later
+     ones assume it exists);
+   - **native enum types** (`taxonomy`, `filing_form`, `fiscal_period`) — check
+     `sa.Enum(..., create_type=...)` is doing what you expect on both up and
+     down;
+   - **expression indexes**, chiefly `uq_fact_natural` with
+     `coalesce(period_start, period_end)` — autogenerate ignores these, add
+     `op.create_index(...)` / `op.drop_index(...)` by hand;
+   - **partial indexes** (`ix_fact_latest_lookup`, `postgresql_where=...`) —
+     usually detected now but eyeball it.
+   Fix the file so `upgrade()` and `downgrade()` are both correct.
+
+2. **Apply it:**
+   ```
+   uv run alembic upgrade head     # runs upgrade() against the DB
+   ```
+   `uv run alembic downgrade -1` steps back one; `uv run alembic current` shows
+   what's applied.
+
+3. Commit the migration file with the `models.py` change.
+
+Never hand-edit a migration that has already been applied to a shared database —
+write a new one.
 
 Dependency direction is always **schemas → nothing in the app** and **loader →
 (schemas, models)**, never the reverse. The nested-JSON walk is

@@ -1,1 +1,28 @@
-Generic single-database configuration with an async dbapi.
+Generic single-database configuration with an async dbapi (asyncpg).
+
+Wiring and rationale: ../DESIGN.md section 5.
+
+Changing the schema
+-------------------
+After editing app/db/models.py, from the repo root:
+
+    uv run alembic revision --autogenerate -m "short description"
+
+That only WRITES a file under versions/ (no DB changes). Then:
+
+  1. Open the generated file and read it. Autogenerate for this schema
+     reliably misses:
+       - the xbrl schema (first migration only: op.execute("CREATE SCHEMA ..."))
+       - native enum types (taxonomy / filing_form / fiscal_period)
+       - expression indexes, esp. uq_fact_natural (coalesce(period_start, period_end))
+       - partial indexes (ix_fact_latest_lookup) -- usually ok, eyeball it
+     Fix upgrade() and downgrade() so both are correct.
+
+  2. Apply it:
+       uv run alembic upgrade head      # run upgrade() against the DB
+       uv run alembic downgrade -1      # step back one
+       uv run alembic current           # what's applied now
+
+  3. Commit the migration file together with the models.py change.
+
+Never hand-edit a migration already applied to a shared database -- write a new one.
