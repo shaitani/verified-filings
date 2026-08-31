@@ -1,0 +1,19 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: verified_filings
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: amospamo@proton.me      # login to the pgAdmin site
+      PGADMIN_DEFAULT_PASSWORD: admin1234
+    ports: ["5050:80"]
+    depends_on: [db]
+
+volumes:
+  pgdata:
