@@ -32,11 +32,14 @@ target_metadata = Base.metadata
 
 
 def include_name(name, type_, parent_names):
-    """Keep autogenerate focused on the ``xbrl`` schema (plus unqualified
-    objects such as ``alembic_version``); ignore ``public``,
-    ``information_schema``, etc."""
+    """Filter for --autogenerate: which reflected DB objects to compare against
+    the models. Only the ``xbrl`` schema is ours; Alembic's own
+    ``alembic_version`` bookkeeping table (in ``public``) must be ignored, or
+    every autogenerate run proposes dropping it."""
     if type_ == "schema":
         return name in (None, "xbrl")
+    if type_ == "table" and name == "alembic_version":
+        return False
     return True
 
 
