@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 914" width="1080" height="914" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title>XBRL schema map (as of 2026-09-03)</title>
+  <desc>Entity-relationship diagram of the xbrl PostgreSQL schema: company, filing, concept, fact and load_run tables joined by their foreign keys, with fact at the centre. Every relationship is one-to-many. Hand-drawn snapshot dated 2026-09-03 — verify against app/db/models.py.</desc>
+
+  <style>
+    svg {
+      --surface:  #f6f7f9;
+      --surface-2:#edeff2;
+      --ink:      #1b212b;
+      --ink-soft: #59636f;
+      --line:     #c9ced7;
+      --teal:     #0d6b74;
+      --amber:    #97620f;
+      --ring:     #2c3868;
+      --hd-teal:  #0d6b74;
+      --hd-amber: #895811;
+      --hd-navy:  #29356a;
+      --hd-slate: #4d5866;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --surface:  #191d24;
+        --surface-2:#20252e;
+        --ink:      #e5e8ec;
+        --ink-soft: #98a2af;
+        --line:     #333a45;
+        --teal:     #4bb2bc;
+        --amber:    #d69a4e;
+        --ring:     #93a1e8;
+      }
+    }
+
+    .bg        { fill: var(--surface-2); }
+    .frame     { fill: none; stroke: var(--line); stroke-width: 1; }
+
+    .er-box    { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+    .er-ring   { fill: none; stroke: var(--ring); stroke-width: 1.5; opacity: .45; }
+    .er-hd--teal  { fill: var(--hd-teal); }
+    .er-hd--amber { fill: var(--hd-amber); }
+    .er-hd--navy  { fill: var(--hd-navy); }
+    .er-hd--slate { fill: var(--hd-slate); }
+    .er-title  { fill: #fff; font-weight: 600; font-size: 13.5px; letter-spacing: .04em; }
+    .er-role   { fill: rgba(255,255,255,.74); font-family: var(--mono); font-weight: 500; font-size: 9px; letter-spacing: .1em; }
+    .er-col    { fill: var(--ink); font-family: var(--mono); font-size: 12px; }
+    .er-ty     { fill: var(--ink-soft); font-family: var(--mono); font-size: 10.5px; }
+    .er-sep    { stroke: var(--line); stroke-width: .5; opacity: .7; }
+
+    .c-pk   { fill: var(--ink); }
+    .c-pk-t { fill: var(--surface); font-family: var(--mono); font-weight: 600; font-size: 8.5px; }
+    .c-fk   { fill: none; stroke: var(--teal); stroke-width: 1; }
+    .c-fk-t { fill: var(--teal); font-family: var(--mono); font-weight: 600; font-size: 8.5px; }
+    .c-u    { fill: none; stroke: var(--ink-soft); stroke-width: 1; }
+    .c-u-t  { fill: var(--ink-soft); font-family: var(--mono); font-weight: 600; font-size: 8.5px; }
+
+    .lnk        { fill: none; stroke: var(--teal); stroke-width: 1.6; }
+    .lnk--short { stroke: var(--ink-soft); stroke-width: 1.4; stroke-dasharray: 6 4; }
+    .cf-teal  { fill: none; stroke: var(--teal);  stroke-width: 1.6; }
+    .cf-amber { fill: none; stroke: var(--amber); stroke-width: 1.6; }
+    .cf-grey  { fill: none; stroke: var(--ink-soft); stroke-width: 1.4; }
+    .lnk-lbl  {
+      fill: var(--ink-soft); font-family: var(--mono); font-weight: 500;
+      font-size: 10.5px; letter-spacing: .03em;
+      paint-order: stroke; stroke: var(--surface-2); stroke-width: 4px;
+    }
+    .lnk-lbl--strong { fill: var(--ink); font-weight: 600; }
+
+    .cap    { fill: var(--ink-soft); font-size: 11px; }
+    .lg-t   { fill: var(--ink-soft); font-size: 11px; }
+    .lg-b   { fill: var(--ink); font-weight: 600; }
+    .lg-cascade  { stroke: var(--teal); stroke-width: 2; }
+    .lg-restrict { stroke: var(--amber); stroke-width: 2; }
+    .lg-short    { stroke: var(--ink-soft); stroke-width: 1.6; stroke-dasharray: 5 4; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1080" height="914"/>
+  <rect class="frame" x="1" y="1" width="1078" height="912" rx="14"/>
+
+  <defs>
+    <marker id="many-teal" viewBox="0 0 14 14" refX="12.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-teal" d="M12.5,7 L1,1.5 M12.5,7 L1,7 M12.5,7 L1,12.5"/>
+    </marker>
+    <marker id="one-teal" viewBox="0 0 14 14" refX="6.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-teal" d="M6.5,1.5 L6.5,12.5"/>
+    </marker>
+    <marker id="many-amber" viewBox="0 0 14 14" refX="12.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-amber" d="M12.5,7 L1,1.5 M12.5,7 L1,7 M12.5,7 L1,12.5"/>
+    </marker>
+    <marker id="one-amber" viewBox="0 0 14 14" refX="6.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-amber" d="M6.5,1.5 L6.5,12.5"/>
+    </marker>
+    <marker id="many-grey" viewBox="0 0 14 14" refX="12.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-grey" d="M12.5,7 L1,1.5 M12.5,7 L1,7 M12.5,7 L1,12.5"/>
+    </marker>
+    <marker id="one-grey" viewBox="0 0 14 14" refX="6.5" refY="7" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path class="cf-grey" d="M6.5,1.5 L6.5,12.5"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== connectors (straight lines) ===================== -->
+  <!-- company.cik  <-  filing.company_cik -->
+  <line class="lnk" x1="470" y1="183" x2="252" y2="300" marker-start="url(#one-teal)" marker-end="url(#many-teal)"/>
+  <text class="lnk-lbl" x="356" y="234" text-anchor="middle">one-to-many</text>
+
+  <!-- company.cik  <-  load_run.company_cik -->
+  <line class="lnk" x1="650" y1="130" x2="856" y2="250" marker-start="url(#one-teal)" marker-end="url(#many-teal)"/>
+  <text class="lnk-lbl" x="752" y="180" text-anchor="middle">one-to-many</text>
+
+  <!-- filing.accession_number  <-  fact.filing_accession -->
+  <line class="lnk" x1="310" y1="398" x2="413" y2="560" marker-start="url(#one-teal)" marker-end="url(#many-teal)"/>
+  <text class="lnk-lbl" x="360" y="476" text-anchor="middle">one-to-many</text>
+
+  <!-- concept.id  <-  fact.concept_id -->
+  <line class="lnk" x1="280" y1="622" x2="413" y2="619" marker-start="url(#one-amber)" marker-end="url(#many-amber)"/>
+  <text class="lnk-lbl" x="345" y="610" text-anchor="middle">one-to-many</text>
+
+  <!-- company.cik  <-  fact.company_cik  (denormalized shortcut) -->
+  <line class="lnk lnk--short" x1="540" y1="183" x2="540" y2="508" marker-start="url(#one-grey)" marker-end="url(#many-grey)"/>
+  <text class="lnk-lbl lnk-lbl--strong" x="556" y="312" text-anchor="start">one-to-many &#183; shortcut</text>
+  <text class="lnk-lbl" x="556" y="329" text-anchor="start">company also reachable via</text>
+  <text class="lnk-lbl" x="556" y="343" text-anchor="start">filing; duplicated here for</text>
+  <text class="lnk-lbl" x="556" y="357" text-anchor="start">company-scoped queries</text>
+
+  <!-- ===================== company ===================== -->
+  <g transform="translate(430,40)">
+    <rect class="er-box" width="220" height="143" rx="8"/>
+    <path class="er-hd--teal" d="M0,8 A8,8 0 0 1 8,0 H212 A8,8 0 0 1 220,8 V28 H0 Z"/>
+    <text class="er-title" x="13" y="19">company</text>
+    <text class="er-role" x="207" y="19" text-anchor="end">CORE ENTITY</text>
+    <g transform="translate(0,28)">
+      <g transform="translate(0,0)">
+        <rect class="c-pk" x="9" y="4.5" width="20" height="13" rx="2"/><text class="c-pk-t" x="19" y="14" text-anchor="middle">PK</text>
+        <text class="er-col" x="35" y="15.5">cik</text><text class="er-ty" x="210" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,23)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <rect class="c-u" x="9" y="4.5" width="16" height="13" rx="2"/><text class="c-u-t" x="17" y="14" text-anchor="middle">U</text>
+        <text class="er-col" x="35" y="15.5">id</text><text class="er-ty" x="210" y="15.5" text-anchor="end">int &#183; identity</text>
+      </g>
+      <g transform="translate(0,46)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">ticker</text><text class="er-ty" x="210" y="15.5" text-anchor="end">varchar(10)</text>
+      </g>
+      <g transform="translate(0,69)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">entity_name</text><text class="er-ty" x="210" y="15.5" text-anchor="end">varchar(150)</text>
+      </g>
+      <g transform="translate(0,92)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">source_url</text><text class="er-ty" x="210" y="15.5" text-anchor="end">varchar(255)</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===================== filing ===================== -->
+  <g transform="translate(90,300)">
+    <rect class="er-box" width="220" height="166" rx="8"/>
+    <path class="er-hd--teal" d="M0,8 A8,8 0 0 1 8,0 H212 A8,8 0 0 1 220,8 V28 H0 Z"/>
+    <text class="er-title" x="13" y="19">filing</text>
+    <text class="er-role" x="207" y="19" text-anchor="end">CORE ENTITY</text>
+    <g transform="translate(0,28)">
+      <g transform="translate(0,0)">
+        <rect class="c-pk" x="9" y="4.5" width="20" height="13" rx="2"/><text class="c-pk-t" x="19" y="14" text-anchor="middle">PK</text>
+        <text class="er-col" x="35" y="15.5">accession_number</text>
+      </g>
+      <g transform="translate(0,23)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <rect class="c-fk" x="9" y="4.5" width="18" height="13" rx="2"/><text class="c-fk-t" x="18" y="14" text-anchor="middle">FK</text>
+        <text class="er-col" x="35" y="15.5">company_cik</text><text class="er-ty" x="210" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,46)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">form</text><text class="er-ty" x="210" y="15.5" text-anchor="end">enum</text>
+      </g>
+      <g transform="translate(0,69)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">fiscal_year</text><text class="er-ty" x="210" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,92)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">fiscal_period</text><text class="er-ty" x="210" y="15.5" text-anchor="end">enum</text>
+      </g>
+      <g transform="translate(0,115)"><line class="er-sep" x1="0" y1="0" x2="220"/>
+        <text class="er-col" x="13" y="15.5">filed_date</text><text class="er-ty" x="210" y="15.5" text-anchor="end">date</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===================== concept ===================== -->
+  <g transform="translate(50,584)">
+    <rect class="er-box" width="230" height="143" rx="8"/>
+    <path class="er-hd--amber" d="M0,8 A8,8 0 0 1 8,0 H222 A8,8 0 0 1 230,8 V28 H0 Z"/>
+    <text class="er-title" x="13" y="19">concept</text>
+    <text class="er-role" x="217" y="19" text-anchor="end">REFERENCE &#183; GLOBAL</text>
+    <g transform="translate(0,28)">
+      <g transform="translate(0,0)">
+        <rect class="c-pk" x="9" y="4.5" width="20" height="13" rx="2"/><text class="c-pk-t" x="19" y="14" text-anchor="middle">PK</text>
+        <text class="er-col" x="35" y="15.5">id</text><text class="er-ty" x="220" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,23)"><line class="er-sep" x1="0" y1="0" x2="230"/>
+        <text class="er-col" x="13" y="15.5">taxonomy</text><text class="er-ty" x="220" y="15.5" text-anchor="end">enum</text>
+      </g>
+      <g transform="translate(0,46)"><line class="er-sep" x1="0" y1="0" x2="230"/>
+        <text class="er-col" x="13" y="15.5">name</text><text class="er-ty" x="220" y="15.5" text-anchor="end">varchar(255)</text>
+      </g>
+      <g transform="translate(0,69)"><line class="er-sep" x1="0" y1="0" x2="230"/>
+        <text class="er-col" x="13" y="15.5">label</text><text class="er-ty" x="220" y="15.5" text-anchor="end">varchar(512)</text>
+      </g>
+      <g transform="translate(0,92)"><line class="er-sep" x1="0" y1="0" x2="230"/>
+        <text class="er-col" x="13" y="15.5">description</text><text class="er-ty" x="220" y="15.5" text-anchor="end">text</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===================== fact  (star table) ===================== -->
+  <g transform="translate(415,510)">
+    <rect class="er-ring" x="-5" y="-5" width="260" height="291" rx="11"/>
+    <rect class="er-box" width="250" height="281" rx="8"/>
+    <path class="er-hd--navy" d="M0,8 A8,8 0 0 1 8,0 H242 A8,8 0 0 1 250,8 V28 H0 Z"/>
+    <text class="er-title" x="13" y="19">fact</text>
+    <text class="er-role" x="237" y="19" text-anchor="end">ONE REPORTED VALUE</text>
+    <g transform="translate(0,28)">
+      <g transform="translate(0,0)">
+        <rect class="c-pk" x="9" y="4.5" width="20" height="13" rx="2"/><text class="c-pk-t" x="19" y="14" text-anchor="middle">PK</text>
+        <text class="er-col" x="35" y="15.5">id</text><text class="er-ty" x="240" y="15.5" text-anchor="end">bigint</text>
+      </g>
+      <g transform="translate(0,23)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <rect class="c-fk" x="9" y="4.5" width="18" height="13" rx="2"/><text class="c-fk-t" x="18" y="14" text-anchor="middle">FK</text>
+        <text class="er-col" x="35" y="15.5">filing_accession</text><text class="er-ty" x="240" y="15.5" text-anchor="end">varchar(20)</text>
+      </g>
+      <g transform="translate(0,46)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <rect class="c-fk" x="9" y="4.5" width="18" height="13" rx="2"/><text class="c-fk-t" x="18" y="14" text-anchor="middle">FK</text>
+        <text class="er-col" x="35" y="15.5">company_cik</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,69)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <rect class="c-fk" x="9" y="4.5" width="18" height="13" rx="2"/><text class="c-fk-t" x="18" y="14" text-anchor="middle">FK</text>
+        <text class="er-col" x="35" y="15.5">concept_id</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,92)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">unit</text><text class="er-ty" x="240" y="15.5" text-anchor="end">varchar(32)</text>
+      </g>
+      <g transform="translate(0,115)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">period_start</text><text class="er-ty" x="240" y="15.5" text-anchor="end">date &#183; null</text>
+      </g>
+      <g transform="translate(0,138)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">period_end</text><text class="er-ty" x="240" y="15.5" text-anchor="end">date</text>
+      </g>
+      <g transform="translate(0,161)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">is_instant</text><text class="er-ty" x="240" y="15.5" text-anchor="end">bool</text>
+      </g>
+      <g transform="translate(0,184)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">value</text><text class="er-ty" x="240" y="15.5" text-anchor="end">numeric(30,6)</text>
+      </g>
+      <g transform="translate(0,207)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">frame</text><text class="er-ty" x="240" y="15.5" text-anchor="end">varchar(16) &#183; null</text>
+      </g>
+      <g transform="translate(0,230)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">is_latest</text><text class="er-ty" x="240" y="15.5" text-anchor="end">bool</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===================== load_run ===================== -->
+  <g transform="translate(790,250)">
+    <rect class="er-box" width="250" height="304" rx="8"/>
+    <path class="er-hd--slate" d="M0,8 A8,8 0 0 1 8,0 H242 A8,8 0 0 1 250,8 V28 H0 Z"/>
+    <text class="er-title" x="13" y="19">load_run</text>
+    <text class="er-role" x="237" y="19" text-anchor="end">PROVENANCE &#183; AUDIT</text>
+    <g transform="translate(0,28)">
+      <g transform="translate(0,0)">
+        <rect class="c-pk" x="9" y="4.5" width="20" height="13" rx="2"/><text class="c-pk-t" x="19" y="14" text-anchor="middle">PK</text>
+        <text class="er-col" x="35" y="15.5">id</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,23)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <rect class="c-fk" x="9" y="4.5" width="18" height="13" rx="2"/><text class="c-fk-t" x="18" y="14" text-anchor="middle">FK</text>
+        <text class="er-col" x="35" y="15.5">company_cik</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,46)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">source_url</text><text class="er-ty" x="240" y="15.5" text-anchor="end">varchar(255)</text>
+      </g>
+      <g transform="translate(0,69)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">retrieved_at</text><text class="er-ty" x="240" y="15.5" text-anchor="end">timestamptz</text>
+      </g>
+      <g transform="translate(0,92)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">loaded_at</text><text class="er-ty" x="240" y="15.5" text-anchor="end">timestamptz</text>
+      </g>
+      <g transform="translate(0,115)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">scope_forms</text><text class="er-ty" x="240" y="15.5" text-anchor="end">jsonb</text>
+      </g>
+      <g transform="translate(0,138)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">scope_fiscal_years</text><text class="er-ty" x="240" y="15.5" text-anchor="end">jsonb</text>
+      </g>
+      <g transform="translate(0,161)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">taxonomy_count</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,184)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">concept_count</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,207)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">fact_count</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+      <g transform="translate(0,230)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">units_allowlist</text><text class="er-ty" x="240" y="15.5" text-anchor="end">jsonb</text>
+      </g>
+      <g transform="translate(0,253)"><line class="er-sep" x1="0" y1="0" x2="250"/>
+        <text class="er-col" x="13" y="15.5">facts_dropped_unit</text><text class="er-ty" x="240" y="15.5" text-anchor="end">int</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===================== caption + legend ===================== -->
+  <line class="er-sep" x1="24" y1="822" x2="1056" y2="822"/>
+  <text class="cap" x="24" y="843">Every relationship is one-to-many &#8212; the bar marks the &#8220;one&#8221; end, the crow&#8217;s foot the &#8220;many&#8221; end. Arrows run from a primary key to the referencing column.</text>
+  <text class="cap" x="1056" y="843" text-anchor="end">hand-drawn &#183; as of 2026-09-03</text>
+
+  <g transform="translate(24,862)">
+    <rect class="er-hd--teal" x="0" y="0" width="13" height="13" rx="3"/>
+    <text class="lg-t" x="20" y="10"><tspan class="lg-b">core entity</tspan> &#8212; company, filing</text>
+  </g>
+  <g transform="translate(300,862)">
+    <rect class="er-hd--navy" x="0" y="0" width="13" height="13" rx="3"/>
+    <text class="lg-t" x="20" y="10"><tspan class="lg-b">fact</tspan> &#8212; the star table</text>
+  </g>
+  <g transform="translate(520,862)">
+    <rect class="er-hd--amber" x="0" y="0" width="13" height="13" rx="3"/>
+    <text class="lg-t" x="20" y="10"><tspan class="lg-b">reference</tspan> &#8212; concept</text>
+  </g>
+  <g transform="translate(740,862)">
+    <rect class="er-hd--slate" x="0" y="0" width="13" height="13" rx="3"/>
+    <text class="lg-t" x="20" y="10"><tspan class="lg-b">provenance</tspan> &#8212; load_run</text>
+  </g>
+
+  <g transform="translate(24,890)">
+    <line class="lg-cascade" x1="0" y1="6" x2="26" y2="6"/>
+    <text class="lg-t" x="34" y="10">FK &#183; on delete cascade</text>
+  </g>
+  <g transform="translate(300,890)">
+    <line class="lg-restrict" x1="0" y1="6" x2="26" y2="6"/>
+    <text class="lg-t" x="34" y="10">FK &#183; on delete restrict (reference data)</text>
+  </g>
+  <g transform="translate(660,890)">
+    <line class="lg-short" x1="0" y1="6" x2="26" y2="6"/>
+    <text class="lg-t" x="34" y="10">denormalized shortcut (company also via filing)</text>
+  </g>
+</svg>
