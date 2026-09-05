@@ -34,12 +34,21 @@ def test_build_plan_transform() -> None:
     assert plan.company.cik == FAKE_CIK
     assert plan.company.ticker == "ZZZZ"
     assert len(plan.filings) == 2  # two accession numbers in the fixture
-    # 3, not 4: ZzzTestLawsuits' only fact has a disallowed unit and is
+    # 4, not 5: ZzzTestLawsuits' only fact has a disallowed unit and is
     # dropped before the concept is even registered -- it never reaches the
     # concept table since no Fact will ever reference it.
-    assert len(plan.concepts) == 3
+    assert len(plan.concepts) == 4
     assert plan.dropped_unit == 1  # the "lawsuit"-unit fact
-    assert len(plan.facts) == 5  # 6 total, minus the dropped one
+    assert len(plan.facts) == 6  # 7 total, minus the dropped one
+
+    # Negative value -- Decimal handles the sign exactly, same as any other.
+    net_loss = next(row for key, row in plan.facts if key == ("us-gaap", "ZzzTestNetLoss"))
+    assert net_loss.value == Decimal("-150000.75")
+
+    # frame passes through when present, stays None when it's not.
+    shares = next(row for key, row in plan.facts if key == ("dei", "ZzzTestSharesOutstanding"))
+    assert shares.frame == "CY2024Q4I"
+    assert net_loss.frame is None
 
     # Restatement: same period, two filings -- only the newer filed date wins.
     assets_2023 = [
@@ -70,7 +79,7 @@ def test_build_plan_transform() -> None:
 
 async def test_load_file_inserts_expected_rows(test_session_factory, clean_fake_company) -> None:
     result = await load_file(FIXTURE_PATH, session_factory=test_session_factory)
-    assert (result.filings, result.facts, result.dropped_unit) == (2, 5, 1)
+    assert (result.filings, result.facts, result.dropped_unit) == (2, 6, 1)
 
     async with test_session_factory() as session:
         company = await session.get(Company, FAKE_CIK)
@@ -89,7 +98,16 @@ async def test_load_file_inserts_expected_rows(test_session_factory, clean_fake_
             .scalars()
             .all()
         )
-        assert len(facts) == 5
+        assert len(facts) == 6
+
+        # Negative value round-trips through Numeric(30, 6) exactly.
+        net_loss = next(f for f in facts if f.value < 0)
+        assert net_loss.value == Decimal("-150000.75")
+        assert net_loss.frame is None
+
+        # frame is stored when the source file has one.
+        shares = next(f for f in facts if f.unit == "shares")
+        assert shares.frame == "CY2024Q4I"
 
         # Exactly one is_latest among the two restated rows, and it's the newer filing.
         restated = [f for f in facts if f.period_end == date(2023, 12, 31)]
@@ -108,7 +126,7 @@ async def test_load_file_inserts_expected_rows(test_session_factory, clean_fake_
             .scalars()
             .one()
         )
-        assert load_run.fact_count == 6  # from the file's counts block -- includes the dropped fact
+        assert load_run.fact_count == 7  # from the file's counts block -- includes the dropped fact
         assert load_run.facts_dropped_unit == 1
 
         concepts = (
@@ -116,7 +134,7 @@ async def test_load_file_inserts_expected_rows(test_session_factory, clean_fake_
             .scalars()
             .all()
         )
-        assert len(concepts) == 3  # not ZzzTestLawsuits -- see test_build_plan_transform
+        assert len(concepts) == 4  # not ZzzTestLawsuits -- see test_build_plan_transform
         shares = next(c for c in concepts if c.name == "ZzzTestSharesOutstanding")
         assert shares.label is None
         assert shares.description is None
@@ -135,7 +153,7 @@ async def test_load_file_is_idempotent(test_session_factory, clean_fake_company)
             .scalars()
             .all()
         )
-        assert len(facts) == 5  # not doubled
+        assert len(facts) == 6  # not doubled
 
         load_runs = (
             (await session.execute(select(LoadRun).where(LoadRun.company_cik == FAKE_CIK)))

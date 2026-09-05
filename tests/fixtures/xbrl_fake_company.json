@@ -5,7 +5,7 @@
   "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999999.json",
   "retrieved": "2026-08-31T00:00:00Z",
   "scope": { "forms": ["10-K"], "fiscal_years": [2023, 2024] },
-  "counts": { "taxonomies": 2, "concepts": 4, "facts": 6 },
+  "counts": { "taxonomies": 2, "concepts": 5, "facts": 7 },
   "facts": {
     "us-gaap": {
       "ZzzTestAssets": {
@@ -42,6 +42,17 @@
               "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" }
           ]
         }
+      },
+      "ZzzTestNetLoss": {
+        "label": "Zzz Test Net Loss",
+        "description": "Negative value on purpose -- real data is ~11% negative.",
+        "units": {
+          "USD": [
+            { "start": "2024-01-01", "end": "2024-12-31", "val": -150000.75,
+              "accn": "0009999999-24-000001", "fy": 2024, "fp": "FY", "form": "10-K",
+              "filed": "2024-11-01" }
+          ]
+        }
       }
     },
     "dei": {
@@ -51,7 +62,8 @@
         "units": {
           "shares": [
             { "end": "2024-10-15", "val": 42000000, "accn": "0009999999-24-000001",
-              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" }
+              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01",
+              "frame": "CY2024Q4I" }
           ]
         }
       }

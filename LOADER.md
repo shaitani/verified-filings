@@ -85,9 +85,12 @@ Runs against a **separate PostgreSQL container**, `db-test` (see
   ticker `ZZZZ`) built to exercise: an instant fact, a duration fact, a
   **restatement** (same period, two filings, different values — proves
   `is_latest`), a unit outside `ALLOWED_UNITS` (proves it's dropped and
-  counted), a concept with a null label/description, and two taxonomies.
-  Concept *names* are obviously fake (`ZzzTest...`); the taxonomy values
-  themselves have to be real (`us-gaap` / `dei`) since that's a fixed enum.
+  counted), a concept with a null label/description, two taxonomies, a
+  **negative value** (`-150000.75`, real data is ~11% negative), and a
+  **`frame`** value (real data has one ~43% of the time; most facts in the
+  fixture deliberately don't, to prove it stays `None` when absent). Concept
+  *names* are obviously fake (`ZzzTest...`); the taxonomy values themselves
+  have to be real (`us-gaap` / `dei`) since that's a fixed enum.
 - `tests/conftest.py` — `test_session_factory` (a fresh engine per test,
   pointed at `DATABASE_URL_TEST`) and `clean_fake_company` (deletes the fake
   company + its concepts before and after a test).
