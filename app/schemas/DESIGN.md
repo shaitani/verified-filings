@@ -18,7 +18,7 @@ from the submodule (`from app.schemas.xbrl import CompanyFactsFile`), so
 
 `xbrl.py` validates **one curated XBRL-data file** (`data/xbrl/<TICKER>.json`,
 written by the retrieval step in `app/ingest/xbrl_store.py`) on the way IN,
-before the **load step** (`app/db/loader.py`, not written yet) turns it into
+before the **load step** (`app/db/loader.py`, see `LOADER.md`) turns it into
 `app.db` ORM rows.
 
 - **Inbound validation only.** No outbound / read DTOs yet — those come if/when
@@ -113,9 +113,16 @@ pattern could be added later with low risk, but isn't now.)
 is touched. Observed max in the data is 4 decimal places (rates / EPS); 7+ would
 signal a data problem.
 
-The loader **must** read files with `json.loads(text, parse_float=Decimal)` so
-`val` arrives as an exact `Decimal` (`0.047`), never a binary `float`
-(`0.046999…`). Verified: with that flag, `FactIn(val=...)` keeps `Decimal("0.047")`.
+**Correction (verified once the loader existed):** an earlier version of this
+doc said the loader must read files with `parse_float=Decimal` to avoid `0.047`
+becoming an imprecise binary float. Not needed — Pydantic's `Decimal` validator
+converts a Python `float` via its *string* form (`str(500000.47) ->
+Decimal('500000.47')`), not the raw binary value, so plain `json.loads(text)`
+is already exact, as long as the raw dict goes straight into
+`CompanyFactsFile.model_validate()` before anything else touches `val`. Verified
+empirically: `Decimal(500000.47)` (raw) gives `500000.46999999997206...`, but
+`FactIn.model_validate({"val": 500000.47, ...}).val` gives the exact
+`Decimal("500000.47")`, with or without `parse_float=Decimal` upstream.
 
 ### 4.6 String fields mirror their DB column lengths
 
@@ -188,8 +195,8 @@ loader wants it elsewhere, moving it is trivial.
 
 ## 5. Relationship to `app/db`
 
-- The load step (`app/db/loader.py`, TBD) will: read a file with
-  `json.loads(..., parse_float=Decimal)` → `CompanyFactsFile.model_validate(...)`
+- The load step (`app/db/loader.py`, built — see `LOADER.md`) reads a file with
+  plain `json.loads(text)` → `CompanyFactsFile.model_validate(...)`
   → walk `iter_facts()` → apply `ALLOWED_UNITS` (imported from `app.db`) →
   upsert `Concept`, insert `Filing` / `Fact`, maintain `is_latest` → write a
   `LoadRun`.
@@ -202,7 +209,6 @@ loader wants it elsewhere, moving it is trivial.
 
 ## 6. Not built yet / follow-ups
 
-- `app/db/loader.py` — the load step.
 - Outbound / read DTOs — deferred until there's an API or structured CLI output.
 - Possible `fy ∈ scope.fiscal_years` assertion (4.8).
 - Possible `accn` / `frame` regex (4.4).

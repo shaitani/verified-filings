@@ -460,14 +460,15 @@ stderr note, and `write_store=False`.
   `val` mirrors `Numeric(30,6)`, counts-vs-tree checksum. Rationale in
   `app/schemas/DESIGN.md`; tests in `tests/test_xbrl_schema.py` (all 20 real
   store files validate). Outbound / read DTOs still deferred.
-- `app/db/` — **partly built (2026-08-30):** SQLAlchemy 2.0 ORM models for the
-  curated XBRL-data store (`app/db/models.py`, `app/db/__init__.py`), in a
-  dedicated PostgreSQL schema `xbrl`. Full rationale in `app/db/DESIGN.md`.
-  Still to do there: the **load step** (`app/db/loader.py` — reads
-  `data/xbrl/*.json` into the tables), **Alembic** (`app/db/migrations/` +
-  `alembic.ini` at repo root), and **engine/session** wiring
-  (`app/db/session.py`). Note: "retrieval" = the SEC→disk fetch in `app/ingest/`
-  (§7.2); "load" = disk→DB. "Ingest" is avoided as a verb for the DB step.
+- `app/db/` — **built (2026-08-31):** SQLAlchemy 2.0 ORM models
+  (`app/db/models.py`) in a dedicated PostgreSQL schema `xbrl`; Alembic
+  migrations (`app/db/migrations/`, `alembic.ini` at repo root — see
+  `ALEMBIC.md`); async engine/session (`app/db/session.py`); the **load step**
+  (`app/db/loader.py`, `data/xbrl/*.json` -> the tables — see `LOADER.md`).
+  Two PostgreSQL containers in `docker-compose.yml`: `db` (real data) and
+  `db-test` (used only by `tests/`). Full rationale in `app/db/DESIGN.md`.
+  Note: "retrieval" = the SEC→disk fetch in `app/ingest/` (§7.2); "load" =
+  disk→DB. "Ingest" is avoided as a verb for the DB step.
 - ~~Recreating `sic_numbers.json`~~ **Done (2026-08-26).** Rebuilt from
   live SEC data and now maintained automatically by `get_submissions()`
   via `sic_index.update_sic_index()` — see §5.1 and the `sic_index.py`

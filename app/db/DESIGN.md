@@ -407,7 +407,7 @@ that touches Postgres is async:
 | **Config** | `app/config.py` | **built.** `pydantic-settings` `Settings`; exposes `settings.database_url` from `.env`. |
 | **Engine + async session** | `app/db/session.py` | **built.** `engine` + `SessionLocal` (`async_sessionmaker`, `expire_on_commit=False`), from `settings.database_url`. |
 | **Alembic** | `alembic.ini` (repo root) + `app/db/migrations/` (async template) | **scaffolded + wired.** `env.py` pulls the URL from `app.config.settings`, sets `target_metadata = Base.metadata`, restricts autogenerate to the `xbrl` schema, keeps `alembic_version` in `public`. `app/db/migrations/` is excluded from ruff. |
-| **The load step** | `app/db/loader.py` | not written. `async def`. Reads a file (`json.loads(..., parse_float=Decimal)`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. |
+| **The load step** | `app/db/loader.py` | **built.** `async def`. Reads a file (plain `json.loads`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. See `LOADER.md`. |
 | **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. Currently a CLI. |
 
 ### 5.1 Changing the schema later
@@ -435,10 +435,15 @@ signed-off decisions plus the micro-choices — is in
 **[`app/schemas/DESIGN.md`](../schemas/DESIGN.md)**. Tests:
 `tests/test_xbrl_schema.py` (all 20 real store files validate).
 
-What the load step (`app/db/loader.py`, TBD) must know:
+What the load step (`app/db/loader.py`) needed to know:
 
-- Read files with **`json.loads(text, parse_float=Decimal)`** so `FactIn.val`
-  arrives as an exact `Decimal`, never a binary `float`.
+- Plain `json.loads(text)` is enough — **no `parse_float=Decimal` needed.**
+  Earlier drafts assumed one was required to avoid `0.047` becoming an
+  imprecise binary float; verified this is unnecessary — Pydantic's `Decimal`
+  validator converts a `float` via its *string* form
+  (`str(500000.47) -> Decimal('500000.47')`), not the raw binary value, so it's
+  already exact as long as the raw dict goes straight into
+  `CompanyFactsFile.model_validate()` before anything else touches `val`.
 - Walk facts via **`CompanyFactsFile.iter_facts()`** — yields
   `(taxonomy, concept_name, ConceptIn, unit, FactIn)`. Don't re-implement the loop.
 - Schema field names mirror the **source JSON** (`start`/`end`/`val`); the loader

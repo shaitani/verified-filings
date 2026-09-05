@@ -1,0 +1,60 @@
+{
+  "cik": 9999999,
+  "ticker": "ZZZZ",
+  "entity_name": "Zzz Test Holdings Inc.",
+  "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999999.json",
+  "retrieved": "2026-08-31T00:00:00Z",
+  "scope": { "forms": ["10-K"], "fiscal_years": [2023, 2024] },
+  "counts": { "taxonomies": 2, "concepts": 4, "facts": 6 },
+  "facts": {
+    "us-gaap": {
+      "ZzzTestAssets": {
+        "label": "Zzz Test Assets",
+        "description": "Fake concept for loader tests.",
+        "units": {
+          "USD": [
+            { "end": "2024-12-31", "val": 1000000, "accn": "0009999999-24-000001",
+              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" },
+            { "end": "2023-12-31", "val": 900000, "accn": "0009999999-24-000001",
+              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" },
+            { "end": "2023-12-31", "val": 890000, "accn": "0009999999-23-000001",
+              "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2023-11-01" }
+          ]
+        }
+      },
+      "ZzzTestRevenues": {
+        "label": "Zzz Test Revenues",
+        "description": "Fake concept for loader tests. val is a bare JSON float with cents, to exercise exact Decimal conversion.",
+        "units": {
+          "USD": [
+            { "start": "2024-01-01", "end": "2024-12-31", "val": 500000.47,
+              "accn": "0009999999-24-000001", "fy": 2024, "fp": "FY", "form": "10-K",
+              "filed": "2024-11-01" }
+          ]
+        }
+      },
+      "ZzzTestLawsuits": {
+        "label": "Zzz Test Pending Lawsuits",
+        "description": "Unit is outside ALLOWED_UNITS on purpose -- the loader must drop it.",
+        "units": {
+          "lawsuit": [
+            { "end": "2024-12-31", "val": 3, "accn": "0009999999-24-000001",
+              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" }
+          ]
+        }
+      }
+    },
+    "dei": {
+      "ZzzTestSharesOutstanding": {
+        "label": null,
+        "description": null,
+        "units": {
+          "shares": [
+            { "end": "2024-10-15", "val": 42000000, "accn": "0009999999-24-000001",
+              "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -17,7 +17,8 @@ Run every `alembic` command **from the repository root**.
 | `app/db/migrations/env.py` | Run at the start of every Alembic command. Wires Alembic to this project. |
 | `app/db/migrations/versions/` | One Python file per migration. `d1ec76ee2152_initial_xbrl_schema.py` is the first. |
 | `app/config.py` | Reads `DATABASE_URL` from `.env` into `settings.database_url`. |
-| `.env` (repo root, git-ignored) | Holds `DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/verified_filings`. |
+| `.env` (repo root, git-ignored) | Holds `DATABASE_URL` (the real database) and `DATABASE_URL_TEST` (used only by `tests/`). |
+| `docker-compose.yml` | Two Postgres containers: `db` (port 5432, real data) and `db-test` (port 5433, used only by `tests/`) — separate server, separate volume, fully isolated. |
 
 ### What was done, in order
 
@@ -127,7 +128,25 @@ Make sure both `upgrade()` and `downgrade()` are correct.
 uv run alembic upgrade head
 ```
 
-**5. Confirm the database matches the models.**
+**5. Apply the same migration to the test database.** The test suite
+(`tests/`) runs against a **separate PostgreSQL container** (`db-test`, port
+5433), which is not touched automatically — only do this when the schema
+actually changed:
+
+```
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/verified_filings_test uv run alembic upgrade head
+```
+
+(PowerShell: `$env:DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5433/verified_filings_test"; uv run alembic upgrade head`)
+
+This works because `app/config.py` reads whichever `DATABASE_URL` is in the
+environment at the time — a real environment variable always wins over the one
+in `.env`, so this one command temporarily points Alembic at the test database
+without changing any file. (It has to be the literal URL, not `$DATABASE_URL_TEST`
+— that variable only exists inside `.env`, which Python reads directly; your
+shell has never seen it.)
+
+**6. Confirm the (real) database matches the models.**
 
 ```
 uv run alembic check
@@ -135,7 +154,7 @@ uv run alembic check
 
 Expected output: `No new upgrade operations detected.`
 
-**6. Commit** the new migration file together with the `models.py` change, in
+**7. Commit** the new migration file together with the `models.py` change, in
 the same commit.
 
 ### Handy commands
