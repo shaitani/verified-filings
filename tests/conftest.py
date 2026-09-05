@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -37,8 +38,11 @@ def _isolate_xbrl_store(tmp_path, monkeypatch):
 # "db-test" (see docker-compose.yml, ALEMBIC.md), never the real database.
 # --------------------------------------------------------------------------- #
 
-#: cik in tests/fixtures/xbrl_fake_company.json.
-FAKE_CIK = 9999999
+#: cik of tests/fixtures/xbrl_fake_company.json -- read from the file itself,
+#: not retyped, so it can never drift out of sync with it.
+FAKE_CIK = json.loads(
+    (Path(__file__).parent / "fixtures" / "xbrl_fake_company.json").read_text("utf-8")
+)["cik"]
 
 
 class _TestDBSettings(BaseSettings):
