@@ -27,6 +27,17 @@ services:
     ports: ["5050:80"]
     depends_on: [db, db-test]
 
+  # Local embedding model server. Serves nomic-embed-text-v1.5 over Ollama's
+  # HTTP API for concept-search embeddings -- nothing leaves the machine.
+  # 11434 is Ollama's standard port. The image ships no models baked in --
+  # after first `docker compose up`, pull the model once with:
+  #   docker compose exec ollama ollama pull nomic-embed-text
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollama-models:/root/.ollama"]
+
 volumes:
   pgdata:
   pgdata-test:
+  ollama-models:
