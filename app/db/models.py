@@ -81,6 +81,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     DDL,
     BigInteger,
@@ -101,7 +102,6 @@ from sqlalchemy import (
     event,
     text,
 )
-from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -273,7 +273,7 @@ class Concept(Base):
     #: ``embedding``. Built by the (not-yet-written) embedding job as:
     #:   ``f"{label}. {description}"``           when both are present
     #:   whichever of the two is present         when only one is
-    #:   a humanized ``name``                    when neither is (~206 concepts) --
+    #:   a humanized ``name``                    when neither is present --
     #:     e.g. "NetIncomeLoss" -> "Net Income Loss", so the model never sees
     #:     a raw camelCase identifier.
     #: Kept (not just the hash) so a human can see what actually generated the
