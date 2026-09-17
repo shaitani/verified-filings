@@ -101,6 +101,7 @@ from sqlalchemy import (
     event,
     text,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -111,6 +112,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 #: non-financial disclosure count and is dropped during the load step -- the
 #: drop is recorded per run in ``LoadRun``. Widen this set to capture more.
 ALLOWED_UNITS: frozenset[str] = frozenset({"USD", "shares", "pure", "USD/shares", "Rate", "EUR"})
+
+#: Output width of the local embedding model (nomic-embed-text-v1.5, served by
+#: the "ollama" docker-compose service). Must match Concept.embedding's
+#: Vector(...) width -- switching embedding models means a migration to
+#: resize this column, since a different model produces a different length.
+EMBEDDING_DIM = 768
 
 #: PostgreSQL schema (namespace) that owns every table and enum type here.
 SCHEMA = "xbrl"
@@ -255,6 +262,32 @@ class Concept(Base):
     #: label observed max 180 chars (p99 131); description runs to ~1.7k -> Text.
     label: Mapped[str | None] = mapped_column(String(512), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: Semantic-search vector for this concept, produced by embedding
+    #: ``embedding_source_text`` through the local nomic-embed-text-v1.5 model
+    #: (see EMBEDDING_DIM). Null until the (not-yet-written) embedding job has
+    #: processed this concept -- populating it is not part of the load step.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+
+    #: The exact string that was fed to the embedding model to produce
+    #: ``embedding``. Built by the (not-yet-written) embedding job as:
+    #:   ``f"{label}. {description}"``           when both are present
+    #:   whichever of the two is present         when only one is
+    #:   a humanized ``name``                    when neither is (~206 concepts) --
+    #:     e.g. "NetIncomeLoss" -> "Net Income Loss", so the model never sees
+    #:     a raw camelCase identifier.
+    #: Kept (not just the hash) so a human can see what actually generated the
+    #: vector, and so a changed *strategy* (e.g. adding taxonomy to the string)
+    #: can be told apart from the underlying label/description merely changing.
+    embedding_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: sha256 hex digest (64 hex chars) of ``embedding_source_text``, computed
+    #: as ``sha256(embedding_source_text.encode("utf-8")).hexdigest()``. The
+    #: embedding job recomputes this from the current label/description on
+    #: every run and only re-embeds a concept when the hash no longer matches
+    #: -- so re-running the job is cheap (one string compare per concept) when
+    #: nothing has actually changed.
+    embedding_source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # passive_deletes="all": never null out fact.concept_id from the ORM side.
     # Concepts are shared reference data and should not be deleted while facts
