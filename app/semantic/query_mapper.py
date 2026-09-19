@@ -21,17 +21,24 @@ Dependency direction: ``semantic -> (schemas, db)``, never the reverse.
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db import Company, Fact, Filing
+from app.db import Company, Concept, Fact, Filing
 from app.db.session import SessionLocal
+from app.embedding_client import embed_query
 from app.schemas.query import (
     Ambiguity,
     Binding,
+    Candidate,
     CompanyElementIn,
+    ComponentCoverage,
+    ConceptRef,
+    Coverage,
     MetricElementIn,
     PeriodElementIn,
     PeriodResidual,
@@ -41,6 +48,7 @@ from app.schemas.query import (
     ResolvedPeriod,
     Unresolved,
 )
+from app.semantic.aliases import AliasHit, alias_index
 
 #: Day spans that identify a filing's *own* reporting window, separating it
 #: from the year-to-date and comparative durations filed alongside it.
@@ -306,8 +314,38 @@ async def _load_windows(
 
 
 # --------------------------------------------------------------------------- #
-# Metrics -- the part that is not written yet
+# Metrics -- curated aliases first, embeddings as the recall net, coverage as
+# the arbiter of both
 # --------------------------------------------------------------------------- #
+
+#: How many nearest concepts the embedding search returns when no curated alias
+#: matches. Generous on purpose: this step is a *recall* net whose output is a
+#: candidate set, and the coverage filter -- not the distance -- decides.
+_EMBEDDING_CANDIDATES = 25
+
+#: Cosine distance past which a candidate isn't worth considering at all. Loose
+#: (measured good matches sit near 0.15-0.25) so near-misses still reach the
+#: coverage filter, which is the step that can actually disprove them.
+_MAX_EMBEDDING_DISTANCE = 0.45
+
+
+@dataclass(frozen=True)
+class _Candidate:
+    """One concept under consideration for one operand slot."""
+
+    concept_id: int
+    taxonomy: str
+    name: str
+    score: float
+
+
+@dataclass(frozen=True)
+class _Evidence:
+    """What the facts say about one ``(company, concept)`` pair."""
+
+    is_instant: bool
+    unit: str
+    windows: frozenset[tuple[date | None, date]]
 
 
 async def _resolve_metrics(
@@ -317,41 +355,366 @@ async def _resolve_metrics(
     ciks: list[int],
     periods: list[ResolvedPeriod],
 ) -> tuple[list[Binding], list[Ambiguity], list[Unresolved]]:
-    """NOT IMPLEMENTED. Reports every metric element as unresolved.
+    """Bind every metric element to concepts that provably have the facts.
 
-    The cascade this becomes, in order:
+    The cascade, in order:
 
-    1. normalize ``element.text``
-    2. curated YAML alias lookup -> ordered candidates. A hit **skips step 3**:
-       a curated entry is accounting judgment and re-checking it against cosine
-       distance can only add noise.
-    3. ``embed_query(text)`` -> top-K nearest ``Concept.embedding``, tuned for
-       recall (generous K, loose threshold). A recall net for whatever step 2
-       does not cover yet, never a decision.
-    4. coverage filter: drop any candidate with no ``Fact`` rows for the
-       ``(cik, concept_id)`` pair inside the resolved ``periods``. This is what
-       turns a guess into a verified binding, and it outranks similarity
-       outright -- a candidate scoring 0.91 with no facts loses to one scoring
-       0.78 with twenty.
-    5. commit one ``Binding`` per ``(element, cik)``, carrying the ``unit`` and
-       ``is_instant`` read off the surviving facts; emit an ``Ambiguity`` when
-       more than one candidate survives step 4.
+    1. curated alias lookup (``aliases.yaml``). A hit **skips step 2** -- a
+       curated entry is accounting judgment, and re-checking it against cosine
+       distance could only add noise.
+    2. embedding search, as a recall net for whatever the file does not cover
+       yet. Produces candidates, never a decision.
+    3. coverage: drop any candidate without facts for every window the plan
+       asks for, per company. This is what separates a verified binding from a
+       plausible one, and it outranks similarity outright.
+    4. commit one ``Binding`` per ``(element, company)``, or report.
 
-    ``ciks`` and ``periods`` are already resolved when this is called -- step 4
-    needs them, which is why the metric pass runs last. Note that coverage has
-    to be checked against the *concept that carries the requested granularity*:
-    NVDA has annual-only facts under one revenue concept and quarterly facts
-    under another, so a concept-level count alone would pass a binding that
-    cannot answer a quarterly question.
+    Curated alternatives are ordered, so the first survivor of step 3 wins
+    outright -- that ordering *is* the disambiguation, which is why the alias
+    path never yields an ``Ambiguity``. The embedding path has no such
+    ordering, so several survivors there is a real tie and gets reported.
+
+    This is also where filer divergence dissolves without per-company
+    curation: "revenue" lists several concepts, and each company keeps
+    whichever one its own facts support.
     """
-    return (
-        [],
-        [],
-        [
-            Unresolved(
-                element_id=element.id,
-                reason=f"metric resolver not implemented; {element.text!r} left unbound",
+    if not elements:
+        return [], [], []
+
+    blockers = []
+    if not ciks:
+        blockers.append("no company in scope to verify coverage against")
+    if not periods:
+        blockers.append("no reporting period in scope to verify coverage against")
+    if blockers:
+        reason = "; ".join(blockers)
+        return [], [], [Unresolved(element_id=e.id, reason=reason) for e in elements]
+
+    index = alias_index()
+    bindings: list[Binding] = []
+    ambiguous: list[Ambiguity] = []
+    problems: list[Unresolved] = []
+
+    for element in elements:
+        hit = index.lookup(element.text)
+        if hit is not None:
+            slots = await _slots_from_alias(session, hit)
+            if any(not slot for slot in slots):
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"curated alias {hit.metric!r} maps to concepts that are "
+                        "not loaded in this database",
+                    )
+                )
+                continue
+            expression = hit.expression
+            resolved_by = "alias"
+            source = f"curated alias {hit.metric!r}"
+        else:
+            nearest = await _nearest_concepts(session, element.text)
+            if not nearest:
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"no curated alias for {element.text!r}, and nothing in the "
+                        "concept corpus is close enough",
+                    )
+                )
+                continue
+            slots = [nearest]
+            expression = "c0"
+            resolved_by = "embedding"
+            source = "embedding search"
+
+        evidence = await _gather_evidence(
+            session,
+            ciks=ciks,
+            concept_ids={c.concept_id for slot in slots for c in slot},
+            periods=periods,
+        )
+        _bind_per_company(
+            element,
+            slots=slots,
+            expression=expression,
+            resolved_by=resolved_by,
+            source=source,
+            ciks=ciks,
+            periods=periods,
+            evidence=evidence,
+            bindings=bindings,
+            ambiguous=ambiguous,
+            problems=problems,
+        )
+
+    return bindings, ambiguous, problems
+
+
+def _bind_per_company(
+    element: MetricElementIn,
+    *,
+    slots: list[list[_Candidate]],
+    expression: str,
+    resolved_by: str,
+    source: str,
+    ciks: list[int],
+    periods: list[ResolvedPeriod],
+    evidence: dict[tuple[int, int], _Evidence],
+    bindings: list[Binding],
+    ambiguous: list[Ambiguity],
+    problems: list[Unresolved],
+) -> None:
+    """Commit one binding per company, or say why there isn't one."""
+    for cik in ciks:
+        in_scope = [p for p in periods if p.company_cik == cik]
+        if not in_scope:
+            continue
+
+        chosen: list[_Candidate] = []
+        tied: list[_Candidate] = []
+        for slot in slots:
+            survivors = [c for c in slot if _covers(evidence.get((cik, c.concept_id)), in_scope)]
+            if not survivors:
+                chosen = []
+                break
+            if resolved_by == "embedding" and len(survivors) > 1:
+                tied = survivors
+                chosen = []
+                break
+            chosen.append(survivors[0])
+
+        if tied:
+            ambiguous.append(
+                Ambiguity(
+                    element_id=element.id,
+                    candidates=[
+                        Candidate(
+                            concept=ConceptRef(
+                                concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name
+                            ),
+                            score=c.score,
+                            coverage=_coverage_for(evidence[(cik, c.concept_id)], in_scope),
+                        )
+                        for c in tied[:4]
+                    ],
+                )
             )
-            for element in elements
-        ],
+            continue
+
+        if not chosen:
+            problems.append(
+                Unresolved(
+                    element_id=element.id,
+                    reason=f"{element.text!r} has no concept with facts covering every "
+                    f"requested period for cik {cik}",
+                )
+            )
+            continue
+
+        lead = evidence[(cik, chosen[0].concept_id)]
+        residual = not lead.is_instant and any(p.residual_of for p in in_scope)
+
+        bindings.append(
+            Binding(
+                element_id=element.id,
+                company_cik=cik,
+                concepts=[
+                    ConceptRef(concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name)
+                    for c in chosen
+                ],
+                expression=expression,
+                unit=lead.unit,
+                is_instant=lead.is_instant,
+                period_rule="residual" if residual else "direct",
+                coverage=_coverage_for(lead, in_scope, residual=residual),
+                confidence=1.0 if resolved_by == "alias" else chosen[0].score,
+                resolved_by=resolved_by,
+                rationale=(
+                    f"{element.text!r} -> "
+                    + ", ".join(f"{c.taxonomy}:{c.name}" for c in chosen)
+                    + f" via {source}; verified against {len(in_scope)} requested period(s)"
+                    + (" as a Q4 residual" if residual else "")
+                ),
+            )
+        )
+
+
+def _required_windows(
+    period: ResolvedPeriod, *, is_instant: bool
+) -> list[tuple[date | None, date]]:
+    """The fact windows a period needs before it can be answered.
+
+    An instant only ever needs its closing date -- including at Q4, where the
+    fiscal-year-end balance already *is* the Q4-end balance. A duration at Q4
+    needs both residual components, because subtracting a window that is not
+    there does not fail; it quietly returns the whole year.
+    """
+    if is_instant:
+        return [(None, period.period_end)]
+    if period.residual_of is not None:
+        residual = period.residual_of
+        return [
+            (residual.shared_start, residual.whole_end),
+            (residual.shared_start, residual.subtract_end),
+        ]
+    return [(period.period_start, period.period_end)]
+
+
+def _covers(evidence: _Evidence | None, periods: list[ResolvedPeriod]) -> bool:
+    if evidence is None:
+        return False
+    required = {
+        window
+        for period in periods
+        for window in _required_windows(period, is_instant=evidence.is_instant)
+    }
+    return required <= evidence.windows
+
+
+def _coverage_for(
+    evidence: _Evidence, periods: list[ResolvedPeriod], *, residual: bool = False
+) -> Coverage:
+    required = [
+        window
+        for period in periods
+        for window in _required_windows(period, is_instant=evidence.is_instant)
+    ]
+    present = [window for window in required if window in evidence.windows]
+    ends = [end for _, end in present]
+
+    components: list[ComponentCoverage] = []
+    if residual:
+        seen: set[tuple[date, date]] = set()
+        for period in periods:
+            if period.residual_of is None:
+                continue
+            for start, end in _required_windows(period, is_instant=False):
+                if (start, end) in seen:
+                    continue
+                seen.add((start, end))
+                components.append(
+                    ComponentCoverage(
+                        period_start=start,
+                        period_end=end,
+                        fact_count=int((start, end) in evidence.windows),
+                    )
+                )
+
+    return Coverage(
+        fact_count=len(present),
+        period_min=min(ends) if ends else None,
+        period_max=max(ends) if ends else None,
+        components=components,
     )
+
+
+async def _slots_from_alias(session: AsyncSession, hit: AliasHit) -> list[list[_Candidate]]:
+    """An alias hit's ``(taxonomy, name)`` refs as loaded concepts.
+
+    Keeps the file's preference order and silently drops refs this database
+    has never seen -- a slot left empty by that is reported by the caller.
+    """
+    refs = {ref for slot in hit.terms for ref in slot}
+    rows = await session.execute(
+        select(Concept.id, Concept.taxonomy, Concept.name).where(
+            tuple_(Concept.taxonomy, Concept.name).in_(refs)
+        )
+    )
+    loaded = {(taxonomy, name): concept_id for concept_id, taxonomy, name in rows}
+    return [
+        [
+            _Candidate(concept_id=loaded[ref], taxonomy=ref[0], name=ref[1], score=1.0)
+            for ref in slot
+            if ref in loaded
+        ]
+        for slot in hit.terms
+    ]
+
+
+async def _nearest_concepts(session: AsyncSession, text: str) -> list[_Candidate]:
+    """Concepts nearest ``text`` in embedding space, closest first.
+
+    Returns nothing when the corpus has no embeddings, so a database that has
+    not had ``app.db.embedder`` run against it degrades to "no candidates"
+    instead of making a pointless call to the embedding service.
+    """
+    any_embedded = await session.execute(
+        select(Concept.id).where(Concept.embedding.is_not(None)).limit(1)
+    )
+    if any_embedded.first() is None:
+        return []
+
+    distance = Concept.embedding.cosine_distance(await embed_query(text))
+    rows = await session.execute(
+        select(Concept.id, Concept.taxonomy, Concept.name, distance.label("distance"))
+        .where(Concept.embedding.is_not(None), distance < _MAX_EMBEDDING_DISTANCE)
+        .order_by(distance)
+        .limit(_EMBEDDING_CANDIDATES)
+    )
+    return [
+        _Candidate(concept_id=cid, taxonomy=taxonomy, name=name, score=1.0 - float(dist))
+        for cid, taxonomy, name, dist in rows
+    ]
+
+
+async def _gather_evidence(
+    session: AsyncSession,
+    *,
+    ciks: list[int],
+    concept_ids: set[int],
+    periods: list[ResolvedPeriod],
+) -> dict[tuple[int, int], _Evidence]:
+    """What facts exist for each ``(company, candidate concept)`` pair.
+
+    Fetches every window any interpretation might need -- instant closing
+    dates and duration spans, residual components included -- in one query,
+    and leaves it to the caller to decide which were actually required.
+    """
+    instant_dates = {period.period_end for period in periods}
+    duration_windows: set[tuple[date, date]] = set()
+    for period in periods:
+        if period.residual_of is not None:
+            residual = period.residual_of
+            duration_windows.add((residual.shared_start, residual.whole_end))
+            duration_windows.add((residual.shared_start, residual.subtract_end))
+        else:
+            duration_windows.add((period.period_start, period.period_end))
+
+    rows = await session.execute(
+        select(
+            Fact.company_cik,
+            Fact.concept_id,
+            Fact.unit,
+            Fact.is_instant,
+            Fact.period_start,
+            Fact.period_end,
+        ).where(
+            Fact.company_cik.in_(ciks),
+            Fact.concept_id.in_(concept_ids),
+            Fact.is_latest.is_(True),
+            or_(
+                and_(Fact.is_instant.is_(True), Fact.period_end.in_(instant_dates)),
+                and_(
+                    Fact.is_instant.is_(False),
+                    tuple_(Fact.period_start, Fact.period_end).in_(duration_windows),
+                ),
+            ),
+        )
+    )
+
+    collected: dict[tuple[int, int], list[tuple[str, bool, date | None, date]]] = defaultdict(list)
+    for cik, concept_id, unit, is_instant, start, end in rows:
+        collected[(cik, concept_id)].append((unit, is_instant, None if is_instant else start, end))
+
+    evidence: dict[tuple[int, int], _Evidence] = {}
+    for key, found in collected.items():
+        # A concept is either a flow or a balance. If a filer has tagged both,
+        # go with whichever it did more often rather than guessing.
+        is_instant = Counter(instant for _, instant, _, _ in found).most_common(1)[0][0]
+        same_kind = [row for row in found if row[1] == is_instant]
+        evidence[key] = _Evidence(
+            is_instant=is_instant,
+            unit=Counter(unit for unit, _, _, _ in same_kind).most_common(1)[0][0],
+            windows=frozenset((start, end) for _, _, start, end in same_kind),
+        )
+    return evidence

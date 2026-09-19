@@ -1,0 +1,184 @@
+# Curated business-term -> XBRL concept mappings: the accounting judgment the
+# embedding search cannot supply.
+#
+# Read by app/semantic/aliases.py, validated by app/schemas/aliases.py.
+# Rationale and the rules for editing: app/schemas/DESIGN.md section 9.
+#
+# How an entry is used
+# --------------------
+#   terms      one list per operand of `expression`. terms[0] is "c0", and so
+#              on. Each list holds ALTERNATIVE concepts in preference order --
+#              not a set to combine. The resolver walks them in order and takes
+#              the first one that has facts covering the requested periods for
+#              that specific company, which is how filer divergence resolves
+#              itself: NVIDIA reports quarterly revenue under `Revenues` while
+#              Apple and Microsoft use `RevenueFromContractWithCustomer...`,
+#              and neither needs a per-company entry here.
+#   expression arithmetic over the operands. Defaults to "c0". The SQL step
+#              performs it; nothing here is ever evaluated in Python.
+#   synonyms   extra surface forms. Matched after normalizing (lowercase,
+#              collapse whitespace, drop punctuation), so "R&D" and "r & d"
+#              both land on the same entry. Must be unique across the file.
+#
+# Coverage measured across all 20 companies / 5 fiscal years, 2026-09-18. The
+# company counts noted below are why some entries list several alternatives.
+
+version: 1
+
+metrics:
+  # --- income statement -----------------------------------------------------
+  revenue:
+    label: Total revenue
+    # 16 companies tag RevenueFromContractWithCustomer..., 10 tag Revenues.
+    synonyms: [revenues, total revenue, net revenue, net revenues, sales, net sales, top line]
+    terms:
+      - - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+        - us-gaap:Revenues
+        - us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax
+
+  cost_of_revenue:
+    label: Cost of revenue
+    synonyms: [cost of sales, cost of goods sold, cogs, cost of products sold]
+    terms:
+      - - us-gaap:CostOfGoodsAndServicesSold
+        - us-gaap:CostOfRevenue
+
+  gross_profit:
+    label: Gross profit
+    # Only 9 of 20 report GrossProfit as a tagged line; the rest leave it to be
+    # computed. Left as a single alternative deliberately -- an entry that
+    # silently fell back to revenue-minus-cost would be a different number than
+    # the filer's own subtotal.
+    synonyms: [gross income]
+    terms:
+      - [us-gaap:GrossProfit]
+
+  operating_income:
+    label: Operating income
+    synonyms: [operating profit, income from operations, operating earnings]
+    terms:
+      - [us-gaap:OperatingIncomeLoss]
+
+  net_income:
+    label: Net income
+    synonyms: [net earnings, net profit, profit, bottom line, net loss]
+    terms:
+      - - us-gaap:NetIncomeLoss
+        - us-gaap:ProfitLoss
+
+  research_and_development:
+    label: Research and development expense
+    synonyms: [r and d, rnd, research and development, research expense, r d expense]
+    terms:
+      - [us-gaap:ResearchAndDevelopmentExpense]
+
+  sga_expense:
+    label: Selling, general and administrative expense
+    synonyms: [sg and a, sga, selling general and administrative, overhead]
+    terms:
+      - [us-gaap:SellingGeneralAndAdministrativeExpense]
+
+  income_tax_expense:
+    label: Income tax expense
+    synonyms: [income taxes, tax expense, provision for income taxes]
+    terms:
+      - [us-gaap:IncomeTaxExpenseBenefit]
+
+  stock_based_compensation:
+    label: Share-based compensation
+    synonyms: [stock compensation, share based compensation, sbc, stock comp]
+    terms:
+      - [us-gaap:ShareBasedCompensation]
+
+  eps_diluted:
+    label: Diluted earnings per share
+    synonyms: [diluted eps, earnings per share diluted, diluted earnings per share]
+    terms:
+      - [us-gaap:EarningsPerShareDiluted]
+
+  eps_basic:
+    label: Basic earnings per share
+    synonyms: [basic eps, earnings per share basic, basic earnings per share]
+    terms:
+      - [us-gaap:EarningsPerShareBasic]
+
+  # --- balance sheet (instant facts; no Q4 arithmetic needed) ---------------
+  total_assets:
+    label: Total assets
+    synonyms: [assets]
+    terms:
+      - [us-gaap:Assets]
+
+  total_liabilities:
+    label: Total liabilities
+    synonyms: [liabilities]
+    terms:
+      - [us-gaap:Liabilities]
+
+  shareholders_equity:
+    label: Shareholders' equity
+    synonyms: [stockholders equity, shareholders equity, total equity, book value]
+    terms:
+      - [us-gaap:StockholdersEquity]
+
+  cash:
+    label: Cash and cash equivalents
+    synonyms: [cash and equivalents, cash on hand, cash balance]
+    terms:
+      - [us-gaap:CashAndCashEquivalentsAtCarryingValue]
+
+  inventory:
+    label: Inventory
+    synonyms: [inventories, stock on hand]
+    terms:
+      - [us-gaap:InventoryNet]
+
+  goodwill:
+    label: Goodwill
+    synonyms: []
+    terms:
+      - [us-gaap:Goodwill]
+
+  long_term_debt:
+    label: Long-term debt
+    synonyms: [long term debt, noncurrent debt]
+    terms:
+      - - us-gaap:LongTermDebtNoncurrent
+        - us-gaap:LongTermDebt
+
+  shares_outstanding:
+    label: Common shares outstanding
+    synonyms: [shares outstanding, common shares outstanding, share count]
+    terms:
+      - [us-gaap:CommonStockSharesOutstanding]
+
+  # --- cash flow ------------------------------------------------------------
+  operating_cash_flow:
+    label: Net cash from operating activities
+    synonyms: [cash from operations, operating cash flow, cash flow from operations, ocf]
+    terms:
+      - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
+
+  capital_expenditures:
+    label: Capital expenditures
+    synonyms: [capex, capital spending, purchases of property and equipment]
+    terms:
+      - [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+
+  # --- derived: arithmetic over several concepts ----------------------------
+  gross_margin:
+    label: Gross margin
+    synonyms: [gross profit margin, gross margin percentage]
+    expression: c0 / c1
+    terms:
+      - [us-gaap:GrossProfit]
+      - - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+        - us-gaap:Revenues
+
+  free_cash_flow:
+    label: Free cash flow
+    synonyms: [fcf, free cash]
+    expression: c0 - c1
+    terms:
+      - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
+      - [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]

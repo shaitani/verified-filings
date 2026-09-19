@@ -18,8 +18,12 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from app.db.loader import load_file
 from app.schemas.query import QueryIn
+from app.semantic import query_mapper
+from app.semantic.aliases import load_aliases
 from app.semantic.query_mapper import map_query
 from tests.conftest import FAKE_CIK
 
@@ -63,11 +67,11 @@ def _query(*elements, intent: str = "lookup") -> QueryIn:
     )
 
 
-async def test_resolves_company_and_period_and_stubs_the_metric(
-    test_session_factory, clean_fake_company
-) -> None:
-    """The whole shape, end to end: in a QueryIn, out a QueryPlan whose
-    deterministic halves are filled and whose metric half is reported missing.
+async def test_plan_shape_end_to_end(test_session_factory, clean_fake_company) -> None:
+    """The whole shape, end to end. "revenue" hits the real curated alias file,
+    whose concepts are not in this test database, so it reports rather than
+    binds -- which is the right answer here and keeps the assertion about plan
+    *shape* rather than about the fixture's accounting.
     """
     await load_file(FIXTURE_PATH, session_factory=test_session_factory)
 
@@ -84,7 +88,7 @@ async def test_resolves_company_and_period_and_stubs_the_metric(
     assert plan.question == "test question"
     assert plan.filters.ciks == [FAKE_CIK]
 
-    # The stub's contract: the metric element is the only thing outstanding.
+    # The metric element is the only thing outstanding.
     assert [u.element_id for u in plan.unresolved] == ["e1"]
     assert plan.bindings == []
     assert not plan.is_complete
@@ -232,3 +236,146 @@ async def test_q4_is_unresolved_without_a_q3_window(
 
     assert plan.filters.periods == []
     assert "no Q4 reporting window" in plan.unresolved[0].reason
+
+
+# --------------------------------------------------------------------------- #
+# Metrics -- the alias cascade, against the fixture's own concepts
+# --------------------------------------------------------------------------- #
+
+FAKE_ALIASES = Path(__file__).parent / "fixtures" / "aliases_fake.yaml"
+
+
+@pytest.fixture
+def fake_aliases(monkeypatch):
+    """Point the resolver at the fixture alias file.
+
+    Patched on ``query_mapper`` rather than on ``app.semantic.aliases`` because
+    the name is bound at import; ``alias_index`` is also lru_cached, and
+    replacing it here keeps the real file's cache untouched for other tests.
+    """
+    index = load_aliases(FAKE_ALIASES)
+    monkeypatch.setattr(query_mapper, "alias_index", lambda: index)
+    return index
+
+
+async def test_alias_falls_through_to_a_loaded_alternative(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The first listed concept isn't in this database at all, so the second
+    one is bound -- preference order, with unloaded refs skipped."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.is_complete
+    (binding,) = plan.bindings
+    assert [c.name for c in binding.concepts] == ["ZzzTestRevenues"]
+    assert binding.resolved_by == "alias"
+    assert binding.period_rule == "direct"
+    assert binding.is_instant is False
+
+
+async def test_coverage_rejects_a_loaded_concept_without_the_right_facts(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Both alternatives exist in the database. The first one's only fact is an
+    instant dated partway through the year, so it cannot answer a fiscal-year
+    request and the second is chosen -- coverage overriding preference order.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget assets", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    (binding,) = plan.bindings
+    assert [c.name for c in binding.concepts] == ["ZzzTestAssets"]
+    assert binding.is_instant is True
+
+
+async def test_no_candidate_with_coverage_is_reported_not_guessed(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget nothing", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings == []
+    assert not plan.is_complete
+    assert "no concept with facts covering" in plan.unresolved[0].reason
+
+
+async def test_multi_slot_alias_binds_every_operand(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """A derived metric binds one concept per operand slot and carries the
+    expression through for the SQL step to apply."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget margin", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    (binding,) = plan.bindings
+    assert binding.expression == "c0 / c1"
+    assert [c.name for c in binding.concepts] == ["ZzzTestNetLoss", "ZzzTestRevenues"]
+
+
+async def test_metric_without_a_company_cannot_be_verified(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Coverage is checked per company, so a metric with nothing to check it
+    against is reported rather than bound on faith."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query({"id": "m", "text": "widget sales", "kind": "metric"}),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings == []
+    assert "no company in scope" in plan.unresolved[0].reason
+
+
+async def test_unaliased_term_makes_no_embedding_call_without_a_corpus(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The test database has no concept embeddings. The resolver must notice
+    and report, not reach out to the embedding service."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "blorptastic synergy index", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings == []
+    assert "nothing in the concept corpus" in plan.unresolved[0].reason

@@ -1,0 +1,39 @@
+# Alias file for tests, pointing at the ZzzTest* concepts in
+# xbrl_fake_company.json. Never loaded by the app -- tests/test_query_mapper.py
+# patches it in so the resolver cascade can be exercised against the fixture
+# rather than against the real curated file.
+
+version: 1
+
+metrics:
+  # First alternative is not in any fixture file, so it must be skipped and the
+  # second one chosen -- the "concept ref not loaded" path.
+  widget_revenue:
+    label: Widget revenue
+    synonyms: [widget sales]
+    terms:
+      - - us-gaap:ZzzTestNeverLoaded
+        - us-gaap:ZzzTestRevenues
+
+  # First alternative IS loaded but its only fact is an instant dated partway
+  # through the year, so it cannot cover a fiscal-year request -- the
+  # "coverage rejects a loaded concept" path.
+  widget_assets:
+    label: Widget assets
+    terms:
+      - - dei:ZzzTestSharesOutstanding
+        - us-gaap:ZzzTestAssets
+
+  # Nothing here can cover a fiscal-year window.
+  widget_nothing:
+    label: Widget nothing
+    terms:
+      - [dei:ZzzTestSharesOutstanding]
+
+  # Two operand slots, so the binding carries an expression.
+  widget_margin:
+    label: Widget margin
+    expression: c0 / c1
+    terms:
+      - [us-gaap:ZzzTestNetLoss]
+      - [us-gaap:ZzzTestRevenues]
