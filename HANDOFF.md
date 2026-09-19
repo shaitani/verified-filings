@@ -87,12 +87,19 @@ the binding has to be *proven* before it is made.
 ### The alias layer
 
 [`app/semantic/metric_aliases.yaml`](app/semantic/metric_aliases.yaml) is
-curated accounting judgment as **data, not code** — 37 metrics, 142 surface
+curated accounting judgment as **data, not code** — 47 metrics, 182 surface
 forms. Each operand slot lists *alternatives in preference order*, and coverage
 picks per company. That is how filer divergence resolves without per-company
 tables: Apple and Microsoft bind
 `RevenueFromContractWithCustomerExcludingAssessedTax`, NVIDIA binds `Revenues`,
 from one entry.
+
+An entry does one of three things, and the split matters more than the count:
+39 **resolve**, 4 **ask** (`clarify`), 4 **decline** (`unavailable` — share
+price, market cap, segment revenue, gross revenue). An entry may also attach a
+per-concept `caveat`, which becomes a `narrower_than_asked` note when a
+fallback alternative answers less than the phrase asked for. See
+`app/semantic/DESIGN.md` §8, §8a, §8b.
 
 **The user is not an accountant.** Curating this file is a collaborative task
 and the main lever for improving answer quality.
@@ -124,14 +131,16 @@ emitter might remove the LLM for most questions. **The user pushed back and was
 right.** `evals/` was built to settle it:
 
 ```
-46 answerable or partial questions
+44 answerable or partial questions
 ... of those, retrieval only  25
-... needing more than that    21   →  46%
+... needing more than that    19   →  43%
 ```
 
 (It read 56% when I had written all the questions; the user's 13 additions are
-more retrieval-heavy and pulled it down. Both numbers say the same thing: a
-large minority-to-majority needs more than retrieval.)
+more retrieval-heavy and pulled it down, and the two of mine they later deleted
+— an all-twenty ranking and a cross-company share-of-total — took the last
+three points with them. All three numbers say the same thing: a large minority
+needs more than retrieval.)
 
 So **Qwen stays.** The split:
 
@@ -147,7 +156,7 @@ So **Qwen stays.** The split:
 The difference from the original plan is only *what Qwen writes against*: a
 narrow retrieval surface instead of four raw tables.
 
-**Caveat:** I wrote 44 of the 58 questions, so the distribution still leans on
+**Caveat:** I wrote 42 of the 56 questions, so the distribution still leans on
 my imagination. More of the user's questions is the cheapest way to sharpen it.
 
 ## 5. What is NOT built — the forward plan
@@ -194,7 +203,7 @@ mapper handles, and it belongs to this layer.
 
 ### 5.7 Company grouping — SCHEMA BUILT, DATA MISSING
 
-From q051/q052 ("which companies in a given sector / by SIC office performed
+From q049/q050 ("which companies in a given sector / by SIC office performed
 best"). The query path is **complete**; only the data is absent.
 
 Built: `CompanyGroupElementIn` (`sic_code` / `sic_description` / `sic_office`),
@@ -226,22 +235,61 @@ current ratio. Capex gained `PaymentsToAcquireProductiveAssets`, taking it from
 14 filers to 18 — BAC and JPM report no capex concept at all, which is normal
 for banks.
 
-Three entries deliberately **ask** rather than resolve — `profit_margin`,
-`profit`, `cash_flow` — via the `clarify` mechanism (app/semantic/DESIGN.md
-§8). Naming the specific metric resolves straight through.
+Four entries deliberately **ask** rather than resolve — `profit_margin`,
+`profit`, `cash_flow`, `debt` — via the `clarify` mechanism
+(app/semantic/DESIGN.md §8). Naming the specific metric resolves straight
+through.
 
-Two things stay uncurated on purpose:
+Four **decline**, via `unavailable` (§8a): `stock_price`, `market_cap`,
+`segment_revenue`, `gross_revenue`. These are questions people actually ask
+that this store structurally cannot answer, and the entry exists so the
+refusal is a reason rather than a menu — left unlisted, a term falls to the
+embedding search, which always returns *something*.
 
-- **"gross revenue"** — US GAAP has no gross-vs-net revenue pair, so there is
-  nothing honest to map it to.
+`gross_revenue` is the instructive one. It was listed here as **deliberately
+uncurated** on the correct reasoning that US GAAP has no gross-vs-net revenue
+pair. That turned out not to be the same as declining it: unlisted, it fell
+through to `GrossProfit` at 0.812 — a different line, and a smaller one.
+"Nothing honest to map it to" is an argument for `unavailable`, not for
+silence.
+
+Still uncurated on purpose:
+
 - **`gross_profit`** — only 9 of 20 filers tag it, and falling back to
   revenue-minus-cost would produce a different number from the filer's own
-  subtotal.
+  subtotal. Unlike gross revenue, the concept genuinely exists; the honest
+  answer for the other 11 is "this filer does not report it", which coverage
+  already gives.
 
 Adding a filer will reopen gaps: coverage counts in the file are measured
 against the current 20 and noted inline.
 
-### 5.9 Known smaller gaps
+### 5.9 Nothing checks that the elements express the question — NOT ADDRESSED
+
+The last plausible-wrong-answer in the eval set, and the only one left that
+produces a confident number for a question nobody asked.
+
+**q026**, "Did any of these companies restate its revenue?", comes back
+`is_complete` with a 100-row revenue series and no caveat. Every element
+resolved — "revenue", twenty companies, five years — so by every measure the
+mapper has, the plan is perfect. It answers "what was their revenue", which is
+a different question.
+
+The mapper cannot catch this on its own and arguably should not: it is handed
+elements, not a question, and the elements are all fine. `QueryIn.question`
+carries the original text, so *something* could compare the two, but the
+natural home is the producer (§5.6) — the layer that decided "restate" needed
+no element and dropped it silently, exactly as the removed `qualifier` kind
+used to (DESIGN.md §8.19).
+
+Shapes that fail this way: restatement, causality ("why did margins fall"),
+counts of filings, anything about the *filing* rather than the figures.
+
+Worth deciding, when the producer is built: should an unrepresented span of the
+question raise, warn, or be ignored? Silently ignoring it is what happens today
+and is the worst of the three.
+
+### 5.10 Known smaller gaps
 
 - **Metric groups are NOT a thing.** "cash flow: operating, investing,
   financing" is just several `MetricElementIn` along a metric axis, which works
@@ -280,7 +328,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (171 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (205 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 7. Verifying things yourself
