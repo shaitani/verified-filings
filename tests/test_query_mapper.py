@@ -24,14 +24,19 @@ from app.db import Company
 from app.db.loader import load_file
 from app.schemas.query import (
     Binding,
+    Clarification,
+    ClarifyOption,
     ConceptRef,
     Coverage,
     Note,
     PeriodRef,
     PeriodResidual,
+    PlanFilters,
     QueryIn,
+    QueryPlan,
     ResolvedPeriod,
     ResultSpec,
+    Unresolved,
 )
 from app.semantic import query_mapper
 from app.semantic.metric_aliases import load_aliases
@@ -681,3 +686,88 @@ async def test_named_company_and_group_merge_without_duplicates(
     )
 
     assert plan.filters.ciks == [FAKE_CIK]
+
+
+async def test_ambiguous_term_asks_instead_of_refusing(
+    test_session_factory, clean_fake_company
+) -> None:
+    """A curated clarify entry must come back as a question with named choices,
+    not as a dead end. Uses the real alias file -- "profit margin" is exactly
+    the case it exists for."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "profit margin", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    assert plan.needs_input, "a curated question is answerable, not a failure"
+    (clarification,) = plan.clarifications
+    assert clarification.element_text == "profit margin"
+    assert "?" in clarification.question
+    assert {o.metric for o in clarification.options} == {
+        "gross_margin",
+        "operating_margin",
+        "net_margin",
+    }
+    # Options read in business terms, not file keys or concept names.
+    assert all(o.label and o.description for o in clarification.options)
+
+
+async def test_specific_margin_resolves_without_asking(
+    test_session_factory, clean_fake_company
+) -> None:
+    """Only the bare term asks. Naming the margin has to go straight through,
+    or the clarification becomes a toll gate."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "net profit margin", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.clarifications == []
+
+
+def test_needs_input_separates_asking_from_impossible() -> None:
+    """`unresolved` means the data cannot support the question; clarifications
+    and ambiguities mean it might, once the asker narrows it."""
+    spec = ResultSpec(shape="scalar", companies=1, periods=1, metrics=1)
+    impossible = QueryPlan(
+        question="q",
+        intent="lookup",
+        result=spec,
+        filters=PlanFilters(),
+        unresolved=[Unresolved(element_id="e1", reason="no such data")],
+    )
+    assert not impossible.is_complete
+    assert not impossible.needs_input
+
+    askable = QueryPlan(
+        question="q",
+        intent="lookup",
+        result=spec,
+        filters=PlanFilters(),
+        clarifications=[
+            Clarification(
+                element_id="e1",
+                element_text="margin",
+                question="Which margin?",
+                options=[
+                    ClarifyOption(metric="gross_margin", label="Gross margin", description="a"),
+                    ClarifyOption(metric="net_margin", label="Net margin", description="b"),
+                ],
+            )
+        ],
+    )
+    assert not askable.is_complete
+    assert askable.needs_input

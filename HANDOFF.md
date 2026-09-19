@@ -87,7 +87,7 @@ the binding has to be *proven* before it is made.
 ### The alias layer
 
 [`app/semantic/metric_aliases.yaml`](app/semantic/metric_aliases.yaml) is
-curated accounting judgment as **data, not code** — 22 metrics, 87 surface
+curated accounting judgment as **data, not code** — 37 metrics, 142 surface
 forms. Each operand slot lists *alternatives in preference order*, and coverage
 picks per company. That is how filer divergence resolves without per-company
 tables: Apple and Microsoft bind
@@ -215,30 +215,31 @@ description only; the SEC assigns review offices by SIC *range*, so it is
 derivable given that mapping, which this project does not have. The column
 exists so the query path is complete; populating it is a separate decision.
 
-### 5.8 Alias curation queue — now the largest single gap
+### 5.8 Alias curation — the 13 gaps are closed
 
-`alias_gap` is tagged **13 times** across the eval set, more than any other
-hazard. All are questions that *should* work, where the concepts exist and are
-well covered, and only a curated entry is missing. Verified against the mapper:
+`alias_gap` was tagged 13 times and is now **zero**. The file went from 22
+metrics / 87 surface forms to 37 / 142. Added: investing and financing cash
+flow, interest expense (ordered fallback, resolves per filer), effective tax
+rate, share buybacks, dividends per share, dividends paid, PP&E, current
+assets and liabilities, operating margin, net margin, free cash flow margin,
+current ratio. Capex gained `PaymentsToAcquireProductiveAssets`, taking it from
+14 filers to 18 — BAC and JPM report no capex concept at all, which is normal
+for banks.
 
-| ask | status |
-|---|---|
-| investing / financing cash flow | refused as ambiguous *against each other*; 20 filers each |
-| interest expense | unresolved; `InterestExpense` (17), `InterestExpenseDebt` (5), `InterestIncomeExpenseNet` (4) |
-| effective tax rate | refused; 20 filers, but filed under **two units** (`pure` / `Rate`) — live case for PITFALLS §1.14 |
-| share buybacks | refused; `PaymentsForRepurchaseOfCommonStock` (19) |
-| dividends per share | refused; splits across three concepts (13 / 9 / 6) |
-| PP&E | refused between Net (18) and Gross (14) — a real choice, not a tie |
-| profit margin | refused between Gross Profit and Operating Income — needs a decision on *which* margin |
-| operating margin, current ratio, free cash flow margin | not aliased |
-| capex for AMZN, BAC, CVX, JPM, NVDA, QCOM | those six use a different concept |
+Three entries deliberately **ask** rather than resolve — `profit_margin`,
+`profit`, `cash_flow` — via the `clarify` mechanism (app/semantic/DESIGN.md
+§8). Naming the specific metric resolves straight through.
 
-**The system is behaving correctly here** — it refuses rather than guessing, and
-the refusals are right (investing and financing cash flow really do sit
-adjacent in embedding space). This is the curation loop working as designed.
-Filling these is the highest-leverage, lowest-risk work available, and it is
-the collaborative task the user needs help with, since they are not an
-accountant.
+Two things stay uncurated on purpose:
+
+- **"gross revenue"** — US GAAP has no gross-vs-net revenue pair, so there is
+  nothing honest to map it to.
+- **`gross_profit`** — only 9 of 20 filers tag it, and falling back to
+  revenue-minus-cost would produce a different number from the filer's own
+  subtotal.
+
+Adding a filer will reopen gaps: coverage counts in the file are measured
+against the current 20 and noted inline.
 
 ### 5.9 Known smaller gaps
 

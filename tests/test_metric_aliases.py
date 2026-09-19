@@ -205,3 +205,95 @@ def test_shipped_file_declares_magnitude_only_inside_arithmetic() -> None:
     for metric, alias in document.metrics.items():
         if alias.expression == "c0":
             assert all(sign == "signed" for _, sign in alias.slots), metric
+
+
+# --------------------------------------------------------------------------- #
+# Clarification -- terms that are several things, asked rather than guessed
+# --------------------------------------------------------------------------- #
+
+
+def test_shipped_clarify_entries_offer_resolvable_choices() -> None:
+    """Every option has to name a metric that exists and itself resolves --
+    offering a choice that leads to another question wastes the one round trip
+    you get. The AliasFile validator enforces it; this pins the shipped file."""
+    document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
+    asking = {k: v for k, v in document.metrics.items() if v.clarify}
+    assert asking, "the shipped file should carry at least one clarify entry"
+    for metric, alias in asking.items():
+        assert alias.terms is None, metric
+        for option in alias.clarify.options:
+            target = document.metrics[option.metric]
+            assert target.clarify is None
+            assert target.terms
+
+
+def test_clarify_option_must_name_a_real_metric() -> None:
+    with pytest.raises(ValidationError, match="not a metric in this file"):
+        AliasFile.model_validate(
+            _document(
+                {
+                    "margin": {
+                        "label": "Margin",
+                        "clarify": {
+                            "question": "Which?",
+                            "options": [
+                                {"metric": "gross_margin", "description": "a"},
+                                {"metric": "nope", "description": "b"},
+                            ],
+                        },
+                    },
+                    "gross_margin": {"label": "Gross", "terms": [["us-gaap:A"]]},
+                }
+            )
+        )
+
+
+def test_clarify_option_cannot_point_at_another_question() -> None:
+    with pytest.raises(ValidationError, match="itself a question"):
+        AliasFile.model_validate(
+            _document(
+                {
+                    "margin": {
+                        "label": "Margin",
+                        "clarify": {
+                            "question": "Which?",
+                            "options": [
+                                {"metric": "profit", "description": "a"},
+                                {"metric": "gross_margin", "description": "b"},
+                            ],
+                        },
+                    },
+                    "profit": {
+                        "label": "Profit",
+                        "clarify": {
+                            "question": "Which?",
+                            "options": [
+                                {"metric": "gross_margin", "description": "a"},
+                                {"metric": "gross_margin", "description": "b"},
+                            ],
+                        },
+                    },
+                    "gross_margin": {"label": "Gross", "terms": [["us-gaap:A"]]},
+                }
+            )
+        )
+
+
+def test_entry_resolves_or_asks_but_not_both() -> None:
+    with pytest.raises(ValidationError, match="exactly one of"):
+        MetricAlias.model_validate(
+            {
+                "label": "X",
+                "terms": [["us-gaap:A"]],
+                "clarify": {
+                    "question": "Which?",
+                    "options": [
+                        {"metric": "a", "description": "a"},
+                        {"metric": "b", "description": "b"},
+                    ],
+                },
+            }
+        )
+
+    with pytest.raises(ValidationError, match="exactly one of"):
+        MetricAlias.model_validate({"label": "X"})

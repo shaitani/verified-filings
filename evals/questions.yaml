@@ -75,8 +75,11 @@ questions:
     question: Which of these companies has the highest operating margin?
     expect: answerable
     needs: [retrieval, ratio, ranking]
-    exercises: [alias_gap]
-    notes: Operating margin is not in metric_aliases.yaml yet.
+    exercises: [derived_metric]
+    notes: >-
+      `operating_margin` now resolves to OperatingIncomeLoss / revenue.
+      OperatingIncomeLoss covers 16 of 20 filers, so a ranking is over a
+      subset.
 
   # --- trend and growth -----------------------------------------------------
   - id: q011
@@ -148,17 +151,19 @@ questions:
     question: What is Microsoft's free cash flow margin?
     expect: answerable
     needs: [retrieval, ratio]
-    exercises: [derived_metric, alias_gap]
-    notes: Free cash flow is aliased; dividing it by revenue is not.
+    exercises: [derived_metric]
+    notes: >-
+      `free_cash_flow_margin` now resolves as (operating cash flow - capex) /
+      revenue, a three-operand expression.
 
   - id: q023
     question: What is Apple's current ratio?
     expect: answerable
     needs: [retrieval, ratio]
-    exercises: [alias_gap]
+    exercises: [derived_metric]
     notes: >-
-      AssetsCurrent and LiabilitiesCurrent are both loaded for 18 filers, but
-      neither is in the alias file.
+      `current_ratio` now resolves to AssetsCurrent / LiabilitiesCurrent, both
+      loaded for 18 of 20 filers.
 
   - id: q024
     question: How much of Alphabet's revenue goes to R&D?
@@ -173,13 +178,13 @@ questions:
 
   - id: q026
     question: What was NVIDIA's free cash flow in fiscal 2025?
-    expect: partial
+    expect: answerable
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      NVIDIA is one of six filers (with AMZN, BAC, CVX, JPM, QCOM) that do not
-      use PaymentsToAcquirePropertyPlantAndEquipment, so this is currently
-      unresolved rather than answered.
+      Was unresolved: NVIDIA is one of six filers not using
+      PaymentsToAcquirePropertyPlantAndEquipment. The capex alias now also
+      lists PaymentsToAcquireProductiveAssets, covering NVDA, AMZN, CVX and
+      QCOM. BAC and JPM still have no capex concept at all.
 
   # --- known data hazards ---------------------------------------------------
   - id: q027
@@ -321,12 +326,10 @@ questions:
     expect: partial
     shape: table
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      "net revenue" binds cleanly. "gross revenue" is refused as ambiguous
-      (nearest are Gross Profit and the revenue concepts), and rightly -- US
-      GAAP has no gross-vs-net revenue pair, so the question needs a curated
-      decision about what it means rather than an embedding guess.
+      Net revenue binds cleanly. Gross revenue is still refused, and rightly:
+      US GAAP has no gross-vs-net revenue pair, so there is nothing honest to
+      map it to. Left uncurated on purpose.
 
   - id: q047
     question: "What is <Company>'s profit: net, gross"
@@ -340,13 +343,14 @@ questions:
 
   - id: q048
     question: What is <Company>'s profit margin
-    expect: answerable
+    expect: partial
     needs: [retrieval, ratio]
-    exercises: [alias_gap, derived_metric]
+    exercises: [derived_metric, clarification]
     notes: >-
-      Currently refused as ambiguous (Gross Profit vs Operating Income). Needs
-      a curated entry, and the entry has to decide WHICH margin -- gross,
-      operating or net. That choice is exactly what the alias layer is for.
+      Deliberately ASKS rather than resolving. Convention reads a bare profit
+      margin as net, but gross and net differ by twenty points or more on one
+      company, so the plan returns a Clarification offering gross, operating
+      and net with descriptions. Naming the margin resolves straight through.
 
   - id: q049
     question: "What is <Company>'s stock price, market cap"
@@ -364,7 +368,7 @@ questions:
     expect: partial
     shape: table
     needs: [retrieval]
-    exercises: [q4_residual, alias_gap]
+    exercises: [q4_residual]
     notes: Same gross/net problem as q046, plus Q4 has to be derived.
 
   - id: q051
@@ -397,12 +401,11 @@ questions:
     expect: partial
     shape: table
     needs: [retrieval]
-    exercises: [alias_gap]
+    exercises: [clarification]
     notes: >-
-      Operating is aliased; investing and financing are not, and both are
-      currently refused as ambiguous against each other -- they sit adjacent in
-      embedding space, so a guess would be a coin flip. All three exist for all
-      20 filers, so this is purely a curation gap.
+      All three now aliased and resolving for all 20 filers. A bare cash flow
+      asks which one is meant, since operating, investing, financing and free
+      cash flow are four different answers.
 
   - id: q054
     question: "What are <Company>'s balance sheet totals: assets, liabilities, stockholders' equity, cash, goodwill, inventory"
@@ -412,10 +415,10 @@ questions:
     needs: [retrieval]
     exercises: [instant_fact]
     notes: >-
-      All six aliased, all instant facts. PP&E was removed from this question:
-      it is refused as ambiguous between PropertyPlantAndEquipmentNet (18
-      filers) and ...Gross (14), which is a real choice someone has to make
-      rather than a tie to break on distance. Coverage still varies by filer
+      All six aliased, all instant facts. PP&E was removed from this question
+      earlier; it is now aliased too, resolving to the Net figure, which is
+      what a balance sheet line means, with Gross as a fallback. Coverage
+      still varies by filer
       (Liabilities 15 of 20, StockholdersEquity 18, InventoryNet 17), so some
       companies will come back with fewer than six.
 
@@ -425,41 +428,34 @@ questions:
     expect: answerable
     shape: table
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      Neither aliased. PaymentsForRepurchaseOfCommonStock covers 19 filers;
-      dividends split across CommonStockDividendsPerShareDeclared (13),
-      PaymentsOfDividendsCommonStock (9) and PaymentsOfDividends (6) -- an
-      ordered-alternatives entry, exactly the divergence case the alias format
-      was built for.
+      Both now aliased. share_buybacks covers 19 filers. Dividends split into
+      two entries, dividends_per_share and dividends_paid, because a per-share
+      figure and a cash total are different questions.
 
   - id: q056
     question: What is <Company>'s capital expenditure
     expect: partial
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      Aliased, but only 14 of 20 filers use
-      PaymentsToAcquirePropertyPlantAndEquipment. AMZN, BAC, CVX, JPM, NVDA and
-      QCOM need their concept added as an alternative.
+      Now 18 of 20 after adding PaymentsToAcquireProductiveAssets as an
+      alternative. BAC and JPM report no capex concept at all.
 
   - id: q057
     question: What is <Company>'s interest expense
     expect: answerable
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      InterestExpense covers 17 filers, with InterestExpenseDebt (5) and
-      InterestIncomeExpenseNet (4) as fallbacks. Not aliased, so currently
-      unresolved.
+      Now aliased with an ordered fallback chain that resolves per filer: MSFT
+      binds InterestExpense, TSLA falls back to InterestExpenseNonoperating,
+      CVX to InterestExpenseDebt. Apple stopped tagging it after FY2023, so
+      FY2024 is correctly unresolved for them.
 
   - id: q058
     question: What is <Company>'s effective tax rate
     expect: answerable
     needs: [retrieval]
-    exercises: [alias_gap]
     notes: >-
-      EffectiveIncomeTaxRateContinuingOperations covers all 20 filers but is
-      filed under TWO units -- "pure" and "Rate" -- so it is the live case for
-      PITFALLS 1.14. The multi-unit guard will bind one unit and exclude the
-      other filers' facts; that needs checking once an alias entry exists.
+      Now aliased and resolving. Still the live case for PITFALLS 1.14: the
+      concept is filed under two units, so the multi-unit guard binds one and
+      filers using the other fall out of coverage.

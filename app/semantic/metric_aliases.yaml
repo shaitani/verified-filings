@@ -19,6 +19,16 @@
 #   synonyms   extra surface forms. Matched after normalizing (lowercase,
 #              collapse whitespace, drop punctuation), so "R&D" and "r & d"
 #              both land on the same entry. Must be unique across the file.
+#   clarify    set INSTEAD of `terms` when the business term is genuinely
+#              several things. The entry then resolves to a question with named
+#              choices rather than to concepts, and each choice points at
+#              another metric here that does resolve. Use it where a default
+#              would be quietly wrong rather than merely imprecise: "profit
+#              margin" reads as net by convention, but gross and net differ by
+#              twenty points on the same company, so guessing hands someone a
+#              wrong answer with no signal. A specific name ("net profit
+#              margin") still resolves straight through -- only the bare,
+#              ambiguous term asks.
 #
 # Coverage measured across all 20 companies / 5 fiscal years, 2026-09-18. The
 # company counts noted below are why some entries list several alternatives.
@@ -61,7 +71,9 @@ metrics:
 
   net_income:
     label: Net income
-    synonyms: [net earnings, net profit, profit, bottom line, net loss]
+    # Bare "profit" and "bottom line" live on the `profit` clarify entry
+    # instead: unqualified, they are not specifically net income.
+    synonyms: [net earnings, net profit, net loss]
     terms:
       - - us-gaap:NetIncomeLoss
         - us-gaap:ProfitLoss
@@ -161,9 +173,15 @@ metrics:
 
   capital_expenditures:
     label: Capital expenditures
+    # 14 filers tag PaymentsToAcquirePropertyPlantAndEquipment; AMZN, CVX, NVDA
+    # and QCOM use the broader PaymentsToAcquireProductiveAssets instead.
+    # Verified as real capex by value for their latest full years: AAPL 12.7B,
+    # AMZN 131.8B, CVX 17.3B, NVDA 3.2B, QCOM 1.2B. BAC and JPM report no capex
+    # concept at all -- banks do not conventionally present one.
     synonyms: [capex, capital spending, purchases of property and equipment]
     terms:
-      - [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+      - - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+        - us-gaap:PaymentsToAcquireProductiveAssets
 
   # --- derived: arithmetic over several concepts ----------------------------
   # Both of these carry `sign: magnitude` on the operand whose direction is
@@ -194,3 +212,176 @@ metrics:
       # negative one would make this add, inflating free cash flow silently.
       - concepts: [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
         sign: magnitude
+
+  # --- added to close the gaps the eval questions exposed ------------------
+  investing_cash_flow:
+    label: Net cash from investing activities
+    synonyms: [cash from investing, investing activities, cash used in investing]
+    terms:
+      - [us-gaap:NetCashProvidedByUsedInInvestingActivities]
+
+  financing_cash_flow:
+    label: Net cash from financing activities
+    synonyms: [cash from financing, financing activities, cash used in financing]
+    terms:
+      - [us-gaap:NetCashProvidedByUsedInFinancingActivities]
+
+  interest_expense:
+    label: Interest expense
+    # InterestExpense covers 17 filers; the fallbacks are narrower views of the
+    # same cost. Deliberately NOT included: concepts like
+    # UnrecognizedTaxBenefitsIncomeTaxPenaltiesAndInterestExpense, which are tax
+    # footnote items that the embedding search kept surfacing instead.
+    synonyms: [interest costs, interest on debt]
+    terms:
+      - - us-gaap:InterestExpense
+        - us-gaap:InterestExpenseNonoperating
+        - us-gaap:InterestExpenseDebt
+
+  effective_tax_rate:
+    label: Effective income tax rate
+    # The filer's own reported rate, not one derived here. Filed under two
+    # units across the corpus ("pure" and "Rate"), so the multi-unit guard
+    # picks one and coverage may exclude filers using the other. PITFALLS 1.14.
+    synonyms: [tax rate, effective rate, etr]
+    terms:
+      - [us-gaap:EffectiveIncomeTaxRateContinuingOperations]
+
+  share_buybacks:
+    label: Share repurchases
+    synonyms: [buybacks, share repurchase, stock buybacks, repurchase of common stock]
+    terms:
+      - [us-gaap:PaymentsForRepurchaseOfCommonStock]
+
+  dividends_per_share:
+    label: Dividends declared per share
+    # Declared is the headline figure; cash-paid is the fallback for filers
+    # that tag only that.
+    synonyms: [dividend per share, dps, per share dividend]
+    terms:
+      - - us-gaap:CommonStockDividendsPerShareDeclared
+        - us-gaap:CommonStockDividendsPerShareCashPaid
+
+  dividends_paid:
+    label: Dividends paid
+    synonyms: [total dividends, dividend payments, cash dividends paid]
+    terms:
+      - - us-gaap:PaymentsOfDividendsCommonStock
+        - us-gaap:PaymentsOfDividends
+        - us-gaap:DividendsCommonStockCash
+
+  property_plant_and_equipment:
+    label: Property, plant and equipment, net
+    # "PP&E" on a balance sheet means net of accumulated depreciation -- that is
+    # the presented line, and what 18 of 20 filers tag. Gross is a footnote
+    # detail, kept as a fallback for filers that report only it.
+    synonyms: [ppe, pp and e, property and equipment, fixed assets]
+    terms:
+      - - us-gaap:PropertyPlantAndEquipmentNet
+        - us-gaap:PropertyPlantAndEquipmentGross
+
+  current_assets:
+    label: Total current assets
+    synonyms: [current assets]
+    terms:
+      - [us-gaap:AssetsCurrent]
+
+  current_liabilities:
+    label: Total current liabilities
+    synonyms: [current liabilities]
+    terms:
+      - [us-gaap:LiabilitiesCurrent]
+
+  # --- ratios: numerator stays signed, denominator is a magnitude ----------
+  operating_margin:
+    label: Operating margin
+    synonyms: [operating profit margin, operating margin percentage]
+    expression: c0 / c1
+    terms:
+      - [us-gaap:OperatingIncomeLoss]
+      - concepts:
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+          - us-gaap:Revenues
+        sign: magnitude
+
+  net_margin:
+    label: Net profit margin
+    synonyms: [net profit margin, net margin percentage, bottom line margin]
+    expression: c0 / c1
+    terms:
+      - - us-gaap:NetIncomeLoss
+        - us-gaap:ProfitLoss
+      - concepts:
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+          - us-gaap:Revenues
+        sign: magnitude
+
+  free_cash_flow_margin:
+    label: Free cash flow margin
+    synonyms: [fcf margin, cash flow margin]
+    expression: (c0 - c1) / c2
+    terms:
+      - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
+      - concepts:
+          - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+          - us-gaap:PaymentsToAcquireProductiveAssets
+        sign: magnitude
+      - concepts:
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+          - us-gaap:Revenues
+        sign: magnitude
+
+  current_ratio:
+    label: Current ratio
+    synonyms: [working capital ratio, liquidity ratio]
+    expression: c0 / c1
+    terms:
+      - [us-gaap:AssetsCurrent]
+      - concepts: [us-gaap:LiabilitiesCurrent]
+        sign: magnitude
+
+  # --- genuinely several things: ask rather than guess ---------------------
+  profit_margin:
+    label: Profit margin
+    # Convention says an unqualified "profit margin" means NET margin, but on
+    # one company gross and net routinely differ by twenty points, so a silent
+    # default is a wrong answer with no signal. All three specific names
+    # resolve directly; only the bare term asks.
+    synonyms: [margin, margins, profitability]
+    clarify:
+      question: Which profit margin do you mean? They can differ by twenty points or more on the same company.
+      options:
+        - metric: gross_margin
+          description: Revenue minus the direct cost of producing it. Shows pricing power and production efficiency.
+        - metric: operating_margin
+          description: Profit after operating costs but before interest and tax. Shows whether the core business works.
+        - metric: net_margin
+          description: What is left after everything, including interest and tax. The conventional reading of a bare "profit margin".
+
+  profit:
+    label: Profit
+    synonyms: [earnings, bottom line]
+    clarify:
+      question: Which profit figure do you mean?
+      options:
+        - metric: gross_profit
+          description: Revenue minus cost of revenue, before operating expenses.
+        - metric: operating_income
+          description: Profit from operations, before interest and tax.
+        - metric: net_income
+          description: Profit after all expenses, interest and tax.
+
+  cash_flow:
+    label: Cash flow
+    synonyms: [cashflow]
+    clarify:
+      question: Which cash flow do you mean?
+      options:
+        - metric: operating_cash_flow
+          description: Cash generated by the business itself.
+        - metric: investing_cash_flow
+          description: Cash spent on or raised from assets and investments.
+        - metric: financing_cash_flow
+          description: Cash from borrowing, repayment, buybacks and dividends.
+        - metric: free_cash_flow
+          description: Operating cash flow minus capital expenditure.

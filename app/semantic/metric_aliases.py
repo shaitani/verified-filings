@@ -80,8 +80,36 @@ class OperandSlot(_Base):
     sign: OperandSign = "signed"
 
 
+class ClarifyOption(_Base):
+    """One choice offered back when a term is genuinely several things."""
+
+    #: Another metric key in this file. Validated to exist, so a choice always
+    #: leads somewhere resolvable.
+    metric: str = Field(min_length=1, max_length=64)
+
+    #: Why someone would pick this one, in business terms.
+    description: str = Field(min_length=1, max_length=240)
+
+
+class ClarifySpec(_Base):
+    """What to ask when a term cannot be pinned down without more from the
+    person who asked.
+
+    The alternative is picking a convention and being quietly wrong: "profit
+    margin" defaults to *net* by convention, but gross and net can differ by
+    twenty points on the same company, and someone reading one while meaning
+    the other has been given a wrong answer with no signal.
+    """
+
+    question: str = Field(min_length=1, max_length=240)
+    options: list[ClarifyOption] = Field(min_length=2)
+
+
 class MetricAlias(_Base):
-    """One curated business term."""
+    """One curated business term.
+
+    Either it resolves (``terms``) or it asks (``clarify``), never both.
+    """
 
     label: str = Field(min_length=1, max_length=120)
     synonyms: list[str] = Field(default_factory=list)
@@ -94,29 +122,49 @@ class MetricAlias(_Base):
     #: order, either as a bare list or as an ``OperandSlot``. ``min_length=1``
     #: on both: a slot with no candidates, or a metric with no slots, can never
     #: resolve and is a typo rather than a choice.
-    terms: list[list[str] | OperandSlot] = Field(min_length=1)
+    terms: list[list[str] | OperandSlot] | None = None
+
+    #: Set instead of ``terms`` when the term is ambiguous by nature.
+    clarify: ClarifySpec | None = None
 
     @property
     def slots(self) -> list[tuple[list[str], OperandSign]]:
         """``terms`` with the two spellings collapsed to one shape."""
         return [
             (slot, "signed") if isinstance(slot, list) else (slot.concepts, slot.sign)
-            for slot in self.terms
+            for slot in self.terms or []
         ]
 
     @model_validator(mode="after")
+    def _resolves_or_asks(self) -> MetricAlias:
+        if (self.terms is None) == (self.clarify is None):
+            raise ValueError(
+                "a metric needs exactly one of `terms` (it resolves) or "
+                "`clarify` (it asks); got "
+                + ("both" if self.terms else "neither")
+            )
+        if self.terms is not None and not self.terms:
+            raise ValueError("`terms` must list at least one operand slot")
+        return self
+
+    @model_validator(mode="after")
     def _refs_are_wellformed(self) -> MetricAlias:
+        if self.clarify is not None:
+            # A question has no operands, so the default expression has nothing
+            # to reference and nothing to check.
+            return self
         for concepts, _ in self.slots:
             if not concepts:
                 raise ValueError("an operand slot must list at least one concept")
             for ref in concepts:
                 split_concept_ref(ref)  # raises on a malformed reference
 
+        slot_count = len(self.slots)
         for index in _OPERAND_REF.findall(self.expression):
-            if int(index) >= len(self.terms):
+            if int(index) >= slot_count:
                 raise ValueError(
                     f"expression {self.expression!r} references c{index}, "
-                    f"but only {len(self.terms)} operand slot(s) are defined"
+                    f"but only {slot_count} operand slot(s) are defined"
                 )
         return self
 
@@ -143,6 +191,28 @@ class AliasFile(_Base):
                         f"surface form {form!r} is claimed by both {seen[form]!r} and {metric!r}"
                     )
                 seen[form] = metric
+        return self
+
+    @model_validator(mode="after")
+    def _clarify_options_lead_somewhere(self) -> AliasFile:
+        """Every offered choice must name a metric that exists and resolves.
+
+        Offering someone a choice that leads to another question, or to
+        nothing, wastes the one round trip you get.
+        """
+        for metric, alias in self.metrics.items():
+            if alias.clarify is None:
+                continue
+            for option in alias.clarify.options:
+                target = self.metrics.get(option.metric)
+                if target is None:
+                    raise ValueError(
+                        f"{metric!r} offers {option.metric!r}, which is not a metric in this file"
+                    )
+                if target.clarify is not None:
+                    raise ValueError(
+                        f"{metric!r} offers {option.metric!r}, which is itself a question"
+                    )
         return self
 
 
@@ -178,6 +248,13 @@ class AliasHit:
     #: One per entry in ``terms``. See ``OperandSign``.
     signs: tuple[OperandSign, ...]
 
+    #: Set instead of ``terms`` when this term asks rather than resolves.
+    clarify: ClarifySpec | None = None
+
+    #: Human label per clarify option, resolved from the target metric so the
+    #: question reads in business terms rather than in file keys.
+    option_labels: tuple[str, ...] = ()
+
 
 class AliasIndex:
     """Normalized surface form -> ``AliasHit``."""
@@ -195,6 +272,12 @@ class AliasIndex:
                     tuple(split_concept_ref(ref) for ref in concepts) for concepts, _ in slots
                 ),
                 signs=tuple(sign for _, sign in slots),
+                clarify=alias.clarify,
+                option_labels=tuple(
+                    document.metrics[o.metric].label for o in alias.clarify.options
+                )
+                if alias.clarify
+                else (),
             )
             for form in (metric, *alias.synonyms):
                 key = normalize(form)

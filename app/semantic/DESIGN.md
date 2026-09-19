@@ -95,3 +95,37 @@ cost — a computed subtotal is a different number from the filer's own, and
 silently substituting one for the other is the class of error this whole layer
 exists to prevent. When a filer does not report it, "unresolved" is the honest
 answer.
+
+---
+
+## 8. Asking instead of guessing
+
+An alias entry sets either `terms` (it resolves) or `clarify` (it asks), never
+both. A clarify entry produces a `Clarification` on the plan: a question with
+named choices, each pointing at another metric in the file that does resolve.
+
+**When to use it.** Where a default would be quietly *wrong*, not merely
+imprecise. "Profit margin" reads as net by convention, but gross and net
+routinely differ by twenty points on one company, so picking one hands someone
+a wrong answer with no signal. Three entries carry it: `profit_margin`,
+`profit` and `cash_flow`.
+
+**Only the bare term asks.** "Net profit margin" resolves straight through. If
+naming the thing precisely still triggered a question, the clarification would
+be a toll gate rather than a service, and a test pins that.
+
+**Choices are validated at load.** Every option must name a metric that exists
+and that itself resolves — offering a choice which leads to another question,
+or to nothing, wastes the one round trip you get.
+
+**Three ways a plan can fall short, and they are not the same:**
+
+| field | meaning | what to do |
+|---|---|---|
+| `unresolved` | the data cannot support it | say so; do not ask |
+| `ambiguous` | the *machine* could not choose; candidates are raw concepts | offer them, imperfectly |
+| `clarifications` | a *person* decided the term is several things and wrote the choices | ask properly |
+
+`QueryPlan.needs_input` is true for the latter two. It separates "ask them"
+from "tell them it cannot be done", which is the distinction a user-facing
+model needs and cannot infer from `is_complete` alone.

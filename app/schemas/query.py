@@ -438,6 +438,33 @@ class Ambiguity(_Base):
     candidates: list[Candidate] = Field(min_length=1)
 
 
+class ClarifyOption(_Base):
+    """One choice to offer back."""
+
+    metric: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=240)
+
+
+class Clarification(_Base):
+    """A term that is genuinely several things, with the choices to offer.
+
+    Distinct from both ``Unresolved`` (nothing matched) and ``Ambiguity`` (the
+    *machine* could not decide, and the candidates are raw concepts). This one
+    is curated: a person decided the term is ambiguous and wrote the options in
+    business language, so the reply can be a real question rather than a
+    shrug.
+
+    A plan carrying these is not a failure. It is a request for one more piece
+    of information, and answering it should be a round trip, not a dead end.
+    """
+
+    element_id: str = Field(min_length=1, max_length=32)
+    element_text: str = Field(min_length=1, max_length=256)
+    question: str = Field(min_length=1, max_length=240)
+    options: list[ClarifyOption] = Field(min_length=2)
+
+
 class Unresolved(_Base):
     """An element the mapper could not bind at all."""
 
@@ -573,6 +600,10 @@ class QueryPlan(_Base):
     ambiguous: list[Ambiguity] = Field(default_factory=list)
     unresolved: list[Unresolved] = Field(default_factory=list)
 
+    #: Curated questions to put back to the asker. See ``Clarification`` --
+    #: these are answerable, unlike ``unresolved``.
+    clarifications: list[Clarification] = Field(default_factory=list)
+
     #: Caveats about the result as a whole rather than about one binding --
     #: currently only that the companies' fiscal labels cover different dates.
     #: Kept separate from ``Binding.notes`` because attaching a statement about
@@ -583,4 +614,15 @@ class QueryPlan(_Base):
     def is_complete(self) -> bool:
         """True when every element bound cleanly. The caller's signal to go
         ahead and generate SQL rather than escalate back to the user."""
-        return not self.ambiguous and not self.unresolved
+        return not self.ambiguous and not self.unresolved and not self.clarifications
+
+    @property
+    def needs_input(self) -> bool:
+        """True when the plan is incomplete but *answerable with one more
+        reply* -- a curated question, or candidates worth offering.
+
+        Separates "ask them" from "tell them it cannot be done": an
+        ``Unresolved`` alone means the data does not support the question,
+        while these mean it might once the asker narrows it.
+        """
+        return bool(self.clarifications or self.ambiguous)

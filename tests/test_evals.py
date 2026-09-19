@@ -44,6 +44,7 @@ EXERCISES = {
     "derived_metric",
     "instant_fact",
     "alias_gap",
+    "clarification",
 }
 
 

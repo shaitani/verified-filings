@@ -36,6 +36,8 @@ from app.schemas.query import (
     Ambiguity,
     Binding,
     Candidate,
+    Clarification,
+    ClarifyOption,
     CompanyElementIn,
     CompanyGroupElementIn,
     ComponentCoverage,
@@ -96,7 +98,7 @@ async def map_query(
         ciks = _merge_ciks(ciks, group_ciks)
         company_problems += group_problems
         resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
-        bindings, ambiguous, metric_problems = await _resolve_metrics(
+        bindings, ambiguous, metric_problems, clarifications = await _resolve_metrics(
             metrics, session, ciks=ciks, periods=resolved_periods
         )
 
@@ -109,6 +111,7 @@ async def map_query(
         bindings=bindings,
         ambiguous=ambiguous,
         unresolved=company_problems + period_problems + metric_problems,
+        clarifications=clarifications,
         notes=_alignment_notes(resolved_periods, result)
         + _granularity_notes(result),
     )
@@ -578,7 +581,7 @@ async def _resolve_metrics(
     *,
     ciks: list[int],
     periods: list[ResolvedPeriod],
-) -> tuple[list[Binding], list[Ambiguity], list[Unresolved]]:
+) -> tuple[list[Binding], list[Ambiguity], list[Unresolved], list[Clarification]]:
     """Bind every metric element to concepts that provably have the facts.
 
     The cascade, in order:
@@ -603,7 +606,7 @@ async def _resolve_metrics(
     whichever one its own facts support.
     """
     if not elements:
-        return [], [], []
+        return [], [], [], []
 
     blockers = []
     if not ciks:
@@ -612,15 +615,35 @@ async def _resolve_metrics(
         blockers.append("no reporting period in scope to verify coverage against")
     if blockers:
         reason = "; ".join(blockers)
-        return [], [], [Unresolved(element_id=e.id, reason=reason) for e in elements]
+        return [], [], [Unresolved(element_id=e.id, reason=reason) for e in elements], []
 
     index = alias_index()
     bindings: list[Binding] = []
     ambiguous: list[Ambiguity] = []
     problems: list[Unresolved] = []
+    clarifications: list[Clarification] = []
 
     for element in elements:
         hit = index.lookup(element.text)
+        if hit is not None and hit.clarify is not None:
+            # Curated: the term really is several things, and someone wrote the
+            # choices. Ask rather than pick a convention and be quietly wrong.
+            clarifications.append(
+                Clarification(
+                    element_id=element.id,
+                    element_text=element.text,
+                    question=hit.clarify.question,
+                    options=[
+                        ClarifyOption(
+                            metric=option.metric, label=label, description=option.description
+                        )
+                        for option, label in zip(
+                            hit.clarify.options, hit.option_labels, strict=True
+                        )
+                    ],
+                )
+            )
+            continue
         if hit is not None:
             slots = await _slots_from_alias(session, hit)
             if any(not slot for slot in slots):
@@ -676,7 +699,7 @@ async def _resolve_metrics(
             problems=problems,
         )
 
-    return bindings, ambiguous, problems
+    return bindings, ambiguous, problems, clarifications
 
 
 def _bind_per_company(
