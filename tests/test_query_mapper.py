@@ -14,13 +14,23 @@ cascade runs against the fixture's own concepts rather than the real corpus.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 
 from app.db.loader import load_file
-from app.schemas.query import Binding, ConceptRef, Coverage, Note, PeriodRef, QueryIn
+from app.schemas.query import (
+    Binding,
+    ConceptRef,
+    Coverage,
+    Note,
+    PeriodRef,
+    PeriodResidual,
+    QueryIn,
+    ResolvedPeriod,
+    ResultSpec,
+)
 from app.semantic import query_mapper
 from app.semantic.metric_aliases import load_aliases
 from app.semantic.query_mapper import map_query
@@ -509,3 +519,60 @@ async def test_negative_signed_operand_still_binds(
     (binding,) = plan.bindings
     assert binding.expression == "c0 - c1"
     assert [c.name for c in binding.concepts] == ["ZzzTestRevenues", "ZzzTestNetLoss"]
+
+
+# --------------------------------------------------------------------------- #
+# Cross-company period alignment -- pure, no database
+# --------------------------------------------------------------------------- #
+
+
+def _period(cik: int, end: date, *, year: int = 2025, fp: str = "Q4") -> ResolvedPeriod:
+    return ResolvedPeriod(
+        company_cik=cik,
+        fiscal_year=year,
+        fiscal_period=fp,
+        period_start=end - timedelta(days=90),
+        period_end=end,
+        residual_of=PeriodResidual(
+            shared_start=end - timedelta(days=364),
+            whole_end=end,
+            subtract_end=end - timedelta(days=91),
+        )
+        if fp == "Q4"
+        else None,
+    )
+
+
+def _series_spec(companies: int) -> ResultSpec:
+    axes = ["company", "period"] if companies > 1 else ["period"]
+    return ResultSpec(shape="series", axes=axes, companies=companies, periods=4, metrics=1)
+
+
+def test_misaligned_fiscal_calendars_are_flagged() -> None:
+    """Measured across the store, one fiscal label can cover period_ends 339
+    days apart. A shared time axis reads those as contemporaneous."""
+    notes = query_mapper._alignment_notes(
+        [_period(1, date(2025, 1, 26)), _period(2, date(2025, 12, 31))],
+        _series_spec(2),
+    )
+    assert [n.kind for n in notes] == ["period_misalignment"]
+    assert "339 days" in notes[0].message
+
+
+def test_aligned_calendars_are_not_flagged() -> None:
+    """Two December filers genuinely are comparable; warning anyway would make
+    the note noise that gets ignored when it matters."""
+    notes = query_mapper._alignment_notes(
+        [_period(1, date(2025, 12, 31)), _period(2, date(2025, 12, 28))],
+        _series_spec(2),
+    )
+    assert notes == []
+
+
+def test_single_company_is_never_flagged() -> None:
+    """Within one filer the labels are self-consistent, whatever its calendar."""
+    notes = query_mapper._alignment_notes(
+        [_period(1, date(2025, 1, 26)), _period(1, date(2025, 12, 31))],
+        _series_spec(1),
+    )
+    assert notes == []

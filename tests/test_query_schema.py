@@ -28,6 +28,7 @@ from app.schemas.query import (
     QueryIn,
     QueryPlan,
     ResolvedPeriod,
+    ResultSpec,
     Unresolved,
 )
 
@@ -148,24 +149,50 @@ def test_binding_rejects_an_operand_it_did_not_bind() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _scalar() -> ResultSpec:
+    return ResultSpec(shape="scalar", companies=1, periods=1, metrics=1)
+
+
 def test_plan_is_complete_only_when_nothing_is_outstanding() -> None:
-    plan = QueryPlan(question="q", intent="lookup", filters=PlanFilters(), bindings=[_binding()])
+    plan = QueryPlan(
+        question="q",
+        intent="lookup",
+        result=_scalar(),
+        filters=PlanFilters(),
+        bindings=[_binding()],
+    )
     assert plan.is_complete
 
     with_gap = QueryPlan(
         question="q",
         intent="lookup",
+        result=_scalar(),
         filters=PlanFilters(),
         unresolved=[Unresolved(element_id="e1", reason="nope")],
     )
     assert not with_gap.is_complete
 
 
-def test_ambiguity_needs_at_least_two_candidates() -> None:
-    """One surviving candidate is a binding, not an ambiguity."""
+def test_row_count_is_the_product_of_the_axes() -> None:
+    """Twelve quarters for three companies is 36 points, not 3 or 12 -- this is
+    the number a chart request actually asks retrieval for."""
+    spec = ResultSpec(
+        shape="series", axes=["company", "period"], companies=3, periods=12, metrics=1
+    )
+    assert spec.row_count == 36
+    assert _scalar().row_count == 1
+
+
+def test_ambiguity_accepts_a_lone_weak_candidate() -> None:
+    """A single match too weak to trust is still something to offer back, so it
+    shares the channel with a genuine tie -- but zero candidates is not an
+    ambiguity, it is an Unresolved."""
     candidate = Candidate(concept=_concept(), score=0.8, coverage=Coverage(fact_count=3))
+    lone = Ambiguity(element_id="e1", element_text="dividends", candidates=[candidate])
+    assert len(lone.candidates) == 1
+
     with pytest.raises(ValidationError):
-        Ambiguity(element_id="e1", candidates=[candidate])
+        Ambiguity(element_id="e1", element_text="dividends", candidates=[])
 
 
 def test_plan_filters_default_to_unconstrained() -> None:

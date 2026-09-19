@@ -34,6 +34,7 @@ are "true today" rather than "true by construction".
 | 1.13 | Short query vs long description retrieval | nomic task prefixes |
 | 1.14 | One concept filed in several units | `_gather_evidence` |
 | 1.15 | Sign assumptions inside an expression | alias `sign:` + `_sign_violation` |
+| 1.16 | One fiscal label, very different dates | `_alignment_notes` |
 
 ### 1.1 `Filing.fiscal_year` is provenance, not the period a number describes
 
@@ -73,8 +74,8 @@ cross-company comparison of the same label compares different windows.
 Apr–Jun for MSFT, Jun–Sep for AAPL and Oct–Jan for NVDA.
 
 **Handled:** `ResolvedPeriod` is per company, so the plan shows the three
-different windows rather than implying alignment. **Not** handled: nothing
-warns that comparing them is apples-to-oranges — see §3.6.
+different windows rather than implying alignment, and §1.16 warns when a
+cross-company result leans on a shared label.
 
 ### 1.4 No filer ever files a Q4
 
@@ -236,6 +237,29 @@ for 16 companies and negative for 15 — genuinely bidirectional, and nothing
 stops someone aliasing it into an expression where neither sign is right. The
 declaration is per slot, not per filer.
 
+### 1.16 One fiscal label, very different dates
+
+§1.3 makes per-company windows visible in the plan. This is the consequence
+nobody reads them for: under a *shared* label they are not comparable.
+
+**Measured:** across the 20 filers, one fiscal label covers `period_end` dates
+up to **343 days** apart. "FY2025" runs from 2025-01-26 (NVIDIA) to 2025-12-31
+(Alphabet). Every quarterly label shows a similar spread — 337 to 343 days.
+
+The shape that hides this best is the one most likely to be asked for. A line
+chart puts "Q1 2025" at a single x position, and the reader takes the points as
+contemporaneous when one company's quarter can close ten months after
+another's. A table at least shows the dates.
+
+**Handled:** `_alignment_notes` emits a plan-level `period_misalignment` note
+whenever a result varies along the company axis and any shared label's dates
+span more than 30 days. It reports the worst label rather than all of them.
+Silent for a single company, and silent for filers that genuinely align —
+Alphabet and Tesla, both December year-ends, produce no note.
+
+Plan-level rather than per-binding: the statement is about the comparison, and
+attaching it to one of its sides would be arbitrary.
+
 ---
 
 ## 2. Partially handled — know the edges
@@ -317,16 +341,7 @@ There is no FX handling anywhere, and no conversion to a reporting currency.
 **Gap:** §1.14 stops a *mixed*-unit binding, but a wholly-EUR binding would be
 reported as EUR and compared against USD downstream with no complaint.
 
-### 3.6 Cross-company period comparability
-
-§1.3 makes the different windows visible; nothing warns that comparing
-Microsoft's Apr–Jun quarter against NVIDIA's Oct–Jan one is only sometimes
-meaningful.
-
-**Gap:** a plan-level note when the compared windows do not overlap
-substantially would cover it. The `Note` channel would carry it.
-
-### 3.7 DQC validation rules
+### 3.6 DQC validation rules
 
 XBRL US publishes ~20 rule sets for filer-side validation. None are applied
 here.
@@ -336,7 +351,7 @@ here.
 memory-market downturn, not an error. Those rules are useful as review signals
 and wrong as hard filters.
 
-### 3.8 Scaling errors
+### 3.7 Scaling errors
 
 Filers sometimes tag thousands as millions.
 

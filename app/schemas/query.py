@@ -65,6 +65,20 @@ QueryFiscalPeriod = Literal["FY", "Q1", "Q2", "Q3", "Q4"]
 #: Only ever describes the arithmetic; the SQL step performs it.
 PeriodRule = Literal["direct", "residual"]
 
+#: What the answer has to *be*, which decides how much data has to come back.
+#: A chart needs a point per period per company; a single figure needs one row.
+#: Nothing here describes drawing -- only cardinality.
+#:   "scalar"  -- one number.
+#:   "series"  -- one metric over an ordered axis, per entity. Charts live here.
+#:   "table"   -- several metrics side by side.
+#:   "ranking" -- entities ordered by one metric.
+ResultShape = Literal["scalar", "series", "table", "ranking"]
+
+#: A dimension the result varies along. The retrieval step must not collapse
+#: these: "revenue by quarter for three companies" varies along both, and
+#: returning one row per company would silently answer a different question.
+ResultAxis = Literal["company", "period", "metric"]
+
 #: Caveats a binding can carry. The answer is computable, but something about
 #: it should reach the reader rather than being smoothed over. See PITFALLS.md.
 #:   "concept_switch"     -- the filer changed tags mid-range and the two agree
@@ -73,7 +87,14 @@ PeriodRule = Literal["direct", "residual"]
 #:                           the seam against, or the overlap disagrees.
 #:   "partial_coverage"   -- some requested periods have no facts and are absent
 #:                           from this binding.
-NoteKind = Literal["concept_switch", "unverified_switch", "partial_coverage"]
+#:   "period_misalignment" -- companies being compared put very different dates
+#:                           under the same fiscal label. Plan-level.
+NoteKind = Literal[
+    "concept_switch",
+    "unverified_switch",
+    "partial_coverage",
+    "period_misalignment",
+]
 
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...
 _CONCEPT_REF = re.compile(r"c(\d+)")
@@ -173,6 +194,12 @@ class QueryIn(_Base):
     intent: Intent
     elements: list[ElementIn] = Field(min_length=1)
 
+    #: What the asker wants back, when the question says so -- "show me
+    #: visually" or "chart this" means a series, and a series needs a point per
+    #: period rather than one summary figure. Left unset when the question does
+    #: not indicate; the mapper then infers it from what actually resolved.
+    shape: ResultShape | None = None
+
     @model_validator(mode="after")
     def _element_ids_unique(self) -> QueryIn:
         seen = set()
@@ -195,6 +222,12 @@ class ConceptRef(_Base):
     concept_id: int
     taxonomy: Taxonomy
     name: str = Field(min_length=1, max_length=255)
+
+    #: The taxonomy's human label, carried so a refusal can offer "Revenues"
+    #: as a choice rather than making someone read
+    #: ``RevenueFromContractWithCustomerExcludingAssessedTax``. Null for the
+    #: ~200 concepts that have no label.
+    label: str | None = Field(default=None, max_length=512)
 
 
 class ComponentCoverage(_Base):
@@ -347,15 +380,25 @@ class Candidate(_Base):
 
 
 class Ambiguity(_Base):
-    """An element with more than one plausible binding left standing.
+    """An element the mapper found candidates for but would not commit to.
 
-    Distinct from ``Unresolved``: there is an answer here, the mapper just
-    can't pick it. Near-ties are exactly the case the curated alias layer is
-    for -- deciding one on a hair of cosine distance would be noise.
+    Two ways to land here: several candidates survive equally, or a single one
+    survives too weakly to trust. Both mean the same thing downstream -- refuse
+    the question and offer these back -- so they share a channel, and
+    ``candidates`` may hold one.
+
+    Distinct from ``Unresolved``, which means nothing plausible was found at
+    all. Here there is something to ask the person about, which is why
+    ``element_text`` travels with it: the refusal has to name the phrase it
+    could not pin down.
     """
 
     element_id: str = Field(min_length=1, max_length=32)
-    candidates: list[Candidate] = Field(min_length=2)
+
+    #: The phrase as the asker wrote it, so the refusal can quote it back.
+    element_text: str = Field(min_length=1, max_length=256)
+
+    candidates: list[Candidate] = Field(min_length=1)
 
 
 class Unresolved(_Base):
@@ -447,16 +490,49 @@ class PlanFilters(_Base):
     forms: list[FilingForm] = Field(default_factory=list)
 
 
+class ResultSpec(_Base):
+    """How much data the answer needs, and along which dimensions.
+
+    This is the part of "show me a chart" that the retrieval step actually has
+    to honour. Drawing is somebody else's problem; *not collapsing twelve
+    quarters into one figure* is this one's. ``row_count`` is the cardinality
+    the retrieval must produce -- the product of the axes it varies along.
+
+    Derived from what resolved, not from the question: if only one period came
+    back, there is no period axis however the question was phrased.
+    """
+
+    shape: ResultShape
+    axes: list[ResultAxis] = Field(default_factory=list)
+
+    companies: int = Field(ge=0)
+    periods: int = Field(ge=0)
+    metrics: int = Field(ge=0)
+
+    @property
+    def row_count(self) -> int:
+        """Rows the retrieval should return. A result with fewer has dropped
+        something the question asked for."""
+        return max(1, self.companies) * max(1, self.periods) * max(1, self.metrics)
+
+
 class QueryPlan(_Base):
     """Everything needed to write the SQL, with nothing left to guess."""
 
     version: Literal["1"] = "1"
     question: str = Field(min_length=1, max_length=2000)
     intent: Intent
+    result: ResultSpec
     filters: PlanFilters
     bindings: list[Binding] = Field(default_factory=list)
     ambiguous: list[Ambiguity] = Field(default_factory=list)
     unresolved: list[Unresolved] = Field(default_factory=list)
+
+    #: Caveats about the result as a whole rather than about one binding --
+    #: currently only that the companies' fiscal labels cover different dates.
+    #: Kept separate from ``Binding.notes`` because attaching a statement about
+    #: the comparison to one of its sides would be arbitrary.
+    notes: list[Note] = Field(default_factory=list)
 
     @property
     def is_complete(self) -> bool:

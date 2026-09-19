@@ -1,0 +1,314 @@
+# Eval set: questions a person might actually ask this system.
+#
+# Purpose: measure what real questions REQUIRE, so decisions about the SQL
+# layer rest on a distribution rather than on anyone's intuition. Specifically
+# open: how much of the work is plain retrieval versus aggregation, ranking or
+# arithmetic the plan does not describe.
+#
+# Written before the SQL emitter exists and deliberately NOT shaped to what the
+# mapper can currently do -- a question that should be refused is as valuable
+# as one that should work. See evals/README.md for the tag vocabulary and how
+# to add your own.
+#
+# Nothing here is a fixture. Expected answers are not recorded, because the
+# point is the shape of the question, not the number.
+
+version: 1
+
+questions:
+  # --- plain lookup ---------------------------------------------------------
+  - id: q001
+    question: What was Apple's revenue in fiscal 2024?
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q002
+    question: How much cash did Microsoft have at the end of its last fiscal year?
+    expect: answerable
+    needs: [retrieval]
+    exercises: [instant_fact]
+
+  - id: q003
+    question: What was NVIDIA's net income last year?
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q004
+    question: How much did Intel spend on research and development in 2023?
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q005
+    question: What were Costco's total assets at the most recent year end?
+    expect: answerable
+    needs: [retrieval]
+    exercises: [instant_fact]
+
+  # --- comparison between companies ----------------------------------------
+  - id: q006
+    question: Which had higher revenue in fiscal 2024, Apple or Microsoft?
+    expect: answerable
+    needs: [retrieval, ranking]
+    exercises: [fiscal_calendar]
+    notes: >-
+      Their fiscal years end three months apart, so "fiscal 2024" is not the
+      same window. PITFALLS 1.3 -- the plan exposes this but nothing warns.
+
+  - id: q007
+    question: Compare gross margins for Intel and AMD over the last three years.
+    expect: answerable
+    needs: [retrieval, ratio]
+    exercises: [derived_metric]
+
+  - id: q008
+    question: How does Tesla's R&D spending compare to Meta's?
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q009
+    question: Rank all twenty companies by revenue for fiscal 2024.
+    expect: answerable
+    needs: [retrieval, ranking]
+    notes: No company element in the question; every loaded filer is in scope.
+
+  - id: q010
+    question: Which of these companies has the highest operating margin?
+    expect: answerable
+    needs: [retrieval, ratio, ranking]
+    exercises: [alias_gap]
+    notes: Operating margin is not in metric_aliases.yaml yet.
+
+  # --- trend and growth -----------------------------------------------------
+  - id: q011
+    question: How fast has NVIDIA's revenue grown over the past five years?
+    expect: answerable
+    needs: [retrieval, growth]
+
+  - id: q012
+    question: What was Tesla's year-over-year revenue growth in 2024?
+    expect: answerable
+    needs: [retrieval, growth]
+
+  - id: q013
+    question: Has Intel's R&D spending increased or decreased since 2021?
+    expect: answerable
+    needs: [retrieval, growth]
+
+  - id: q014
+    question: Show me Apple's revenue trend for the last five years.
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q015
+    question: Which company grew revenue fastest between 2023 and 2024?
+    expect: answerable
+    needs: [retrieval, growth, ranking]
+
+  - id: q016
+    question: Show me every company whose gross margin fell three years running.
+    expect: answerable
+    needs: [retrieval, growth, multi_step]
+    notes: A filter over a computed sequence, not over a stored value.
+
+  # --- quarterly, including the quarter nobody files ------------------------
+  - id: q017
+    question: What was Apple's Q4 revenue last year?
+    expect: answerable
+    needs: [retrieval]
+    exercises: [q4_residual]
+
+  - id: q018
+    question: Compare Q4 revenue across Apple, Microsoft and NVIDIA.
+    expect: answerable
+    needs: [retrieval]
+    exercises: [q4_residual, fiscal_calendar]
+    notes: >-
+      Three different calendar quarters under one label (Jun-Sep, Apr-Jun,
+      Oct-Jan). PITFALLS 3.6 -- nothing warns that the comparison is uneven.
+
+  - id: q019
+    question: Which quarter is Costco's strongest?
+    expect: answerable
+    needs: [retrieval, ranking]
+    exercises: [q4_residual]
+
+  - id: q020
+    question: What was Microsoft's operating cash flow in Q2 of fiscal 2024?
+    expect: answerable
+    needs: [retrieval]
+
+  - id: q021
+    question: How much did Apple's revenue change from Q3 to Q4 last year?
+    expect: answerable
+    needs: [retrieval, growth]
+    exercises: [q4_residual]
+
+  # --- ratios and derived metrics -------------------------------------------
+  - id: q022
+    question: What is Microsoft's free cash flow margin?
+    expect: answerable
+    needs: [retrieval, ratio]
+    exercises: [derived_metric, alias_gap]
+    notes: Free cash flow is aliased; dividing it by revenue is not.
+
+  - id: q023
+    question: What is Apple's current ratio?
+    expect: answerable
+    needs: [retrieval, ratio]
+    exercises: [alias_gap]
+    notes: >-
+      AssetsCurrent and LiabilitiesCurrent are both loaded for 18 filers, but
+      neither is in the alias file.
+
+  - id: q024
+    question: How much of Alphabet's revenue goes to R&D?
+    expect: answerable
+    needs: [retrieval, ratio]
+
+  - id: q025
+    question: What percentage of the combined revenue of all twenty companies did Apple represent in 2024?
+    expect: answerable
+    needs: [retrieval, aggregation, cross_company_total, ratio]
+    notes: The denominator spans companies, which no single binding describes.
+
+  - id: q026
+    question: What was NVIDIA's free cash flow in fiscal 2025?
+    expect: partial
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      NVIDIA is one of six filers (with AMZN, BAC, CVX, JPM, QCOM) that do not
+      use PaymentsToAcquirePropertyPlantAndEquipment, so this is currently
+      unresolved rather than answered.
+
+  # --- known data hazards ---------------------------------------------------
+  - id: q027
+    question: Show Alphabet's revenue from 2021 through 2025.
+    expect: answerable
+    needs: [retrieval]
+    exercises: [concept_drift]
+    notes: >-
+      Alphabet switches revenue concepts at FY2025. Should return the full
+      series WITH the concept_switch note attached. PITFALLS 1.8.
+
+  - id: q028
+    question: Did any of these companies restate its revenue?
+    expect: refuse
+    blocked_by: [restatement_metadata]
+    notes: >-
+      1,575 periods carry more than one value, but is_latest hides them and
+      nothing exposes that a restatement happened. PITFALLS 2.2.
+
+  - id: q029
+    question: What was Micron's gross margin in fiscal 2023?
+    expect: answerable
+    needs: [retrieval, ratio]
+    notes: Genuinely negative. Must not be "corrected" or refused.
+
+  - id: q030
+    question: What was Apple's revenue in 2015?
+    expect: refuse
+    blocked_by: [out_of_scope_period]
+    notes: Store holds fiscal 2021-2025 only.
+
+  - id: q031
+    question: What was Apple's revenue in 2019?
+    expect: partial
+    needs: [retrieval]
+    blocked_by: [out_of_scope_period]
+    notes: >-
+      Outside the loaded fiscal years, but comparative columns mean some 2019
+      period_ends do exist. Whether to answer from a comparative is an open
+      question -- flagging it rather than deciding it here.
+
+  # --- should be refused ----------------------------------------------------
+  - id: q032
+    question: How much revenue did Apple make from iPhones?
+    expect: refuse
+    blocked_by: [segment_data]
+    notes: PITFALLS 3.2 -- companyfacts carries no dimensional facts at all.
+
+  - id: q033
+    question: How much of Microsoft's revenue came from outside the United States?
+    expect: refuse
+    blocked_by: [segment_data]
+
+  - id: q034
+    question: What does Intel say about competition risk in its latest 10-K?
+    expect: refuse
+    blocked_by: [filing_text]
+
+  - id: q035
+    question: Why did Intel's margins fall in 2023?
+    expect: refuse
+    blocked_by: [causal, filing_text]
+
+  - id: q036
+    question: How many employees does Amazon have?
+    expect: refuse
+    blocked_by: [not_in_dataset]
+    notes: EntityNumberOfEmployees is not present in the store.
+
+  - id: q037
+    question: What is NVIDIA's market capitalisation?
+    expect: refuse
+    blocked_by: [not_in_dataset]
+    notes: >-
+      EntityPublicFloat exists for all 20 filers and is NOT market cap. A
+      plausible wrong binding -- worth checking the resolver does not make it.
+
+  - id: q038
+    question: How does Apple compare to Samsung on revenue?
+    expect: partial
+    blocked_by: [company_not_loaded]
+    notes: Apple resolves, Samsung does not. Should answer half and say so.
+
+  - id: q039
+    question: What is Tesla's stock price today?
+    expect: refuse
+    blocked_by: [not_in_dataset]
+
+  # --- awkward shapes -------------------------------------------------------
+  - id: q040
+    question: Which company had the largest single-quarter revenue decline?
+    expect: answerable
+    needs: [retrieval, growth, ranking, aggregation]
+    exercises: [q4_residual]
+
+  - id: q041
+    question: List companies with more than 100 billion dollars in revenue last year.
+    expect: answerable
+    needs: [retrieval, multi_step]
+    notes: A filter on the value itself rather than on a coordinate.
+
+  - id: q042
+    question: What was the average R&D spend across these companies in 2024?
+    expect: answerable
+    needs: [retrieval, aggregation, cross_company_total]
+
+  - id: q043
+    question: Show me Apple's revenue and net income side by side for five years.
+    expect: answerable
+    needs: [retrieval]
+    notes: Two metric elements, one company, many periods.
+
+  - id: q044
+    question: Has anyone's total debt more than doubled since 2021?
+    expect: answerable
+    needs: [retrieval, growth, ranking, multi_step]
+
+  # --- user provided -------------------------------------------------------
+  - id: q045
+    question: Show me visually how much money was made from 2023 to 2025 by quarter, for Google, Apple, and Nvidia
+    expect: answerable
+    shape: series
+    needs: [retrieval]
+    exercises: [q4_residual, fiscal_calendar, concept_drift]
+    notes: >-
+      The question that made `shape` a field. "Visually" is not decoration --
+      it means 3 companies x 12 quarters = 36 points rather than one figure,
+      and the plan has to say so or retrieval may collapse it. Also ambiguous
+      on its face: "how much money was made" could be revenue or net income,
+      which the producer has to pin down or the mapper will refuse it.
+      Verified: resolves to 36 rows, 9 of them Q4 residuals, and 4 bindings
+      because Alphabet changes revenue tags partway through the range.

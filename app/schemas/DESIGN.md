@@ -450,3 +450,49 @@ The seam is verified rather than assumed: where two concepts both report a
 period their values are compared, and the note says whether the series was
 stitched across agreeing values or across an unverifiable gap. See
 `PITFALLS.md` §1.8.
+
+### 8.14 `ResultSpec` — what the answer has to contain
+
+Added after a question asked for a chart: *"show me visually how much money was
+made from 2023 to 2025 by quarter, for Google, Apple and Nvidia"*. The point is
+not drawing. It is that a chart of three companies over twelve quarters needs
+**36 rows**, and a plan that does not say so lets retrieval collapse it to one
+figure per company and answer a different question.
+
+`QueryIn.shape` is what the asker wants; `QueryPlan.result` is a `ResultSpec`
+carrying `shape`, the `axes` the result varies along, the counts, and
+`row_count` — the product, and the number retrieval must not come in under.
+
+**Axes are measured, not requested.** They come from what actually resolved: a
+question phrased as a chart whose periods all failed has no period axis, and
+saying so beats promising a series that cannot be filled. `shape` does take the
+asker's word, because "visually" carries intent that cardinality alone does
+not — one company over twelve quarters and the same as a chart need identical
+rows but not identical answers.
+
+Kept off `needs`-style tagging in `evals/`, and kept separate from `intent`,
+for the same reason: *what to compute* and *what to return* are different
+questions, and folding them together is how the dimension got missed in the
+first place.
+
+### 8.15 Two kinds of notes
+
+`Binding.notes` covers a caveat about one binding's numbers; `QueryPlan.notes`
+covers one about the result as a whole. Period misalignment (PITFALLS §1.16) is
+the plan-level case — it is a statement about a *comparison*, and attaching it
+to one of its sides would be arbitrary.
+
+### 8.16 `Ambiguity` holds one candidate, and carries the phrase
+
+Originally `min_length=2`, on the reasoning that a lone survivor is a binding
+rather than an ambiguity. That was wrong once the embedding path grew a
+confidence floor: a single match too weak to trust is also something to refuse
+and offer back, and downstream both cases mean the same thing. One channel,
+`min_length=1`; zero candidates is still `Unresolved`.
+
+`element_text` travels with it so a refusal can quote the phrase it could not
+pin down, and `ConceptRef.label` carries the taxonomy's human label so the
+options read as "Income Taxes Paid, Net" rather than `IncomeTaxesPaidNet`.
+Refusing without saying what you nearly matched is not much better than
+guessing.
+

@@ -49,6 +49,8 @@ from app.schemas.query import (
     QueryIn,
     QueryPlan,
     ResolvedPeriod,
+    ResultAxis,
+    ResultSpec,
     Unresolved,
 )
 from app.semantic.metric_aliases import AliasHit, alias_index
@@ -63,6 +65,14 @@ from app.semantic.metric_aliases import AliasHit, alias_index
 #: duration.
 _ANNUAL_SPAN_DAYS = (355, 375)
 _QUARTER_SPAN_DAYS = (80, 100)
+
+#: How far apart two companies' dates may sit under the same fiscal label
+#: before a cross-company comparison is worth warning about. A month shifts a
+#: quarter by a third and changes which conditions a year captures. The bar is
+#: low because the real spreads are not: measured across the store, one fiscal
+#: label covers period_ends up to 343 days apart -- "FY2025" runs from
+#: 2025-01-26 to 2025-12-31 depending on the filer.
+_ALIGNMENT_TOLERANCE_DAYS = 30
 
 
 async def map_query(
@@ -85,14 +95,103 @@ async def map_query(
             metrics, session, ciks=ciks, periods=resolved_periods
         )
 
+    result = _describe_result(query, ciks=ciks, periods=resolved_periods, metrics=len(metrics))
     return QueryPlan(
         question=query.question,
         intent=query.intent,
+        result=result,
         filters=PlanFilters(ciks=ciks, periods=resolved_periods),
         bindings=bindings,
         ambiguous=ambiguous,
         unresolved=company_problems + period_problems + metric_problems,
+        notes=_alignment_notes(resolved_periods, result),
     )
+
+
+def _describe_result(
+    query: QueryIn, *, ciks: list[int], periods: list[ResolvedPeriod], metrics: int
+) -> ResultSpec:
+    """What the answer has to contain, from what actually resolved.
+
+    The axes are measured rather than requested: a question phrased as a chart
+    whose periods all failed to resolve has no period axis, and saying so is
+    more useful than promising a series that cannot be filled. ``shape`` does
+    take the asker's word when they gave one, because "show me visually"
+    carries intent the cardinality alone cannot -- one company over twelve
+    quarters and one company over twelve quarters *as a chart* need the same
+    rows but not the same answer.
+    """
+    distinct_periods = {(p.fiscal_year, p.fiscal_period) for p in periods}
+    axes: list[ResultAxis] = []
+    if len(ciks) > 1:
+        axes.append("company")
+    if len(distinct_periods) > 1:
+        axes.append("period")
+    if metrics > 1:
+        axes.append("metric")
+
+    if query.shape is not None:
+        shape = query.shape
+    elif not axes:
+        shape = "scalar"
+    elif query.intent == "rank":
+        shape = "ranking"
+    elif axes == ["period"] or axes == ["company", "period"]:
+        shape = "series"
+    else:
+        shape = "table"
+
+    return ResultSpec(
+        shape=shape,
+        axes=axes,
+        companies=len(ciks),
+        periods=len(distinct_periods),
+        metrics=metrics,
+    )
+
+
+def _alignment_notes(periods: list[ResolvedPeriod], result: ResultSpec) -> list[Note]:
+    """Warn when one fiscal label covers very different dates per company.
+
+    Only fires on a cross-company comparison, because within one filer the
+    labels are self-consistent. It matters most for the shape that hides it
+    best: a line chart puts "Q1 2025" at one x position, and the viewer reads
+    points as contemporaneous when one company's quarter can end ten months
+    after another's.
+
+    Reports the worst label rather than all of them -- once the reader knows
+    the axis is approximate, an enumeration adds nothing.
+    """
+    if "company" not in result.axes:
+        return []
+
+    by_label: dict[tuple[int, str], list[ResolvedPeriod]] = defaultdict(list)
+    for period in periods:
+        by_label[(period.fiscal_year, period.fiscal_period)].append(period)
+
+    worst: tuple[int, tuple[int, str], date, date] | None = None
+    for label, group in by_label.items():
+        if len({p.company_cik for p in group}) < 2:
+            continue
+        earliest = min(p.period_end for p in group)
+        latest = max(p.period_end for p in group)
+        spread = (latest - earliest).days
+        if spread > _ALIGNMENT_TOLERANCE_DAYS and (worst is None or spread > worst[0]):
+            worst = (spread, label, earliest, latest)
+
+    if worst is None:
+        return []
+
+    spread, (year, fiscal_period), earliest, latest = worst
+    return [
+        Note(
+            kind="period_misalignment",
+            message=f"These companies do not share a fiscal calendar: {fiscal_period} "
+            f"{year} ends anywhere from {earliest} to {latest}, a spread of {spread} "
+            "days. Points sharing a period label are not contemporaneous, so treat a "
+            "shared time axis as approximate.",
+        )
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -331,6 +430,13 @@ _EMBEDDING_CANDIDATES = 25
 #: coverage filter, which is the step that can actually disprove them.
 _MAX_EMBEDDING_DISTANCE = 0.45
 
+#: Similarity a lone embedding candidate must clear to be bound outright.
+#: Below it the match is a guess, and a guess presented as an answer is the
+#: failure this project keeps trying to avoid -- so it is offered back as a
+#: choice instead. Curated aliases bypass this; they are judgment, not
+#: distance.
+_MIN_BINDING_SIMILARITY = 0.70
+
 
 @dataclass(frozen=True)
 class _Candidate:
@@ -340,6 +446,15 @@ class _Candidate:
     taxonomy: str
     name: str
     score: float
+    label: str | None = None
+
+    def as_ref(self) -> ConceptRef:
+        return ConceptRef(
+            concept_id=self.concept_id,
+            taxonomy=self.taxonomy,
+            name=self.name,
+            label=self.label,
+        )
 
 
 @dataclass(frozen=True)
@@ -515,7 +630,11 @@ def _bind_per_company(
                 if not survivors:
                     chosen = []
                     break
-                if resolved_by == "embedding" and len(survivors) > 1:
+                if resolved_by == "embedding" and (
+                    len(survivors) > 1 or survivors[0].score < _MIN_BINDING_SIMILARITY
+                ):
+                    # Several equally plausible, or one that is only a guess.
+                    # Both refuse; the caller gets the candidates to ask about.
                     tied = survivors
                     chosen = []
                     break
@@ -535,11 +654,10 @@ def _bind_per_company(
             ambiguous.append(
                 Ambiguity(
                     element_id=element.id,
+                    element_text=element.text,
                     candidates=[
                         Candidate(
-                            concept=ConceptRef(
-                                concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name
-                            ),
+                            concept=c.as_ref(),
                             score=c.score,
                             coverage=_coverage_for(evidence[(cik, c.concept_id)], in_scope),
                         )
@@ -589,10 +707,7 @@ def _bind_per_company(
                         PeriodRef(fiscal_year=p.fiscal_year, fiscal_period=p.fiscal_period)
                         for p in covered
                     ],
-                    concepts=[
-                        ConceptRef(concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name)
-                        for c in chosen
-                    ],
+                    concepts=[c.as_ref() for c in chosen],
                     expression=expression,
                     unit=lead.unit,
                     is_instant=lead.is_instant,
@@ -822,14 +937,20 @@ async def _slots_from_alias(session: AsyncSession, hit: AliasHit) -> list[list[_
     """
     refs = {ref for slot in hit.terms for ref in slot}
     rows = await session.execute(
-        select(Concept.id, Concept.taxonomy, Concept.name).where(
+        select(Concept.id, Concept.taxonomy, Concept.name, Concept.label).where(
             tuple_(Concept.taxonomy, Concept.name).in_(refs)
         )
     )
-    loaded = {(taxonomy, name): concept_id for concept_id, taxonomy, name in rows}
+    loaded = {(taxonomy, name): (cid, label) for cid, taxonomy, name, label in rows}
     return [
         [
-            _Candidate(concept_id=loaded[ref], taxonomy=ref[0], name=ref[1], score=1.0)
+            _Candidate(
+                concept_id=loaded[ref][0],
+                taxonomy=ref[0],
+                name=ref[1],
+                score=1.0,
+                label=loaded[ref][1],
+            )
             for ref in slot
             if ref in loaded
         ]
@@ -852,14 +973,26 @@ async def _nearest_concepts(session: AsyncSession, text: str) -> list[_Candidate
 
     distance = Concept.embedding.cosine_distance(await embed_query(text))
     rows = await session.execute(
-        select(Concept.id, Concept.taxonomy, Concept.name, distance.label("distance"))
+        select(
+            Concept.id,
+            Concept.taxonomy,
+            Concept.name,
+            Concept.label,
+            distance.label("distance"),
+        )
         .where(Concept.embedding.is_not(None), distance < _MAX_EMBEDDING_DISTANCE)
         .order_by(distance)
         .limit(_EMBEDDING_CANDIDATES)
     )
     return [
-        _Candidate(concept_id=cid, taxonomy=taxonomy, name=name, score=1.0 - float(dist))
-        for cid, taxonomy, name, dist in rows
+        _Candidate(
+            concept_id=cid,
+            taxonomy=taxonomy,
+            name=name,
+            score=1.0 - float(dist),
+            label=label,
+        )
+        for cid, taxonomy, name, label, dist in rows
     ]
 
 
