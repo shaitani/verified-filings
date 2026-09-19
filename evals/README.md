@@ -21,7 +21,7 @@ useful as the ones it should answer. Do not soften a question to fit what the
 code can currently do; that defeats the purpose.
 
 ```yaml
-  - id: q045
+  - id: q043
     question: How much did Meta spend on capex last year?
     expect: answerable
     needs: [retrieval]

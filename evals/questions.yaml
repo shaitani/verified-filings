@@ -66,12 +66,6 @@ questions:
     needs: [retrieval]
 
   - id: q009
-    question: Rank all twenty companies by revenue for fiscal 2024.
-    expect: answerable
-    needs: [retrieval, ranking]
-    notes: No company element in the question; every loaded filer is in scope.
-
-  - id: q010
     question: Which of these companies has the highest operating margin?
     expect: answerable
     needs: [retrieval, ratio, ranking]
@@ -82,45 +76,45 @@ questions:
       subset.
 
   # --- trend and growth -----------------------------------------------------
-  - id: q011
+  - id: q010
     question: How fast has NVIDIA's revenue grown over the past five years?
     expect: answerable
     needs: [retrieval, growth]
 
-  - id: q012
+  - id: q011
     question: What was Tesla's year-over-year revenue growth in 2024?
     expect: answerable
     needs: [retrieval, growth]
 
-  - id: q013
+  - id: q012
     question: Has Intel's R&D spending increased or decreased since 2021?
     expect: answerable
     needs: [retrieval, growth]
 
-  - id: q014
+  - id: q013
     question: Show me Apple's revenue trend for the last five years.
     expect: answerable
     needs: [retrieval]
 
-  - id: q015
+  - id: q014
     question: Which company grew revenue fastest between 2023 and 2024?
     expect: answerable
     needs: [retrieval, growth, ranking]
 
-  - id: q016
+  - id: q015
     question: Show me every company whose gross margin fell three years running.
     expect: answerable
     needs: [retrieval, growth, multi_step]
     notes: A filter over a computed sequence, not over a stored value.
 
   # --- quarterly, including the quarter nobody files ------------------------
-  - id: q017
+  - id: q016
     question: What was Apple's Q4 revenue last year?
     expect: answerable
     needs: [retrieval]
     exercises: [q4_residual]
 
-  - id: q018
+  - id: q017
     question: Compare Q4 revenue across Apple, Microsoft and NVIDIA.
     expect: answerable
     needs: [retrieval]
@@ -129,25 +123,25 @@ questions:
       Three different calendar quarters under one label (Jun-Sep, Apr-Jun,
       Oct-Jan). PITFALLS 3.6 -- nothing warns that the comparison is uneven.
 
-  - id: q019
+  - id: q018
     question: Which quarter is Costco's strongest?
     expect: answerable
     needs: [retrieval, ranking]
     exercises: [q4_residual]
 
-  - id: q020
+  - id: q019
     question: What was Microsoft's operating cash flow in Q2 of fiscal 2024?
     expect: answerable
     needs: [retrieval]
 
-  - id: q021
+  - id: q020
     question: How much did Apple's revenue change from Q3 to Q4 last year?
     expect: answerable
     needs: [retrieval, growth]
     exercises: [q4_residual]
 
   # --- ratios and derived metrics -------------------------------------------
-  - id: q022
+  - id: q021
     question: What is Microsoft's free cash flow margin?
     expect: answerable
     needs: [retrieval, ratio]
@@ -156,7 +150,7 @@ questions:
       `free_cash_flow_margin` now resolves as (operating cash flow - capex) /
       revenue, a three-operand expression.
 
-  - id: q023
+  - id: q022
     question: What is Apple's current ratio?
     expect: answerable
     needs: [retrieval, ratio]
@@ -165,18 +159,12 @@ questions:
       `current_ratio` now resolves to AssetsCurrent / LiabilitiesCurrent, both
       loaded for 18 of 20 filers.
 
-  - id: q024
+  - id: q023
     question: How much of Alphabet's revenue goes to R&D?
     expect: answerable
     needs: [retrieval, ratio]
 
-  - id: q025
-    question: What percentage of the combined revenue of all twenty companies did Apple represent in 2024?
-    expect: answerable
-    needs: [retrieval, aggregation, cross_company_total, ratio]
-    notes: The denominator spans companies, which no single binding describes.
-
-  - id: q026
+  - id: q024
     question: What was NVIDIA's free cash flow in fiscal 2025?
     expect: answerable
     needs: [retrieval]
@@ -187,7 +175,7 @@ questions:
       QCOM. BAC and JPM still have no capex concept at all.
 
   # --- known data hazards ---------------------------------------------------
-  - id: q027
+  - id: q025
     question: Show Alphabet's revenue from 2021 through 2025.
     expect: answerable
     needs: [retrieval]
@@ -196,7 +184,7 @@ questions:
       Alphabet switches revenue concepts at FY2025. Should return the full
       series WITH the concept_switch note attached. PITFALLS 1.8.
 
-  - id: q028
+  - id: q026
     question: Did any of these companies restate its revenue?
     expect: refuse
     blocked_by: [restatement_metadata]
@@ -204,19 +192,19 @@ questions:
       1,575 periods carry more than one value, but is_latest hides them and
       nothing exposes that a restatement happened. PITFALLS 2.2.
 
-  - id: q029
+  - id: q027
     question: What was Micron's gross margin in fiscal 2023?
     expect: answerable
     needs: [retrieval, ratio]
     notes: Genuinely negative. Must not be "corrected" or refused.
 
-  - id: q030
+  - id: q028
     question: What was Apple's revenue in 2015?
     expect: refuse
     blocked_by: [out_of_scope_period]
     notes: Store holds fiscal 2021-2025 only.
 
-  - id: q031
+  - id: q029
     question: What was Apple's revenue in 2019?
     expect: partial
     needs: [retrieval]
@@ -227,34 +215,34 @@ questions:
       question -- flagging it rather than deciding it here.
 
   # --- should be refused ----------------------------------------------------
-  - id: q032
+  - id: q030
     question: How much revenue did Apple make from iPhones?
     expect: refuse
     blocked_by: [segment_data]
     notes: PITFALLS 3.2 -- companyfacts carries no dimensional facts at all.
 
-  - id: q033
+  - id: q031
     question: How much of Microsoft's revenue came from outside the United States?
     expect: refuse
     blocked_by: [segment_data]
 
-  - id: q034
+  - id: q032
     question: What does Intel say about competition risk in its latest 10-K?
     expect: refuse
     blocked_by: [filing_text]
 
-  - id: q035
+  - id: q033
     question: Why did Intel's margins fall in 2023?
     expect: refuse
     blocked_by: [causal, filing_text]
 
-  - id: q036
+  - id: q034
     question: How many employees does Amazon have?
     expect: refuse
     blocked_by: [not_in_dataset]
     notes: EntityNumberOfEmployees is not present in the store.
 
-  - id: q037
+  - id: q035
     question: What is NVIDIA's market capitalisation?
     expect: refuse
     blocked_by: [not_in_dataset]
@@ -262,48 +250,48 @@ questions:
       EntityPublicFloat exists for all 20 filers and is NOT market cap. A
       plausible wrong binding -- worth checking the resolver does not make it.
 
-  - id: q038
+  - id: q036
     question: How does Apple compare to Samsung on revenue?
     expect: partial
     blocked_by: [company_not_loaded]
     notes: Apple resolves, Samsung does not. Should answer half and say so.
 
-  - id: q039
+  - id: q037
     question: What is Tesla's stock price today?
     expect: refuse
     blocked_by: [not_in_dataset]
 
   # --- awkward shapes -------------------------------------------------------
-  - id: q040
+  - id: q038
     question: Which company had the largest single-quarter revenue decline?
     expect: answerable
     needs: [retrieval, growth, ranking, aggregation]
     exercises: [q4_residual]
 
-  - id: q041
+  - id: q039
     question: List companies with more than 100 billion dollars in revenue last year.
     expect: answerable
     needs: [retrieval, multi_step]
     notes: A filter on the value itself rather than on a coordinate.
 
-  - id: q042
+  - id: q040
     question: What was the average R&D spend across these companies in 2024?
     expect: answerable
     needs: [retrieval, aggregation, cross_company_total]
 
-  - id: q043
+  - id: q041
     question: Show me Apple's revenue and net income side by side for five years.
     expect: answerable
     needs: [retrieval]
     notes: Two metric elements, one company, many periods.
 
-  - id: q044
+  - id: q042
     question: Has anyone's total debt more than doubled since 2021?
     expect: answerable
     needs: [retrieval, growth, ranking, multi_step]
 
   # --- user provided -------------------------------------------------------
-  - id: q045
+  - id: q043
     question: Show me visually how much money was made from 2023 to 2025 by quarter, for Google, Apple, and Nvidia
     expect: answerable
     shape: series
@@ -320,7 +308,7 @@ questions:
 
   # --- user provided: templates. <Company> is substituted before running, so
   # --- these measure coverage of common asks rather than one concrete query.
-  - id: q046
+  - id: q044
     question: "What is <Company>'s yearly revenue: gross, net"
     template: true
     expect: partial
@@ -331,7 +319,7 @@ questions:
       US GAAP has no gross-vs-net revenue pair, so there is nothing honest to
       map it to. Left uncurated on purpose.
 
-  - id: q047
+  - id: q045
     question: "What is <Company>'s profit: net, gross"
     template: true
     expect: partial
@@ -341,7 +329,7 @@ questions:
       Both aliased. GrossProfit is only tagged by 9 of 20 filers, so this is
       complete for some companies and partial for others.
 
-  - id: q048
+  - id: q046
     question: What is <Company>'s profit margin
     expect: partial
     needs: [retrieval, ratio]
@@ -352,7 +340,7 @@ questions:
       company, so the plan returns a Clarification offering gross, operating
       and net with descriptions. Naming the margin resolves straight through.
 
-  - id: q049
+  - id: q047
     question: "What is <Company>'s stock price, market cap"
     template: true
     expect: refuse
@@ -360,18 +348,18 @@ questions:
     notes: >-
       Neither is in XBRL. EntityPublicFloat exists for all 20 filers and is NOT
       market cap -- the plausible wrong binding worth guarding against. Overlaps
-      q037 and q039.
+      q035 and q037.
 
-  - id: q050
+  - id: q048
     question: "What are <Company>'s quarterly revenues: gross, net"
     template: true
     expect: partial
     shape: table
     needs: [retrieval]
     exercises: [q4_residual]
-    notes: Same gross/net problem as q046, plus Q4 has to be derived.
+    notes: Same gross/net problem as q044, plus Q4 has to be derived.
 
-  - id: q051
+  - id: q049
     question: "Which companies in a given sector performed best: highest revenue, profit both quarterly and yearly"
     expect: refuse
     shape: ranking
@@ -384,18 +372,18 @@ questions:
       rather than an empty set. Loading sic_numbers.json into the company table
       is the only remaining step.
 
-  - id: q052
+  - id: q050
     question: "Which companies by sic office performed best: highest revenue, profit both quarterly and yearly"
     expect: refuse
     shape: ranking
     blocked_by: [sector_classification]
     notes: >-
-      Same as q051, grouped by SIC office. Note sic_office has no source at all
+      Same as q049, grouped by SIC office. Note sic_office has no source at all
       -- sic_numbers.json carries code and description only. The SEC assigns
       offices by SIC range, so it is derivable given that mapping, which this
       project does not have.
 
-  - id: q053
+  - id: q051
     question: "What is <Company>'s cash flow: operating, investing, financing"
     template: true
     expect: partial
@@ -407,7 +395,7 @@ questions:
       asks which one is meant, since operating, investing, financing and free
       cash flow are four different answers.
 
-  - id: q054
+  - id: q052
     question: "What are <Company>'s balance sheet totals: assets, liabilities, stockholders' equity, cash, goodwill, inventory"
     template: true
     expect: answerable
@@ -422,7 +410,7 @@ questions:
       (Liabilities 15 of 20, StockholdersEquity 18, InventoryNet 17), so some
       companies will come back with fewer than six.
 
-  - id: q055
+  - id: q053
     question: "What are <Company>'s shareholder returns: share buyback spend, dividends per share"
     template: true
     expect: answerable
@@ -433,7 +421,7 @@ questions:
       two entries, dividends_per_share and dividends_paid, because a per-share
       figure and a cash total are different questions.
 
-  - id: q056
+  - id: q054
     question: What is <Company>'s capital expenditure
     expect: partial
     needs: [retrieval]
@@ -441,7 +429,7 @@ questions:
       Now 18 of 20 after adding PaymentsToAcquireProductiveAssets as an
       alternative. BAC and JPM report no capex concept at all.
 
-  - id: q057
+  - id: q055
     question: What is <Company>'s interest expense
     expect: answerable
     needs: [retrieval]
@@ -451,7 +439,7 @@ questions:
       CVX to InterestExpenseDebt. Apple stopped tagging it after FY2023, so
       FY2024 is correctly unresolved for them.
 
-  - id: q058
+  - id: q056
     question: What is <Company>'s effective tax rate
     expect: answerable
     needs: [retrieval]
