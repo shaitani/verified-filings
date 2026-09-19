@@ -3,18 +3,18 @@
     from app.semantic.query_mapper import map_query
     plan = await map_query(query)
 
-**Skeleton.** The two deterministic resolvers (company, period) are real; the
-metric resolver -- the one that needs the curated alias layer and the embedding
-cascade -- is a documented stub that reports every metric element as
-unresolved. The shape of what goes in and comes out is therefore exercisable
-end to end today, and only ``_resolve_metrics`` has to change to make it
-answer anything.
+Three resolvers run in order, because each needs the last one's answer:
+companies by exact lookup, periods into concrete date windows per company, then
+metrics -- curated alias, embedding fallback, and a coverage check against the
+facts that decides between them.
 
-Why the split is drawn there: companies and periods resolve by exact lookup and
-arithmetic, and getting them wrong is a bug. Metrics resolve by judgment about
-how filers tag things, and getting them wrong is a *research problem* -- so it
-is deliberately the one piece left empty rather than filled with a plausible
-guess that would be hard to tell apart from a working implementation.
+Nothing here raises on bad input. An element that cannot be resolved comes back
+in ``unresolved`` or ``ambiguous``, and one that resolves with a caveat carries
+a ``Note``; the caller reads ``plan.is_complete`` and decides.
+
+The data hazards this navigates -- comparative columns, 52/53-week calendars,
+Q4 never being filed, filers changing tags mid-range -- are catalogued with
+their evidence in ``PITFALLS.md``.
 
 Dependency direction: ``semantic -> (schemas, db)``, never the reverse.
 """
@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 
 from sqlalchemy import and_, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -40,7 +41,9 @@ from app.schemas.query import (
     ConceptRef,
     Coverage,
     MetricElementIn,
+    Note,
     PeriodElementIn,
+    PeriodRef,
     PeriodResidual,
     PlanFilters,
     QueryIn,
@@ -341,11 +344,21 @@ class _Candidate:
 
 @dataclass(frozen=True)
 class _Evidence:
-    """What the facts say about one ``(company, concept)`` pair."""
+    """What the facts say about one ``(company, concept)`` pair.
+
+    Values are kept, not just the window keys, so that a concept switch can be
+    checked at the seam: where two concepts both report a period, agreeing
+    values mean the filer dual-tagged one quantity and the series can be
+    stitched.
+    """
 
     is_instant: bool
     unit: str
-    windows: frozenset[tuple[date | None, date]]
+    values: dict[tuple[date | None, date], Decimal]
+
+    @property
+    def windows(self) -> set[tuple[date | None, date]]:
+        return set(self.values)
 
 
 async def _resolve_metrics(
@@ -464,24 +477,53 @@ def _bind_per_company(
     ambiguous: list[Ambiguity],
     problems: list[Unresolved],
 ) -> None:
-    """Commit one binding per company, or say why there isn't one."""
+    """Commit bindings per company, splitting where the filer changed tags.
+
+    Coverage is decided **per period**, not once for the whole range, because a
+    filer can switch concepts partway through it -- Alphabet moves from
+    ``RevenueFromContractWithCustomerExcludingAssessedTax`` to ``Revenues``
+    between FY2024 and FY2025, so no single concept answers all five years.
+    Periods that resolve to the same concepts are grouped into one binding, so
+    the common case (nothing changed) still produces exactly one.
+
+    Preference order does the grouping for free: for each period the first
+    covering alternative wins, so two periods agree iff the same alternative
+    covers both.
+    """
     for cik in ciks:
         in_scope = [p for p in periods if p.company_cik == cik]
         if not in_scope:
             continue
 
-        chosen: list[_Candidate] = []
+        groups: dict[tuple[int, ...], list[ResolvedPeriod]] = {}
+        chosen_by_key: dict[tuple[int, ...], list[_Candidate]] = {}
+        uncovered: list[ResolvedPeriod] = []
         tied: list[_Candidate] = []
-        for slot in slots:
-            survivors = [c for c in slot if _covers(evidence.get((cik, c.concept_id)), in_scope)]
-            if not survivors:
-                chosen = []
+
+        for period in in_scope:
+            chosen: list[_Candidate] = []
+            for slot in slots:
+                survivors = [
+                    c for c in slot if _covers(evidence.get((cik, c.concept_id)), [period])
+                ]
+                if not survivors:
+                    chosen = []
+                    break
+                if resolved_by == "embedding" and len(survivors) > 1:
+                    tied = survivors
+                    chosen = []
+                    break
+                chosen.append(survivors[0])
+
+            if tied:
                 break
-            if resolved_by == "embedding" and len(survivors) > 1:
-                tied = survivors
-                chosen = []
-                break
-            chosen.append(survivors[0])
+            if not chosen:
+                uncovered.append(period)
+                continue
+
+            key = tuple(c.concept_id for c in chosen)
+            groups.setdefault(key, []).append(period)
+            chosen_by_key[key] = chosen
 
         if tied:
             ambiguous.append(
@@ -501,42 +543,154 @@ def _bind_per_company(
             )
             continue
 
-        if not chosen:
+        if not groups:
             problems.append(
                 Unresolved(
                     element_id=element.id,
-                    reason=f"{element.text!r} has no concept with facts covering every "
+                    reason=f"{element.text!r} has no concept with facts covering any "
                     f"requested period for cik {cik}",
                 )
             )
             continue
 
-        lead = evidence[(cik, chosen[0].concept_id)]
-        residual = not lead.is_instant and any(p.residual_of for p in in_scope)
-
-        bindings.append(
-            Binding(
-                element_id=element.id,
-                company_cik=cik,
-                concepts=[
-                    ConceptRef(concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name)
-                    for c in chosen
-                ],
-                expression=expression,
-                unit=lead.unit,
-                is_instant=lead.is_instant,
-                period_rule="residual" if residual else "direct",
-                coverage=_coverage_for(lead, in_scope, residual=residual),
-                confidence=1.0 if resolved_by == "alias" else chosen[0].score,
-                resolved_by=resolved_by,
-                rationale=(
-                    f"{element.text!r} -> "
-                    + ", ".join(f"{c.taxonomy}:{c.name}" for c in chosen)
-                    + f" via {source}; verified against {len(in_scope)} requested period(s)"
-                    + (" as a Q4 residual" if residual else "")
-                ),
+        shared_notes = _switch_notes(groups, chosen_by_key, cik=cik, evidence=evidence)
+        if uncovered:
+            missing = ", ".join(f"FY{p.fiscal_year} {p.fiscal_period}" for p in uncovered)
+            shared_notes.append(
+                Note(
+                    kind="partial_coverage",
+                    message=f"No concept reports {element.text!r} for {missing}; "
+                    "those periods are absent from the result.",
+                )
             )
+
+        for key, covered in groups.items():
+            chosen = chosen_by_key[key]
+            lead = evidence[(cik, chosen[0].concept_id)]
+            residual = not lead.is_instant and any(p.residual_of for p in covered)
+            years = [p.fiscal_year for p in covered]
+            span = f"FY{min(years)}-FY{max(years)}"
+
+            bindings.append(
+                Binding(
+                    element_id=element.id,
+                    company_cik=cik,
+                    periods=[
+                        PeriodRef(fiscal_year=p.fiscal_year, fiscal_period=p.fiscal_period)
+                        for p in covered
+                    ],
+                    concepts=[
+                        ConceptRef(concept_id=c.concept_id, taxonomy=c.taxonomy, name=c.name)
+                        for c in chosen
+                    ],
+                    expression=expression,
+                    unit=lead.unit,
+                    is_instant=lead.is_instant,
+                    period_rule="residual" if residual else "direct",
+                    coverage=_coverage_for(lead, covered, residual=residual),
+                    confidence=1.0 if resolved_by == "alias" else chosen[0].score,
+                    resolved_by=resolved_by,
+                    rationale=(
+                        f"{element.text!r} -> "
+                        + ", ".join(f"{c.taxonomy}:{c.name}" for c in chosen)
+                        + f" via {source}; verified over {len(covered)} period(s) ({span})"
+                        + (" as a Q4 residual" if residual else "")
+                    ),
+                    notes=shared_notes,
+                )
+            )
+
+
+def _switch_notes(
+    groups: dict[tuple[int, ...], list[ResolvedPeriod]],
+    chosen_by_key: dict[tuple[int, ...], list[_Candidate]],
+    *,
+    cik: int,
+    evidence: dict[tuple[int, int], _Evidence],
+) -> list[Note]:
+    """Disclose a mid-range concept change, and say whether it was verifiable.
+
+    Where two concepts both report a period, their values are compared. Equal
+    values mean the filer dual-tagged one quantity and stitching the series is
+    safe -- measured on Alphabet, the two revenue concepts agree exactly in all
+    three overlapping years. Unequal values, or no overlap at all, mean the
+    switch could be a change of *definition* rather than of tag, and the reader
+    has to be told rather than handed a smooth-looking line.
+    """
+    if len(groups) < 2:
+        return []
+
+    ordered = sorted(groups.items(), key=lambda kv: min(p.fiscal_year for p in kv[1]))
+    described = "; ".join(
+        f"FY{min(p.fiscal_year for p in periods)}-FY{max(p.fiscal_year for p in periods)}: "
+        + ", ".join(c.name for c in chosen_by_key[key])
+        for key, periods in ordered
+    )
+
+    agreed, compared = _seam_agrees(ordered, chosen_by_key, cik=cik, evidence=evidence)
+    if compared and agreed:
+        return [
+            Note(
+                kind="concept_switch",
+                message=f"Filer changed tags mid-range ({described}). The tags report "
+                f"identical values in {compared} overlapping period(s), so the series "
+                "was stitched across the change.",
+            )
+        ]
+    if compared:
+        return [
+            Note(
+                kind="unverified_switch",
+                message=f"Filer changed tags mid-range ({described}), and the tags "
+                f"DISAGREE in {compared} overlapping period(s). The series may not be "
+                "continuous; treat comparisons across the change with care.",
+            )
+        ]
+    return [
+        Note(
+            kind="unverified_switch",
+            message=f"Filer changed tags mid-range ({described}), with no overlapping "
+            "period to check the two against. The series may not be continuous.",
         )
+    ]
+
+
+def _seam_agrees(
+    ordered: list[tuple[tuple[int, ...], list[ResolvedPeriod]]],
+    chosen_by_key: dict[tuple[int, ...], list[_Candidate]],
+    *,
+    cik: int,
+    evidence: dict[tuple[int, int], _Evidence],
+) -> tuple[bool, int]:
+    """``(values agree, how many periods could be compared)`` across the change.
+
+    The overlap to inspect sits in the **earlier** group's periods: preference
+    order means the later concept never won a period the earlier one covered,
+    so any period where both have facts is one the earlier concept was chosen
+    for. Alphabet is the worked example -- ``Revenues`` also reports FY2021,
+    FY2023 and FY2024, which ``RevenueFromContractWithCustomerExcludingAssessedTax``
+    won on order, and the two agree to the dollar in all three.
+
+    Only the lead operand is compared. A derived metric whose *numerator*
+    survives the switch is the case worth catching; comparing every operand
+    would report a disagreement for ratios whose denominator legitimately
+    moved.
+    """
+    compared = 0
+    for i in range(len(ordered) - 1):
+        left_key, left_periods = ordered[i]
+        right_key, _ = ordered[i + 1]
+        left = evidence.get((cik, chosen_by_key[left_key][0].concept_id))
+        right = evidence.get((cik, chosen_by_key[right_key][0].concept_id))
+        if left is None or right is None:
+            continue
+        for period in left_periods:
+            for window in _required_windows(period, is_instant=left.is_instant):
+                if window in left.values and window in right.values:
+                    compared += 1
+                    if left.values[window] != right.values[window]:
+                        return False, compared
+    return True, compared
 
 
 def _required_windows(
@@ -688,6 +842,7 @@ async def _gather_evidence(
             Fact.is_instant,
             Fact.period_start,
             Fact.period_end,
+            Fact.value,
         ).where(
             Fact.company_cik.in_(ciks),
             Fact.concept_id.in_(concept_ids),
@@ -702,19 +857,27 @@ async def _gather_evidence(
         )
     )
 
-    collected: dict[tuple[int, int], list[tuple[str, bool, date | None, date]]] = defaultdict(list)
-    for cik, concept_id, unit, is_instant, start, end in rows:
-        collected[(cik, concept_id)].append((unit, is_instant, None if is_instant else start, end))
+    collected: dict[tuple[int, int], list[tuple[str, bool, date | None, date, Decimal]]] = (
+        defaultdict(list)
+    )
+    for cik, concept_id, unit, is_instant, start, end, value in rows:
+        collected[(cik, concept_id)].append(
+            (unit, is_instant, None if is_instant else start, end, value)
+        )
 
     evidence: dict[tuple[int, int], _Evidence] = {}
     for key, found in collected.items():
         # A concept is either a flow or a balance. If a filer has tagged both,
         # go with whichever it did more often rather than guessing.
-        is_instant = Counter(instant for _, instant, _, _ in found).most_common(1)[0][0]
+        is_instant = Counter(instant for _, instant, _, _, _ in found).most_common(1)[0][0]
         same_kind = [row for row in found if row[1] == is_instant]
+        # One unit per binding, and the covered windows must be the windows of
+        # THAT unit -- a concept filed in both EUR and USD would otherwise pass
+        # coverage on one and be reported as the other. See PITFALLS.md.
+        unit = Counter(unit for unit, _, _, _, _ in same_kind).most_common(1)[0][0]
         evidence[key] = _Evidence(
             is_instant=is_instant,
-            unit=Counter(unit for unit, _, _, _ in same_kind).most_common(1)[0][0],
-            windows=frozenset((start, end) for _, _, start, end in same_kind),
+            unit=unit,
+            values={(start, end): value for u, _, start, end, value in same_kind if u == unit},
         )
     return evidence

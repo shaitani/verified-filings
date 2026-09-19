@@ -4,6 +4,8 @@ Companion to [`app/schemas/DESIGN.md`](../schemas/DESIGN.md), which covers the
 `QueryIn` / `QueryPlan` models this package produces and consumes (its sections
 8 and 8.11-8.12 in particular).
 
+Data hazards and their evidence live in [`PITFALLS.md`](../../PITFALLS.md).
+
 This file covers the **curated metric alias layer** — `metric_aliases.yaml` and
 `metric_aliases.py`. The file holds the accounting judgment; the module
 validates it, normalizes surface forms and answers lookups. It is **data, not

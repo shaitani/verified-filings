@@ -5,7 +5,8 @@ Context handoff for the schemas in [`xbrl.py`](xbrl.py), like
 decided and why**, so a future session can extend or explain the schemas without
 re-deriving the reasoning.
 
-Related: `app/db/DESIGN.md`, memory `db-layer-layout.md`, `xbrl-data-terminology.md`.
+Related: `app/db/DESIGN.md`, `app/semantic/DESIGN.md`, `PITFALLS.md`,
+memory `db-layer-layout.md`, `xbrl-data-terminology.md`.
 
 ---
 
@@ -429,3 +430,23 @@ exact plan-supplied dates — no day-span ranges — returning FY2025 Q4 revenue
 Note those are three different calendar quarters (Jun–Sep, Apr–Jun, Oct–Jan)
 carrying the same label, which is why §8.11's per-company windows had to land
 first.
+
+### 8.13 `Binding.periods` and `Binding.notes`
+
+A binding is keyed on `(element_id, company_cik, periods)`, not just the first
+two: a filer can change tags *during* the range asked about. Alphabet reports
+revenue under `RevenueFromContractWithCustomerExcludingAssessedTax` through
+FY2024 and `Revenues` in FY2025, so a five-year question yields two bindings
+for one company. Periods sharing a concept selection are grouped, so the
+ordinary case still produces exactly one binding and nothing gets noisier.
+
+`notes: list[Note]` is a general caveat channel, deliberately not a
+`concept_changed` boolean. Three hazards have the same shape — *the answer is
+computable but carries something the reader must see* — and restatement
+disclosure and period-comparability warnings should land here too without
+reopening the schema. `NoteKind` is the enum to extend.
+
+The seam is verified rather than assumed: where two concepts both report a
+period their values are compared, and the note says whether the series was
+stitched across agreeing values or across an unverifiable gap. See
+`PITFALLS.md` §1.8.

@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from app.db.loader import load_file
-from app.schemas.query import QueryIn
+from app.schemas.query import Binding, ConceptRef, Coverage, Note, PeriodRef, QueryIn
 from app.semantic import query_mapper
 from app.semantic.metric_aliases import load_aliases
 from app.semantic.query_mapper import map_query
@@ -378,3 +378,86 @@ async def test_unaliased_term_makes_no_embedding_call_without_a_corpus(
 
     assert plan.bindings == []
     assert "nothing in the concept corpus" in plan.unresolved[0].reason
+
+
+# --------------------------------------------------------------------------- #
+# Concept drift -- a filer changing tags partway through the range asked about
+# --------------------------------------------------------------------------- #
+
+
+async def test_one_binding_per_company_when_nothing_drifts(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The common case must not get noisier: a metric whose concept holds for
+    the whole range still produces exactly one binding, with no notes."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    (binding,) = plan.bindings
+    assert binding.notes == []
+    assert [p.fiscal_year for p in binding.periods] == [WINDOW_YEAR]
+
+
+async def test_periods_with_no_covering_concept_are_noted_not_dropped(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Coverage is decided per period now, so a range where only some periods
+    resolve binds the ones that do -- but the gap has to be disclosed, never
+    silently omitted from a series someone will read as continuous."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    missing_year = min(y for y in (WINDOW_YEAR - 1, WINDOW_YEAR) if y not in WINDOWS)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget assets", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p1", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+            {"id": "p2", "text": "prior", "kind": "period", "fiscal_year": missing_year},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    # The missing year has no reporting window at all, so it never reaches the
+    # metric resolver -- the period resolver reports it.
+    assert any("no FY reporting window" in u.reason for u in plan.unresolved)
+    assert [p.fiscal_year for p in plan.bindings[0].periods] == [WINDOW_YEAR]
+
+
+def test_binding_periods_default_to_every_period_in_scope() -> None:
+    """An empty list means "all", so a plan built by hand stays valid."""
+    binding = Binding(
+        element_id="e1",
+        concepts=[ConceptRef(concept_id=1, taxonomy="us-gaap", name="Revenues")],
+        unit="USD",
+        is_instant=False,
+        coverage=Coverage(fact_count=1),
+        confidence=1.0,
+        resolved_by="alias",
+        rationale="x",
+    )
+    assert binding.periods == []
+    assert binding.notes == []
+
+
+def test_note_survives_on_a_binding() -> None:
+    binding = Binding(
+        element_id="e1",
+        periods=[PeriodRef(fiscal_year=2025, fiscal_period="FY")],
+        concepts=[ConceptRef(concept_id=1, taxonomy="us-gaap", name="Revenues")],
+        unit="USD",
+        is_instant=False,
+        coverage=Coverage(fact_count=1),
+        confidence=1.0,
+        resolved_by="alias",
+        rationale="x",
+        notes=[Note(kind="concept_switch", message="tags changed in FY2025")],
+    )
+    assert binding.notes[0].kind == "concept_switch"

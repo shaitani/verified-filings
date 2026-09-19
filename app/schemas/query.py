@@ -65,6 +65,16 @@ QueryFiscalPeriod = Literal["FY", "Q1", "Q2", "Q3", "Q4"]
 #: Only ever describes the arithmetic; the SQL step performs it.
 PeriodRule = Literal["direct", "residual"]
 
+#: Caveats a binding can carry. The answer is computable, but something about
+#: it should reach the reader rather than being smoothed over. See PITFALLS.md.
+#:   "concept_switch"     -- the filer changed tags mid-range and the two agree
+#:                           where they overlap, so the series was stitched.
+#:   "unverified_switch"  -- same, but there is no overlapping period to check
+#:                           the seam against, or the overlap disagrees.
+#:   "partial_coverage"   -- some requested periods have no facts and are absent
+#:                           from this binding.
+NoteKind = Literal["concept_switch", "unverified_switch", "partial_coverage"]
+
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...
 _CONCEPT_REF = re.compile(r"c(\d+)")
 
@@ -217,17 +227,49 @@ class Coverage(_Base):
     components: list[ComponentCoverage] = Field(default_factory=list)
 
 
+class Note(_Base):
+    """A caveat that must survive all the way to the reader.
+
+    Distinct from ``Unresolved``: the binding *works*, but presenting its
+    numbers without this sentence would mislead. The user-facing model is
+    expected to pass these on rather than summarize them away.
+    """
+
+    kind: NoteKind
+    message: str = Field(min_length=1, max_length=512)
+
+
+class PeriodRef(_Base):
+    """Points at one ``ResolvedPeriod`` in ``PlanFilters``; the company comes
+    from the ``Binding`` that carries it."""
+
+    fiscal_year: int
+    fiscal_period: QueryFiscalPeriod
+
+
 class Binding(_Base):
-    """One element, resolved, for one company.
+    """One element, resolved, for one company, over the periods it covers.
 
     ``company_cik=None`` means the binding holds for every cik in
     ``QueryPlan.filters``; a per-company binding overrides it. That split is
     what lets one "revenue" element resolve to ``Revenues`` for one filer and
     ``RevenueFromContractWithCustomerExcludingAssessedTax`` for another.
+
+    ``periods`` narrows it further, because a filer can change tags *during*
+    the range asked about. Alphabet reports revenue under
+    ``RevenueFromContractWithCustomerExcludingAssessedTax`` through FY2024 and
+    ``Revenues`` in FY2025, so a five-year question yields two bindings for one
+    company, each naming the periods it answers. One binding per element per
+    company would have had to pick a concept that covers everything, and there
+    isn't one -- see PITFALLS.md.
     """
 
     element_id: str = Field(min_length=1, max_length=32)
     company_cik: int | None = None
+
+    #: The periods this binding answers for, as keys into
+    #: ``PlanFilters.periods``. Empty means every period in scope.
+    periods: list[PeriodRef] = Field(default_factory=list)
 
     #: Operands for ``expression``, positionally: ``concepts[0]`` is "c0".
     concepts: list[ConceptRef] = Field(min_length=1)
@@ -255,6 +297,9 @@ class Binding(_Base):
     #: Why this binding, in a sentence a non-accountant can check. Doubles as
     #: what the user-facing model cites when it says which concept it used.
     rationale: str = Field(min_length=1, max_length=512)
+
+    #: Caveats that must reach the reader. See ``NoteKind``.
+    notes: list[Note] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _expression_refs_exist(self) -> Binding:
