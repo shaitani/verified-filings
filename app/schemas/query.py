@@ -96,12 +96,21 @@ ResultAxis = Literal["company", "period", "metric"]
 #:                           under the same fiscal label. Plan-level.
 #:   "mixed_granularity"  -- annual and quarterly figures in one result.
 #:                           Plan-level.
+#:   "narrower_than_asked" -- the bound concept measures a *subset* of what the
+#:                           phrase names, because no filed concept covers the
+#:                           whole of it. Curated, not inferred: a person wrote
+#:                           down what is missing. "Total debt" resolving to
+#:                           long-term debt is the case it exists for -- Apple
+#:                           carries $8.0B of commercial paper outside that
+#:                           figure, so the number is 8% light and nothing else
+#:                           in the plan would say so.
 NoteKind = Literal[
     "concept_switch",
     "unverified_switch",
     "partial_coverage",
     "period_misalignment",
     "mixed_granularity",
+    "narrower_than_asked",
 ]
 
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...

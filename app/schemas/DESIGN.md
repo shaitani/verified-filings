@@ -446,6 +446,14 @@ computable but carries something the reader must see* — and restatement
 disclosure and period-comparability warnings should land here too without
 reopening the schema. `NoteKind` is the enum to extend.
 
+That generality has since paid for itself once: `narrower_than_asked` was added
+when "total debt" turned out to be answerable only with long-term debt for most
+filers, an 8% understatement for Apple that nothing else in the plan would
+disclose. Unlike its neighbours it is *curated*, not inferred — the sentence
+comes from `metric_aliases.yaml` and is keyed per concept, because the
+alternatives differ in definition and the preferred one needs no caveat at all.
+See `app/semantic/DESIGN.md` §8b.
+
 The seam is verified rather than assumed: where two concepts both report a
 period their values are compared, and the note says whether the series was
 stitched across agreeing values or across an unverifiable gap. See

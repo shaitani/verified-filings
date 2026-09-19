@@ -534,7 +534,41 @@ _MAX_EMBEDDING_DISTANCE = 0.45
 #: failure this project keeps trying to avoid -- so it is offered back as a
 #: choice instead. Curated aliases bypass this; they are judgment, not
 #: distance.
-_MIN_BINDING_SIMILARITY = 0.70
+#:
+#: Was 0.70. Measured 2026-09-19 over 221 labelled (phrase, company) cases, by
+#: where the *top covered candidate* landed:
+#:
+#:     band        right   wrong   not in the store
+#:     0.70-0.75       2      19        22
+#:     0.75-0.80      32       7         0
+#:     0.80+          12       2         0
+#:
+#: The band just above the old bar is 5% precise; above 0.75 it is 83%. That
+#: band is where the wrong bindings lived -- "interest income" resolving to
+#: pre-tax income at 0.718, "treasury stock" to a share count at 0.701.
+#:
+#: Raising it is worth doing and does not fix the path. Right answers span
+#: 0.675-0.851 and wrong ones 0.556-0.810, and most of both sits in the
+#: overlap, so no threshold makes an unreviewed binding safe. The fix for a
+#: term people keep asking is a curated entry. See DESIGN.md §3b.
+_MIN_BINDING_SIMILARITY = 0.75
+
+#: Similarity below which the nearest concept is not worth *offering* either.
+#:
+#: Measured 2026-09-19 over 221 (phrase, company) cases with hand-labelled
+#: truth: a floor here at 0.65 turns 104 of 129 questions the store cannot
+#: answer from "here are four concepts, pick one" into a refusal, and of the 15
+#: answerable cases it also refuses, **none** had the right concept anywhere in
+#: the list they were offering. The cost is zero because a candidate list this
+#: weak was never going to help -- "competition risk disclosure" was coming
+#: back as a choice between AssetsFairValueDisclosure and
+#: LiabilitiesFairValueDisclosure. Above 0.68 the cost stops being zero, which
+#: is why the floor sits here and not higher.
+#:
+#: The distinction this draws is the one in DESIGN.md §8: `ambiguous` means the
+#: machine could not choose between real possibilities, and `unresolved` means
+#: there is nothing to choose between.
+_MIN_PLAUSIBLE_SIMILARITY = 0.65
 
 
 @dataclass(frozen=True)
@@ -625,6 +659,14 @@ async def _resolve_metrics(
 
     for element in elements:
         hit = index.lookup(element.text)
+        if hit is not None and hit.unavailable is not None:
+            # Curated: the term is understood and the dataset has no answer for
+            # it. Reaching the resolver ahead of the embedding net is the whole
+            # point -- left to similarity, "share price" bound par value and
+            # reported $0.000006. An `Unresolved` says so and does not ask,
+            # because there is nothing the asker could narrow.
+            problems.append(Unresolved(element_id=element.id, reason=hit.unavailable))
+            continue
         if hit is not None and hit.clarify is not None:
             # Curated: the term really is several things, and someone wrote the
             # choices. Ask rather than pick a convention and be quietly wrong.
@@ -657,6 +699,7 @@ async def _resolve_metrics(
                 continue
             expression = hit.expression
             signs = list(hit.signs)
+            caveats = hit.caveats
             resolved_by = "alias"
             source = f"curated alias {hit.metric!r}"
         else:
@@ -675,6 +718,8 @@ async def _resolve_metrics(
             # An embedding hit is a single lookup, never arithmetic, so there
             # is no operator for a magnitude assumption to attach to.
             signs = ["signed"]
+            # Caveats are curated judgment; a distance match has none behind it.
+            caveats = {}
             resolved_by = "embedding"
             source = "embedding search"
 
@@ -688,6 +733,7 @@ async def _resolve_metrics(
             element,
             slots=slots,
             signs=signs,
+            caveats=caveats,
             expression=expression,
             resolved_by=resolved_by,
             source=source,
@@ -710,6 +756,7 @@ def _bind_per_company(
     expression: str,
     resolved_by: str,
     source: str,
+    caveats: dict[tuple[str, str], str] | None = None,
     ciks: list[int],
     periods: list[ResolvedPeriod],
     evidence: dict[tuple[int, int], _Evidence],
@@ -729,7 +776,20 @@ def _bind_per_company(
     Preference order does the grouping for free: for each period the first
     covering alternative wins, so two periods agree iff the same alternative
     covers both.
+
+    Ambiguity is reported **once per element**, not once per company. The
+    candidates differ per filer -- each keeps whichever concepts its own facts
+    cover -- but the question they raise is the same one question, and asking
+    it twenty times is not twenty questions. Measured before this merged:
+    "total debt" over twenty companies produced nineteen separate records for
+    one phrase.
     """
+    # Merged across companies: concept_id -> the best sighting of it anywhere.
+    tied_candidates: dict[int, _Candidate] = {}
+    tied_coverage: dict[int, Coverage] = {}
+    weak_ciks: list[int] = []
+    weak_best: _Candidate | None = None
+
     for cik in ciks:
         in_scope = [p for p in periods if p.company_cik == cik]
         if not in_scope:
@@ -739,6 +799,7 @@ def _bind_per_company(
         chosen_by_key: dict[tuple[int, ...], list[_Candidate]] = {}
         uncovered: list[ResolvedPeriod] = []
         tied: list[_Candidate] = []
+        weak: _Candidate | None = None
 
         for period in in_scope:
             chosen: list[_Candidate] = []
@@ -749,17 +810,24 @@ def _bind_per_company(
                 if not survivors:
                     chosen = []
                     break
-                if resolved_by == "embedding" and (
-                    len(survivors) > 1 or survivors[0].score < _MIN_BINDING_SIMILARITY
-                ):
-                    # Several equally plausible, or one that is only a guess.
-                    # Both refuse; the caller gets the candidates to ask about.
-                    tied = survivors
-                    chosen = []
-                    break
+                if resolved_by == "embedding":
+                    if survivors[0].score < _MIN_PLAUSIBLE_SIMILARITY:
+                        # Not close enough to be worth offering as a choice.
+                        # Offering it anyway is how "competition risk
+                        # disclosure" came back as a choice between two
+                        # fair-value concepts.
+                        weak = survivors[0]
+                        chosen = []
+                        break
+                    if len(survivors) > 1 or survivors[0].score < _MIN_BINDING_SIMILARITY:
+                        # Several equally plausible, or one that is only a
+                        # guess. Both refuse; the caller gets the candidates.
+                        tied = survivors
+                        chosen = []
+                        break
                 chosen.append(survivors[0])
 
-            if tied:
+            if weak is not None or tied:
                 break
             if not chosen:
                 uncovered.append(period)
@@ -769,21 +837,20 @@ def _bind_per_company(
             groups.setdefault(key, []).append(period)
             chosen_by_key[key] = chosen
 
+        if weak is not None:
+            weak_ciks.append(cik)
+            if weak_best is None or weak.score > weak_best.score:
+                weak_best = weak
+            continue
+
         if tied:
-            ambiguous.append(
-                Ambiguity(
-                    element_id=element.id,
-                    element_text=element.text,
-                    candidates=[
-                        Candidate(
-                            concept=c.as_ref(),
-                            score=c.score,
-                            coverage=_coverage_for(evidence[(cik, c.concept_id)], in_scope),
-                        )
-                        for c in tied[:4]
-                    ],
-                )
-            )
+            for candidate in tied:
+                seen = tied_candidates.get(candidate.concept_id)
+                if seen is None or candidate.score > seen.score:
+                    tied_candidates[candidate.concept_id] = candidate
+                    tied_coverage[candidate.concept_id] = _coverage_for(
+                        evidence[(cik, candidate.concept_id)], in_scope
+                    )
             continue
 
         if not groups:
@@ -818,6 +885,15 @@ def _bind_per_company(
             years = [p.fiscal_year for p in covered]
             span = f"FY{min(years)}-FY{max(years)}"
 
+            # Which alternative won decides what has to be disclosed: a filer's
+            # own combined debt line needs no caveat, the long-term fallback
+            # omits commercial paper, and the noncurrent one omits more still.
+            narrower = [
+                Note(kind="narrower_than_asked", message=(caveats or {})[(c.taxonomy, c.name)])
+                for c in chosen
+                if (c.taxonomy, c.name) in (caveats or {})
+            ]
+
             bindings.append(
                 Binding(
                     element_id=element.id,
@@ -840,9 +916,44 @@ def _bind_per_company(
                         + f" via {source}; verified over {len(covered)} period(s) ({span})"
                         + (" as a Q4 residual" if residual else "")
                     ),
-                    notes=shared_notes,
+                    notes=shared_notes + narrower,
                 )
             )
+
+    if weak_best is not None:
+        problems.append(
+            Unresolved(
+                element_id=element.id,
+                reason=f"nothing in the concept corpus plausibly measures "
+                f"{element.text!r} for {_named_ciks(weak_ciks)}; the closest match, "
+                f"{weak_best.taxonomy}:{weak_best.name}, scores "
+                f"{weak_best.score:.2f} and is not near enough to offer as a choice",
+            )
+        )
+
+    if tied_candidates:
+        ranked = sorted(tied_candidates.values(), key=lambda c: -c.score)[:4]
+        ambiguous.append(
+            Ambiguity(
+                element_id=element.id,
+                element_text=element.text,
+                candidates=[
+                    Candidate(
+                        concept=c.as_ref(),
+                        score=c.score,
+                        coverage=tied_coverage[c.concept_id],
+                    )
+                    for c in ranked
+                ],
+            )
+        )
+
+
+def _named_ciks(ciks: list[int], limit: int = 4) -> str:
+    """Ciks for a refusal message, abbreviated once there are too many to read."""
+    if len(ciks) > limit:
+        return f"{len(ciks)} companies"
+    return "cik " + ", ".join(str(cik) for cik in ciks)
 
 
 def _switch_notes(

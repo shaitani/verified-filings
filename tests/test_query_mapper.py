@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ from app.schemas.query import (
     ClarifyOption,
     ConceptRef,
     Coverage,
+    MetricElementIn,
     Note,
     PeriodRef,
     PeriodResidual,
@@ -736,6 +738,226 @@ async def test_specific_margin_resolves_without_asking(
     )
 
     assert plan.clarifications == []
+
+
+async def test_unavailable_term_declines_with_a_reason(
+    test_session_factory, clean_fake_company
+) -> None:
+    """A curated `unavailable` entry must refuse outright, with the reason, and
+    must never reach the embedding search.
+
+    The distinction matters: left uncurated, "share price" bound
+    dei:EntityListingParValuePerShare and reported par value -- $0.000006 --
+    as a verified answer. Offering it back as an `Ambiguity` would be no better,
+    because there is nothing the asker could narrow.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "share price", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    assert not plan.needs_input, "there is no choice to offer; this is a refusal"
+    assert plan.bindings == []
+    assert plan.ambiguous == []
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m"
+    assert "par value" in problem.reason
+
+
+async def _fixture_concept(session_factory, name: str):
+    """One loaded concept from the fixture, as an embedding candidate would
+    arrive -- so a stubbed search points at something coverage can verify."""
+    from sqlalchemy import select
+
+    from app.db import Concept
+
+    async with session_factory() as session:
+        row = await session.execute(
+            select(Concept.id, Concept.taxonomy, Concept.name, Concept.label).where(
+                Concept.name == name
+            )
+        )
+        return row.one()
+
+
+async def test_a_distant_match_is_refused_rather_than_offered(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    """Below the plausibility floor there is nothing to choose between, so the
+    element is `unresolved`, not `ambiguous`.
+
+    Measured over 221 labelled cases: candidate lists this weak never contained
+    the right concept. Offering them is how "competition risk disclosure" came
+    back as a choice between AssetsFairValueDisclosure and
+    LiabilitiesFairValueDisclosure.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    cid, taxonomy, name, label = await _fixture_concept(
+        test_session_factory, "ZzzTestRevenues"
+    )
+
+    async def _distant(session, text):
+        return [
+            query_mapper._Candidate(
+                concept_id=cid, taxonomy=taxonomy, name=name, score=0.60, label=label
+            )
+        ]
+
+    monkeypatch.setattr(query_mapper, "_nearest_concepts", _distant)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "something nobody curated", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.ambiguous == [], "a 0.60 match is not a choice worth offering"
+    assert plan.bindings == []
+    assert not plan.needs_input
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m"
+    assert "plausibly measures" in problem.reason
+    assert "0.60" in problem.reason
+
+
+def test_a_narrower_fallback_discloses_what_it_leaves_out() -> None:
+    """When a metric's preferred concept is missing and a narrower alternative
+    binds instead, the binding has to say so.
+
+    "Total debt" is the case this exists for: most filers tag no combined debt
+    line, so the answer is long-term debt, which omits commercial paper --
+    Apple's is $8.0B against $90.7B, so the figure runs 8% light. Nothing else
+    in the plan would tell a reader that, and an 8% understatement labelled
+    "total debt" is a wrong number rather than a caveated one.
+
+    The filers that *do* tag the exact line must carry no such note, which is
+    why caveats are keyed per concept rather than per metric.
+    """
+    window = (date(2024, 1, 1), date(2024, 12, 31))
+    exact = query_mapper._Candidate(
+        concept_id=1, taxonomy="us-gaap", name="DebtLongtermAndShorttermCombinedAmount", score=1.0
+    )
+    narrower = query_mapper._Candidate(
+        concept_id=2, taxonomy="us-gaap", name="LongTermDebt", score=1.0
+    )
+    periods = [
+        ResolvedPeriod(
+            company_cik=cik,
+            fiscal_year=2024,
+            fiscal_period="FY",
+            period_start=window[0],
+            period_end=window[1],
+        )
+        for cik in (11, 22)
+    ]
+    fact = query_mapper._Evidence(
+        is_instant=False, unit="USD", values={window: Decimal("100")}
+    )
+    # cik 11 tags both and must take the exact one; cik 22 only the fallback.
+    evidence = {(11, 1): fact, (11, 2): fact, (22, 2): fact}
+
+    bindings: list[Binding] = []
+    query_mapper._bind_per_company(
+        MetricElementIn(id="m", text="total debt"),
+        slots=[[exact, narrower]],
+        signs=["signed"],
+        caveats={("us-gaap", "LongTermDebt"): "Short-term borrowings are not included."},
+        expression="c0",
+        resolved_by="alias",
+        source="curated alias 'total_debt'",
+        ciks=[11, 22],
+        periods=periods,
+        evidence=evidence,
+        bindings=bindings,
+        ambiguous=[],
+        problems=[],
+    )
+
+    by_cik = {b.company_cik: b for b in bindings}
+    assert by_cik[11].concepts[0].name == "DebtLongtermAndShorttermCombinedAmount"
+    assert by_cik[11].notes == [], "the exact line needs no caveat"
+
+    assert by_cik[22].concepts[0].name == "LongTermDebt"
+    (note,) = by_cik[22].notes
+    assert note.kind == "narrower_than_asked"
+    assert "Short-term borrowings" in note.message
+
+
+def test_ambiguity_is_reported_once_per_element_not_once_per_company() -> None:
+    """Twenty companies tying on one phrase is one question, not twenty.
+
+    Measured before this merged: "total debt" across the corpus produced
+    nineteen separate `Ambiguity` records for a single element, each with a
+    slightly different candidate list. Unusable as something to put to a
+    person. The merge keeps the best sighting of each concept.
+    """
+    element = MetricElementIn(id="m", text="total debt")
+    window = (date(2024, 1, 1), date(2024, 12, 31))
+
+    def _candidate(concept_id: int, name: str, score: float):
+        return query_mapper._Candidate(
+            concept_id=concept_id, taxonomy="us-gaap", name=name, score=score
+        )
+
+    # Two filers, overlapping but not identical candidate sets, and the shared
+    # concept scores differently for each.
+    shared = ("LongTermDebt", 0.69)
+    slot = [
+        _candidate(1, "DebtInstrumentCarryingAmount", 0.71),
+        _candidate(2, *shared),
+        _candidate(3, "ShortTermBorrowings", 0.66),
+    ]
+    periods = [
+        ResolvedPeriod(
+            company_cik=cik,
+            fiscal_year=2024,
+            fiscal_period="FY",
+            period_start=window[0],
+            period_end=window[1],
+        )
+        for cik in (11, 22)
+    ]
+    evidence = {
+        (cik, candidate.concept_id): query_mapper._Evidence(
+            is_instant=False, unit="USD", values={window: Decimal("1")}
+        )
+        for cik in (11, 22)
+        for candidate in slot
+    }
+
+    ambiguous: list = []
+    query_mapper._bind_per_company(
+        element,
+        slots=[slot],
+        signs=["signed"],
+        expression="c0",
+        resolved_by="embedding",
+        source="embedding search",
+        ciks=[11, 22],
+        periods=periods,
+        evidence=evidence,
+        bindings=[],
+        ambiguous=ambiguous,
+        problems=[],
+    )
+
+    (report,) = ambiguous
+    assert report.element_id == "m"
+    names = [c.concept.name for c in report.candidates]
+    assert len(names) == len(set(names)), "one concept, one entry"
+    assert names == sorted(names, key=lambda n: -dict(
+        DebtInstrumentCarryingAmount=0.71, LongTermDebt=0.69, ShortTermBorrowings=0.66
+    )[n]), "best match first"
 
 
 def test_needs_input_separates_asking_from_impossible() -> None:

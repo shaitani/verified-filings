@@ -20,6 +20,7 @@ from app.semantic.metric_aliases import (
     AliasIndex,
     MetricAlias,
     alias_index,
+    compact,
     load_aliases,
     normalize,
     split_concept_ref,
@@ -74,12 +75,45 @@ def test_shipped_file_only_references_known_taxonomies() -> None:
         ("Revenue", "revenue"),
         ("  Net   Sales  ", "net sales"),
         ("free_cash_flow", "free cash flow"),
-        ("SG&A", "sga"),
-        ("R&D", "rd"),
+        ("SG&A", "sg a"),
+        ("R&D", "r d"),
+        ("long-term debt", "long term debt"),
+        ("free-cash-flow", "free cash flow"),
     ],
 )
 def test_normalize(raw: str, expected: str) -> None:
     assert normalize(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("SG&A", "sga"),
+        ("R&D", "rd"),
+        ("long-term debt", "longterm debt"),
+    ],
+)
+def test_compact_deletes_punctuation_instead_of_separating(raw: str, expected: str) -> None:
+    """The acronym spelling, for forms the file writes run together."""
+    assert compact(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("written", "metric"),
+    [
+        ("R&D", "research_and_development"),
+        ("R & D", "research_and_development"),
+        ("SG&A", "sga_expense"),
+        ("long-term debt", "long_term_debt"),
+        ("free-cash-flow", "free_cash_flow"),
+    ],
+)
+def test_punctuated_spellings_reach_their_entry(written: str, metric: str) -> None:
+    """Both folds are tried, because no single one serves them all: "SG&A"
+    wants its ampersand deleted and "long-term" wants its hyphen to become a
+    space. Deleting punctuation outright -- the original rule -- turned every
+    hyphenated phrase into one run-together word that matched nothing."""
+    assert alias_index().lookup(written).metric == metric
 
 
 def test_underscores_fold_so_metric_keys_are_reachable_as_prose() -> None:
@@ -198,6 +232,68 @@ def test_unknown_sign_is_rejected() -> None:
         )
 
 
+def test_caveat_must_name_one_of_the_metric_s_own_terms() -> None:
+    """A caveat keyed on a concept the metric never binds would never be shown,
+    while reading in the file as though the hazard were handled."""
+    with pytest.raises(ValidationError, match="not one of this metric"):
+        MetricAlias.model_validate(
+            {
+                "label": "X",
+                "terms": [["us-gaap:A"]],
+                "caveats": {"us-gaap:B": "this one never binds"},
+            }
+        )
+
+    with pytest.raises(ValidationError, match="no concept to caveat"):
+        MetricAlias.model_validate(
+            {"label": "X", "unavailable": "not here", "caveats": {"us-gaap:A": "unreachable"}}
+        )
+
+
+def test_caveats_reach_the_index_keyed_by_concept() -> None:
+    """Keyed per concept, not per metric, because the alternatives differ in
+    what they leave out -- the preferred one often needs no caveat at all."""
+    document = AliasFile.model_validate(
+        {
+            "version": 1,
+            "metrics": {
+                "total_debt": {
+                    "label": "Total debt",
+                    "terms": [["us-gaap:Exact", "us-gaap:Narrower"]],
+                    "caveats": {"us-gaap:Narrower": "short-term borrowings are not included"},
+                }
+            },
+        }
+    )
+    hit = AliasIndex(document).lookup("total debt")
+    assert hit.caveats == {("us-gaap", "Narrower"): "short-term borrowings are not included"}
+    assert ("us-gaap", "Exact") not in hit.caveats
+
+
+def test_shipped_caveats_fit_a_note() -> None:
+    """A caveat becomes `Note.message`, which is capped at 512 characters. A
+    file edit that overruns it should fail here, not at resolve time."""
+    document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
+    for metric, alias in document.metrics.items():
+        for ref, message in alias.caveats.items():
+            collapsed = " ".join(message.split())
+            assert len(collapsed) <= 512, f"{metric}/{ref} is {len(collapsed)} characters"
+
+
+def test_shipped_synonyms_are_single_phrases() -> None:
+    """A synonym holding a comma is a YAML list someone wrote on one line.
+
+    It validates, indexes and looks up perfectly happily -- as one surface form
+    reading "international revenue foreign revenue overseas revenue", which
+    nobody will ever type. Caught by hand once; pinned so it is caught for
+    free next time.
+    """
+    document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
+    for metric, alias in document.metrics.items():
+        for form in alias.synonyms:
+            assert "," not in form, f"{metric}: {form!r} looks like several synonyms in one string"
+
+
 def test_shipped_file_declares_magnitude_only_inside_arithmetic() -> None:
     """A sign assumption only means something when an operator supplies the
     direction -- on a plain `c0` lookup a negative value is just data."""
@@ -297,3 +393,46 @@ def test_entry_resolves_or_asks_but_not_both() -> None:
 
     with pytest.raises(ValidationError, match="exactly one of"):
         MetricAlias.model_validate({"label": "X"})
+
+    with pytest.raises(ValidationError, match="exactly one of"):
+        MetricAlias.model_validate(
+            {"label": "X", "terms": [["us-gaap:A"]], "unavailable": "not here"}
+        )
+
+
+def test_a_choice_may_not_lead_to_an_unavailable_metric() -> None:
+    """Offering someone a choice that turns out to be a dead end wastes the one
+    round trip you get -- same reason a choice may not lead to another question.
+    """
+    with pytest.raises(ValidationError, match="unavailable"):
+        AliasFile.model_validate(
+            {
+                "version": 1,
+                "metrics": {
+                    "asks": {
+                        "label": "Asks",
+                        "clarify": {
+                            "question": "Which?",
+                            "options": [
+                                {"metric": "real", "description": "a real one"},
+                                {"metric": "gone", "description": "a dead end"},
+                            ],
+                        },
+                    },
+                    "real": {"label": "Real", "terms": [["us-gaap:A"]]},
+                    "gone": {"label": "Gone", "unavailable": "not in this dataset"},
+                },
+            }
+        )
+
+
+def test_an_unavailable_entry_carries_its_reason_to_the_index() -> None:
+    document = AliasFile.model_validate(
+        {
+            "version": 1,
+            "metrics": {"gone": {"label": "Gone", "unavailable": "no filing carries this"}},
+        }
+    )
+    hit = AliasIndex(document).lookup("gone")
+    assert hit.unavailable == "no filing carries this"
+    assert hit.terms == ()

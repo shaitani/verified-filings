@@ -13,7 +13,7 @@ Design notes: ``app/semantic/DESIGN.md``.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -31,9 +31,7 @@ _CONCEPT_REF = re.compile(r"^(dei|us-gaap|srt):([A-Za-z][A-Za-z0-9]*)$")
 #: Operand reference inside ``expression``.
 _OPERAND_REF = re.compile(r"c(\d+)")
 
-#: Anything that isn't a letter, digit or space. Dropped rather than replaced,
-#: so "R&D" folds to "rd" while "R and D" stays "r and d" -- the file lists
-#: both spellings rather than relying on them colliding.
+#: Anything that isn't a letter, digit or space.
 _PUNCTUATION = re.compile(r"[^\w\s]")
 _WHITESPACE = re.compile(r"\s+")
 
@@ -108,7 +106,8 @@ class ClarifySpec(_Base):
 class MetricAlias(_Base):
     """One curated business term.
 
-    Either it resolves (``terms``) or it asks (``clarify``), never both.
+    Exactly one of three things: it resolves (``terms``), it asks
+    (``clarify``), or it declines (``unavailable``).
     """
 
     label: str = Field(min_length=1, max_length=120)
@@ -127,6 +126,32 @@ class MetricAlias(_Base):
     #: Set instead of ``terms`` when the term is ambiguous by nature.
     clarify: ClarifySpec | None = None
 
+    #: ``"<taxonomy>:<Concept>" -> what a reader must be told`` when *that*
+    #: alternative is the one that binds. Becomes a ``narrower_than_asked``
+    #: note on the binding.
+    #:
+    #: Keyed per concept rather than per metric because the whole point is that
+    #: the alternatives differ in what they leave out. ``total_debt`` prefers a
+    #: filer's own combined line, which needs no caveat at all; falls back to
+    #: long-term debt, which omits commercial paper; and then to the noncurrent
+    #: portion, which also omits current maturities. One message for the metric
+    #: would have to be wrong for at least two of the three.
+    #:
+    #: Every key must appear in ``terms``, so a typo fails the file instead of
+    #: quietly attaching to nothing.
+    caveats: dict[str, str] = Field(default_factory=dict)
+
+    #: Set instead of ``terms`` when the term is well understood and simply not
+    #: in this dataset. The text is the reason a reader gets, so it says what
+    #: the thing is, why no filing carries it, and -- where one exists -- which
+    #: nearby concept is the plausible wrong answer, so nobody re-derives the
+    #: mistake later.
+    #:
+    #: The point is to reach the resolver *before* the embedding net does. Left
+    #: uncurated, "share price" bound ``dei:EntityListingParValuePerShare`` at
+    #: 0.726 and reported $0.000006 as Microsoft's share price.
+    unavailable: str | None = Field(default=None, min_length=1, max_length=512)
+
     @property
     def slots(self) -> list[tuple[list[str], OperandSign]]:
         """``terms`` with the two spellings collapsed to one shape."""
@@ -136,12 +161,21 @@ class MetricAlias(_Base):
         ]
 
     @model_validator(mode="after")
-    def _resolves_or_asks(self) -> MetricAlias:
-        if (self.terms is None) == (self.clarify is None):
+    def _resolves_asks_or_declines(self) -> MetricAlias:
+        set_fields = [
+            name
+            for name, value in (
+                ("terms", self.terms),
+                ("clarify", self.clarify),
+                ("unavailable", self.unavailable),
+            )
+            if value is not None
+        ]
+        if len(set_fields) != 1:
             raise ValueError(
-                "a metric needs exactly one of `terms` (it resolves) or "
-                "`clarify` (it asks); got "
-                + ("both" if self.terms else "neither")
+                "a metric needs exactly one of `terms` (it resolves), `clarify` "
+                "(it asks) or `unavailable` (it declines); got "
+                + (", ".join(set_fields) if set_fields else "none of them")
             )
         if self.terms is not None and not self.terms:
             raise ValueError("`terms` must list at least one operand slot")
@@ -149,9 +183,8 @@ class MetricAlias(_Base):
 
     @model_validator(mode="after")
     def _refs_are_wellformed(self) -> MetricAlias:
-        if self.clarify is not None:
-            # A question has no operands, so the default expression has nothing
-            # to reference and nothing to check.
+        if self.terms is None:
+            # A question and a refusal both have operands to check: none.
             return self
         for concepts, _ in self.slots:
             if not concepts:
@@ -166,6 +199,23 @@ class MetricAlias(_Base):
                     f"expression {self.expression!r} references c{index}, "
                     f"but only {slot_count} operand slot(s) are defined"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _caveats_name_a_listed_alternative(self) -> MetricAlias:
+        """A caveat keyed on a concept this metric never binds would never be
+        shown, and would read in the file as though the hazard were handled."""
+        if not self.caveats:
+            return self
+        if self.terms is None:
+            raise ValueError("a metric that does not resolve has no concept to caveat")
+        listed = {ref for concepts, _ in self.slots for ref in concepts}
+        for ref, message in self.caveats.items():
+            split_concept_ref(ref)  # raises on a malformed reference
+            if ref not in listed:
+                raise ValueError(f"caveat names {ref!r}, which is not one of this metric's terms")
+            if not message.strip():
+                raise ValueError(f"caveat for {ref!r} is empty")
         return self
 
 
@@ -209,9 +259,10 @@ class AliasFile(_Base):
                     raise ValueError(
                         f"{metric!r} offers {option.metric!r}, which is not a metric in this file"
                     )
-                if target.clarify is not None:
+                if target.terms is None:
+                    leads_to = "itself a question" if target.clarify else "unavailable"
                     raise ValueError(
-                        f"{metric!r} offers {option.metric!r}, which is itself a question"
+                        f"{metric!r} offers {option.metric!r}, which is {leads_to}"
                     )
         return self
 
@@ -222,14 +273,41 @@ class AliasFile(_Base):
 
 
 def normalize(text: str) -> str:
-    """Fold a surface form to its lookup key: lowercase, no punctuation,
-    single-spaced, underscores treated as spaces.
+    """Fold a surface form to its lookup key: lowercase, single-spaced,
+    punctuation and underscores treated as word separators.
 
     Underscores fold so a metric named ``free_cash_flow`` is reachable by
     someone typing "free cash flow" without it being listed as a synonym.
+    Punctuation folds the same way, so "long-term debt" and "free-cash-flow"
+    reach the entries spelled with spaces. It is deliberately *not* deleted:
+    deleting it turned every hyphenated phrase into one run-together word that
+    matched nothing, which is how "long-term debt" became ``longtermdebt``.
+    """
+    folded = _PUNCTUATION.sub(" ", text.replace("_", " ").lower())
+    return _WHITESPACE.sub(" ", folded).strip()
+
+
+def compact(text: str) -> str:
+    """The same fold with punctuation *deleted* rather than separated, so an
+    acronym written with its punctuation reaches the entry spelled without it:
+    "SG&A" -> ``sga``, "P/E" -> ``pe``.
+
+    Exists because no single rule serves both this and ``normalize``: "SG&A"
+    wants its ampersand to vanish and "long-term" wants its hyphen to become a
+    space. Rather than guess which a phrase means, ``AliasIndex`` indexes and
+    looks up under both.
     """
     folded = _PUNCTUATION.sub("", text.replace("_", " ").lower())
     return _WHITESPACE.sub(" ", folded).strip()
+
+
+def lookup_keys(text: str) -> list[str]:
+    """Both spellings of one phrase, separator form first, without duplicates."""
+    keys = [normalize(text)]
+    packed = compact(text)
+    if packed and packed != keys[0]:
+        keys.append(packed)
+    return keys
 
 
 @dataclass(frozen=True)
@@ -250,6 +328,16 @@ class AliasHit:
 
     #: Set instead of ``terms`` when this term asks rather than resolves.
     clarify: ClarifySpec | None = None
+
+    #: Set instead of ``terms`` when the dataset simply has no answer. Carries
+    #: the curated reason straight through to ``Unresolved.reason``.
+    unavailable: str | None = None
+
+    #: ``(taxonomy, name) -> message``, for the alternatives that only partly
+    #: answer the phrase. Split into a tuple key here, unlike the file's
+    #: "us-gaap:X" spelling, so the resolver can look a bound concept up
+    #: directly.
+    caveats: dict[tuple[Taxonomy, str], str] = field(default_factory=dict)
 
     #: Human label per clarify option, resolved from the target metric so the
     #: question reads in business terms rather than in file keys.
@@ -273,6 +361,10 @@ class AliasIndex:
                 ),
                 signs=tuple(sign for _, sign in slots),
                 clarify=alias.clarify,
+                unavailable=alias.unavailable,
+                caveats={
+                    split_concept_ref(ref): message for ref, message in alias.caveats.items()
+                },
                 option_labels=tuple(
                     document.metrics[o.metric].label for o in alias.clarify.options
                 )
@@ -280,20 +372,29 @@ class AliasIndex:
                 else (),
             )
             for form in (metric, *alias.synonyms):
-                key = normalize(form)
-                if not key:
+                keys = lookup_keys(form)
+                if not keys[0]:
                     raise ValueError(f"{metric!r} has a surface form that normalizes to nothing")
-                if key in self._by_form and self._by_form[key].metric != metric:
-                    raise ValueError(
-                        f"surface form {form!r} normalizes to {key!r}, already claimed by "
-                        f"{self._by_form[key].metric!r}"
-                    )
-                self._by_form[key] = hit
+                for key in keys:
+                    if key in self._by_form and self._by_form[key].metric != metric:
+                        raise ValueError(
+                            f"surface form {form!r} normalizes to {key!r}, already claimed by "
+                            f"{self._by_form[key].metric!r}"
+                        )
+                    self._by_form[key] = hit
 
     def lookup(self, text: str) -> AliasHit | None:
         """The curated metric for a phrase, or ``None`` to fall through to the
-        embedding search."""
-        return self._by_form.get(normalize(text))
+        embedding search.
+
+        Tries the separator spelling before the compacted one, so a phrase that
+        could be read either way ("SG&A") lands on whichever the file lists.
+        """
+        for key in lookup_keys(text):
+            hit = self._by_form.get(key)
+            if hit is not None:
+                return hit
+        return None
 
     def __len__(self) -> int:
         return len(self._by_form)

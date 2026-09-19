@@ -80,7 +80,12 @@ metrics:
 
   research_and_development:
     label: Research and development expense
-    synonyms: [r and d, rnd, research and development, research expense, r d expense]
+    # "r d" is what "R&D" and "R & D" both fold to now that punctuation
+    # separates rather than vanishes. Before that they folded to "rd", which
+    # nothing listed, so the commonest spelling of this metric missed the file
+    # entirely and fell through to an embedding match that scored 0.699 --
+    # one thousandth under the binding bar.
+    synonyms: [r d, r and d, rnd, research and development, research expense, r d expense]
     terms:
       - [us-gaap:ResearchAndDevelopmentExpense]
 
@@ -158,6 +163,63 @@ metrics:
       - - us-gaap:LongTermDebtNoncurrent
         - us-gaap:LongTermDebt
 
+  short_term_debt:
+    label: Short-term debt
+    # Both alternatives are genuine short-term borrowing totals: DebtCurrent
+    # covers 9 filers, ShortTermBorrowings 6. LongTermDebtCurrent is wider (13)
+    # and deliberately NOT listed -- it is the current maturities of long-term
+    # debt, a *component*, so binding it would understate any filer that also
+    # runs commercial paper. An honest refusal beats a low number.
+    synonyms: [short term debt, current debt, current borrowings]
+    terms:
+      - - us-gaap:DebtCurrent
+        - us-gaap:ShortTermBorrowings
+
+  total_debt:
+    label: Total debt
+    # Ordered by how completely each alternative answers the phrase, which is
+    # exactly what preference order is for -- and here the alternatives differ
+    # in DEFINITION, not just in tag, so each fallback declares what it drops.
+    #
+    #   DebtLongtermAndShorttermCombinedAmount  4 filers, the real thing
+    #   LongTermDebt                           17 filers, no commercial paper
+    #   LongTermDebtNoncurrent                 13 filers, no current maturities
+    #
+    # Summing the components instead was measured and rejected: filers
+    # double-tag the same balance under several concepts. At FY2025 JNJ reports
+    # DebtCurrent and ShortTermBorrowings as the same $8.50B, INTC reports
+    # DebtCurrent and LongTermDebtCurrent as the same $2.50B, and CVX's
+    # DebtCurrent of $10.92B is not the sum of its own parts ($7.97B). Adding
+    # them gives a different wrong answer per filer, which is also why
+    # DESIGN.md §7 refuses computed subtotals generally.
+    #
+    # Measured: 17 of 20 bind, 4 of them to the exact combined line and so
+    # with no caveat at all. The three that do not are each unresolved for a
+    # different and correct reason -- NTGR carries no debt concept because it
+    # carries no debt; CVX tags LongTermDebt but not for the window asked
+    # about, so coverage drops it; JPM's only debt total in this store is
+    # ShortTermBorrowings at $69B against a long-term load in the hundreds of
+    # billions, so a chain reaching down to it would be off by roughly six
+    # times. That last one is why no short-term concept is listed here.
+    synonyms: [total borrowings, total indebtedness, combined debt]
+    terms:
+      - - us-gaap:DebtLongtermAndShorttermCombinedAmount
+        - us-gaap:LongTermDebt
+        - us-gaap:LongTermDebtNoncurrent
+    caveats:
+      us-gaap:LongTermDebt: >-
+        This filer tags no combined debt total, so the figure shown is
+        long-term debt including current maturities. Short-term borrowings and
+        commercial paper are NOT included: Apple carried $8.0B of commercial
+        paper outside its $90.7B of long-term debt at FY2025, so a number like
+        this runs about 8% light.
+      us-gaap:LongTermDebtNoncurrent: >-
+        This filer tags neither a combined debt total nor an all-in long-term
+        figure, so the figure shown is the NONCURRENT portion of long-term debt
+        only. It excludes both current maturities and short-term borrowings,
+        and so understates total debt by more than the long-term-debt fallback
+        would.
+
   shares_outstanding:
     label: Common shares outstanding
     synonyms: [shares outstanding, common shares outstanding, share count]
@@ -208,9 +270,16 @@ metrics:
     terms:
       # Operating cash flow is signed -- 7 of 20 filers post negative quarters.
       - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
-      # Capex is tagged positive by all 14 reporting filers and subtracted. A
+      # Same two alternatives as `capital_expenditures`, and for the same
+      # reason: AMZN, CVX, NVDA and QCOM tag only the broader one. This slot
+      # listed just the first until 2026-09-19, so "NVIDIA's free cash flow"
+      # refused outright while "NVIDIA's capital expenditure" resolved -- the
+      # two entries have to move together or they contradict each other.
+      # Capex is tagged positive by every reporting filer and subtracted. A
       # negative one would make this add, inflating free cash flow silently.
-      - concepts: [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+      - concepts:
+          - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+          - us-gaap:PaymentsToAcquireProductiveAssets
         sign: magnitude
 
   # --- added to close the gaps the eval questions exposed ------------------
@@ -340,6 +409,74 @@ metrics:
       - concepts: [us-gaap:LiabilitiesCurrent]
         sign: magnitude
 
+  # --- understood, and genuinely not in this dataset: decline --------------
+  # These resolve to a reason rather than to concepts. The point is to reach
+  # the resolver BEFORE the embedding search does: left uncurated, market
+  # questions did not fail safely. Measured 2026-09-19 -- "share price" bound
+  # dei:EntityListingParValuePerShare outright at 0.726 and would have reported
+  # $0.000006 as Microsoft's share price, and "stock price" put
+  # CommonStockParOrStatedValuePerShare at 0.733, above the binding bar and
+  # held back only by a second candidate happening to survive alongside it.
+  stock_price:
+    label: Share price
+    synonyms: [share price, stock quote, share value, market price, price per share, quote]
+    unavailable: >-
+      Share prices are set by the market, not reported in a filing, so no XBRL
+      concept carries one and this store has no price data at all. The nearest
+      thing in it is par value (us-gaap:CommonStockParOrStatedValuePerShare or
+      dei:EntityListingParValuePerShare), a legal formality often well under a
+      cent, which is not a traded price. Answering this needs a market data
+      source.
+
+  market_cap:
+    label: Market capitalisation
+    synonyms: [market capitalization, market capitalisation, market value, mkt cap]
+    unavailable: >-
+      Market capitalisation is share price times shares outstanding, and share
+      prices are not in XBRL. dei:EntityPublicFloat is filed by all 20 companies
+      here and is NOT market cap -- it counts only shares held by non-affiliates
+      and is measured on a single date each year. Answering this needs a market
+      data source.
+
+  segment_revenue:
+    label: Revenue by segment or geography
+    synonyms:
+      - international revenue
+      - foreign revenue
+      - overseas revenue
+      - domestic revenue
+      - revenue by segment
+      - revenue by geography
+      - geographic revenue
+      - revenue by region
+      - revenue by product
+      - product revenue
+      - business segment revenue
+    unavailable: >-
+      The SEC's XBRL data endpoint returns only undimensioned consolidated
+      facts -- measured, zero dimensional facts in this store -- so revenue
+      split by segment, product or geography is not here at all. The
+      consolidated revenue line is the only revenue figure available, and
+      reporting it as a segment's revenue would be wrong rather than
+      approximate. Answering this needs the segment axis from the filing's own
+      XBRL.
+
+  gross_revenue:
+    label: Gross revenue
+    # Deliberately not mapped to anything for years, on the grounds that there
+    # is nothing honest to map it to -- but "not mapped" is not the same as
+    # "declined". Left unlisted it fell to the embedding net, which offered
+    # GrossProfit at 0.812: revenue minus cost of revenue, a different line
+    # that is smaller than revenue rather than larger, which is the opposite of
+    # what someone asking for a *gross* figure expects.
+    synonyms: [gross sales, gross revenues, total gross revenue]
+    unavailable: >-
+      US GAAP has no gross-versus-net revenue pair. The revenue a filer tags is
+      already net of returns, allowances and discounts, so there is no separate
+      gross figure to report. Note that "gross profit" is a different line
+      entirely -- revenue minus the cost of producing it -- and is not a gross
+      revenue. Ask for revenue, or for gross profit, by name.
+
   # --- genuinely several things: ask rather than guess ---------------------
   profit_margin:
     label: Profit margin
@@ -370,6 +507,24 @@ metrics:
           description: Profit from operations, before interest and tax.
         - metric: net_income
           description: Profit after all expenses, interest and tax.
+
+  debt:
+    label: Debt
+    # Only the BARE term asks. "Total debt" is specific and resolves above,
+    # disclosing what its fallbacks omit rather than making someone choose.
+    # Left uncurated this was the worst case in the eval set: nineteen separate
+    # ambiguity records for one phrase, offering DebtInstrumentCarryingAmount
+    # (a per-instrument footnote line) among the choices.
+    synonyms: [borrowings, indebtedness, debt load]
+    clarify:
+      question: Which debt figure do you mean? Most filers here report the halves rather than a combined total.
+      options:
+        - metric: total_debt
+          description: Everything owed. Uses the filer's own combined line where there is one, and otherwise long-term debt, saying what that leaves out.
+        - metric: long_term_debt
+          description: Borrowings due more than a year out. The largest piece for most companies, and the most widely reported.
+        - metric: short_term_debt
+          description: Borrowings due within a year, such as commercial paper and revolver draws.
 
   cash_flow:
     label: Cash flow

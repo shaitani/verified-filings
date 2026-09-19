@@ -58,6 +58,54 @@ and one is per-share — genuinely different questions, correctly refused rather
 than guessed. That pair is also a good candidate for the next alias entry;
 that is the intended feedback loop.
 
+**An ambiguity is reported once per element, not once per company.** Each filer
+keeps whichever candidates its own facts cover, so the lists differ — but they
+raise one question, and asking it twenty times is not twenty questions. The
+merge keeps the highest-scoring sighting of each concept. Measured before it
+existed: "total debt" over the corpus produced nineteen separate records for
+one phrase.
+
+## 3a. A floor under what is worth offering
+
+Below `_MIN_PLAUSIBLE_SIMILARITY` (0.65) the element is `unresolved`, not
+`ambiguous`. The two fields mean different things (§8) and an embedding search
+always returns *something*, so without a floor every question the store cannot
+answer became a menu of nonsense — "competition risk disclosure" came back as a
+choice between `AssetsFairValueDisclosure` and `LiabilitiesFairValueDisclosure`.
+
+**Where 0.65 came from.** 221 `(phrase, company)` cases, hand-labelled as
+either present in the store with known acceptable concepts, or absent from it.
+A floor at 0.65 refuses 104 of the 129 absent cases, and of the 15 answerable
+cases it also refuses, **none had the right concept anywhere in the list they
+were offering**. The cost is zero because a list scoring that low was never
+going to help. At 0.68 the cost stops being zero, which is why the floor sits
+where it does.
+
+## 3b. Why the binding bar is not the place to fix wrong bindings
+
+`_MIN_BINDING_SIMILARITY` (0.70) is what a lone surviving candidate must clear
+to be bound with nobody having reviewed it. It is tempting to raise it until
+the wrong bindings stop. The same 221 cases say the score does not separate
+right from wrong well enough for that to work cleanly:
+
+| band | top candidate right | wrong | not in store |
+|---|---|---|---|
+| 0.70–0.75 | 2 | 19 | 22 |
+| 0.75–0.80 | 32 | 7 | 0 |
+| 0.80+ | 12 | 2 | 0 |
+
+The band immediately above the old bar was **5% precise**; above 0.75 it is
+83%. The bar is therefore 0.75, not the 0.70 it started at — that band is where
+"interest income" resolved to pre-tax income (0.718) and "treasury stock" to a
+share count (0.701).
+
+But note what the table also says: right answers run from 0.675 to 0.851 and
+wrong ones from 0.556 to 0.810, and those ranges overlap across most of their
+mass. **No threshold makes this path safe.** 0.75 makes it less bad. The actual
+fix for a term people keep asking about is a curated entry — `terms` if the
+store has it, `clarify` if it is several things, `unavailable` if it is not
+there.
+
 ## 4. Surface forms must be unique, at two levels
 
 The schema rejects duplicate raw strings; `AliasIndex` additionally rejects
@@ -66,9 +114,22 @@ underscores folded to spaces). Both exist because lookup resolving by dict
 order is precisely the quiet wrongness this layer is meant to remove.
 
 Normalizing underscores means a metric key like `free_cash_flow` answers to
-"free cash flow" without anyone remembering to add it as a synonym. Punctuation
-is dropped rather than replaced, so "R&D" folds to `rd` and not to `r d` — the
-file lists the spelled-out forms separately.
+"free cash flow" without anyone remembering to add it as a synonym.
+
+**Punctuation is folded two ways, and both are tried.** This used to be one
+rule — punctuation *deleted*, so "R&D" became `rd` — on the reasoning that the
+file would list the spelled-out spellings separately. It never listed `rd`, and
+the rule quietly broke every hyphenated phrase by running it together:
+"long-term debt" became `longtermdebt` and matched nothing. Measured against
+the eval set, the commonest spelling of one of the commonest metrics — "R&D" —
+missed the file entirely and fell through to an embedding match scoring 0.699,
+one thousandth under the binding bar.
+
+One rule cannot serve both cases: "SG&A" wants its ampersand to vanish, and
+"long-term" wants its hyphen to become a space. So `normalize` separates
+(`r d`, `long term debt`), `compact` deletes (`sga`, `rd`), and both indexing
+and lookup use the pair. Collision detection covers both spellings, so an entry
+cannot claim a form another entry already owns under either fold.
 
 ## 5. Coverage still outranks the file
 
@@ -100,9 +161,10 @@ answer.
 
 ## 8. Asking instead of guessing
 
-An alias entry sets either `terms` (it resolves) or `clarify` (it asks), never
-both. A clarify entry produces a `Clarification` on the plan: a question with
-named choices, each pointing at another metric in the file that does resolve.
+An alias entry sets exactly one of `terms` (it resolves), `clarify` (it asks)
+or `unavailable` (it declines). A clarify entry produces a `Clarification` on
+the plan: a question with named choices, each pointing at another metric in the
+file that does resolve.
 
 **When to use it.** Where a default would be quietly *wrong*, not merely
 imprecise. "Profit margin" reads as net by convention, but gross and net
@@ -114,15 +176,101 @@ a wrong answer with no signal. Three entries carry it: `profit_margin`,
 naming the thing precisely still triggered a question, the clarification would
 be a toll gate rather than a service, and a test pins that.
 
+Only the *bare* term asks: `debt` is a question, `total debt` resolves — see
+§8b, which is where the interesting part of that entry lives.
+
+Either way it replaced the worst case in the eval set: "total debt" across the
+corpus produced nineteen ambiguity records offering, among other things,
+`DebtInstrumentCarryingAmount`, a per-instrument footnote line.
+
+## 8b. Answering with a narrower figure, and saying so
+
+`caveats` maps a concept reference to a sentence that becomes a
+`narrower_than_asked` note whenever *that* alternative is the one that binds.
+
+**The case it exists for.** "Total debt" is not ambiguous — it means short-term
+borrowings plus long-term debt including current maturities, and anyone asking
+it knows what they mean. It is simply not a line most filers tag. Three routes
+were available and two are wrong:
+
+- *Sum the components.* Measured and rejected: filers double-tag the same
+  balance. At FY2025 JNJ reports `DebtCurrent` and `ShortTermBorrowings` as the
+  same $8.50B, INTC reports `DebtCurrent` and `LongTermDebtCurrent` as the same
+  $2.50B, and CVX's `DebtCurrent` of $10.92B is not the sum of its own parts
+  ($7.97B). The addition yields a different wrong answer per filer. This is §7's
+  rule arriving with a measurement attached.
+- *Bind `LongTermDebt` and say nothing.* It covers 17 filers and omits
+  commercial paper — Apple's $8.0B against $90.7B, so the figure runs 8% light
+  under a label that promises a total. A quiet 8% is exactly the error class
+  this project exists to refuse.
+- *Bind it and disclose.* What the file does.
+
+**Why per concept and not per metric.** The alternatives differ in *definition*,
+not just in tag, which is unlike every other entry here. `total_debt` prefers a
+filer's own combined line (4 filers, needs no caveat), falls back to long-term
+debt (omits commercial paper), then to the noncurrent portion (omits current
+maturities too). A single message for the metric would be wrong for at least two
+of the three, and would put a warning on the four filers whose number is exact.
+
+**What it is not.** Not a way to make a weak binding acceptable. The three
+filers with no usable concept — NTGR, which has no debt; CVX, whose
+`LongTermDebt` has no fact for the window; JPM, whose only debt total here is
+`ShortTermBorrowings` at $69B against a long-term load in the hundreds of
+billions — stay unresolved. A caveat discloses a *narrower* answer; it does not
+license a wrong one.
+
 **Choices are validated at load.** Every option must name a metric that exists
 and that itself resolves — offering a choice which leads to another question,
-or to nothing, wastes the one round trip you get.
+to a decline, or to nothing, wastes the one round trip you get.
+
+## 8a. Declining, for terms the dataset simply does not hold
+
+`unavailable` carries a sentence of curated reasoning that becomes
+`Unresolved.reason` verbatim. It is not a third flavour of "we could not find
+it": it is a statement that someone looked, and there is nothing to find.
+
+**Why it has to be in the file rather than left to fail naturally.** An
+unlisted term does not fail naturally — it falls into the embedding search,
+which always returns *something*. Measured 2026-09-19 across 52 unaliased
+business phrases and six filers, that path committed eight bindings with no
+human behind them, and half were wrong. "Share price" bound
+`dei:EntityListingParValuePerShare` at 0.726, which for Microsoft is
+$0.000006 — a plausible wrong number with a rationale reading "verified over
+1 period(s)". "Stock price" scored 0.733 against
+`CommonStockParOrStatedValuePerShare` and was held back only by a second
+candidate happening to survive alongside it, which is luck, not a guard.
+
+So the entries exist for the questions people actually ask that this store
+cannot answer, and they reach the resolver first. Four are curated today:
+
+| entry | why it is not here |
+|---|---|
+| `stock_price` | set by the market, never filed |
+| `market_cap` | needs a price; `EntityPublicFloat` is not it |
+| `segment_revenue` | the XBRL data endpoint returns only undimensioned consolidated facts (PITFALLS §3.2) |
+| `gross_revenue` | US GAAP has no gross-versus-net revenue pair; the tagged revenue line is already net |
+
+`gross_revenue` is the instructive one. It was left *unlisted* for a long time
+on the correct reasoning that there was nothing honest to map it to — but
+unlisted is not declined. It fell to the embedding net, which offered
+`GrossProfit` at 0.812: a different line, and one *smaller* than revenue where
+the asker expected something larger.
+
+**The reason text names the plausible wrong answer.** Each one says what the
+thing is, why no filing carries it, and which nearby concept an embedding
+search would reach for — `EntityPublicFloat` is not market cap, par value is
+not a share price. Naming it is what stops the mistake being re-derived by the
+next person, or the next model, who notices the concept exists.
+
+**It refuses rather than asks.** `needs_input` stays false: a clarification
+offers a choice the asker can make, and here there is none.
 
 **Three ways a plan can fall short, and they are not the same:**
 
 | field | meaning | what to do |
 |---|---|---|
-| `unresolved` | the data cannot support it | say so; do not ask |
+| `unresolved` | the data cannot support it — either measured (no coverage) or curated (`unavailable`) | say so; do not ask |
+| a `narrower_than_asked` note | it answered, with a figure that is a *subset* of the phrase | show the number **and** the sentence |
 | `ambiguous` | the *machine* could not choose; candidates are raw concepts | offer them, imperfectly |
 | `clarifications` | a *person* decided the term is several things and wrote the choices | ask properly |
 
