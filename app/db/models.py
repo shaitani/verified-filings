@@ -265,17 +265,21 @@ class Concept(Base):
 
     #: Semantic-search vector for this concept, produced by embedding
     #: ``embedding_source_text`` through the local nomic-embed-text-v1.5 model
-    #: (see EMBEDDING_DIM). Null until the (not-yet-written) embedding job has
-    #: processed this concept -- populating it is not part of the load step.
+    #: (see EMBEDDING_DIM). Null until the embedding job (app/db/embedder.py)
+    #: has processed this concept -- populating it is not part of the load step.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     #: The exact string that was fed to the embedding model to produce
-    #: ``embedding``. Built by the (not-yet-written) embedding job as:
+    #: ``embedding``. Built by the embedding job (app/db/embedder.py) as
+    #: ``SEARCH_DOCUMENT_PREFIX`` followed by:
     #:   ``f"{label}. {description}"``           when both are present
     #:   whichever of the two is present         when only one is
     #:   a humanized ``name``                    when neither is present --
     #:     e.g. "NetIncomeLoss" -> "Net Income Loss", so the model never sees
     #:     a raw camelCase identifier.
+    #: The prefix is stored rather than added at call time because this column
+    #: is meant to be literally what the model saw; see app/embedding_client.py
+    #: for why nomic needs one at all.
     #: Kept (not just the hash) so a human can see what actually generated the
     #: vector, and so a changed *strategy* (e.g. adding taxonomy to the string)
     #: can be told apart from the underlying label/description merely changing.

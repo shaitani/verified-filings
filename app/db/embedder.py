@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Concept
 from app.db.session import SessionLocal
-from app.embedding_client import embed_texts
+from app.embedding_client import SEARCH_DOCUMENT_PREFIX, embed_texts
 
 # --------------------------------------------------------------------------- #
 # Pure transform: a Concept -> the text to embed and its hash. No I/O, so this
@@ -48,16 +48,18 @@ def humanize_name(name: str) -> str:
 
 
 def build_source_text(concept: Concept) -> str:
-    """The exact string that gets embedded for one concept.
+    """The exact string that gets embedded for one concept, task prefix included.
 
     Mirrors the rule documented on Concept.embedding_source_text in
     app/db/models.py -- keep the two in sync if this changes.
     """
     if concept.label and concept.description:
-        return f"{concept.label}. {concept.description}"
-    if concept.label or concept.description:
-        return concept.label or concept.description
-    return humanize_name(concept.name)
+        body = f"{concept.label}. {concept.description}"
+    elif concept.label or concept.description:
+        body = concept.label or concept.description
+    else:
+        body = humanize_name(concept.name)
+    return SEARCH_DOCUMENT_PREFIX + body
 
 
 def source_hash(text: str) -> str:
