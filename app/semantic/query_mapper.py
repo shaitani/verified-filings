@@ -37,6 +37,7 @@ from app.schemas.query import (
     Binding,
     Candidate,
     CompanyElementIn,
+    CompanyGroupElementIn,
     ComponentCoverage,
     ConceptRef,
     Coverage,
@@ -85,11 +86,15 @@ async def map_query(
     whether to proceed (``plan.is_complete``) or go back to the user.
     """
     companies = [e for e in query.elements if isinstance(e, CompanyElementIn)]
+    groups = [e for e in query.elements if isinstance(e, CompanyGroupElementIn)]
     periods = [e for e in query.elements if isinstance(e, PeriodElementIn)]
     metrics = [e for e in query.elements if isinstance(e, MetricElementIn)]
 
     async with session_factory() as session:
         ciks, company_problems = await _resolve_companies(companies, session)
+        group_ciks, group_problems = await _resolve_company_groups(groups, session)
+        ciks = _merge_ciks(ciks, group_ciks)
+        company_problems += group_problems
         resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
         bindings, ambiguous, metric_problems = await _resolve_metrics(
             metrics, session, ciks=ciks, periods=resolved_periods
@@ -104,7 +109,8 @@ async def map_query(
         bindings=bindings,
         ambiguous=ambiguous,
         unresolved=company_problems + period_problems + metric_problems,
-        notes=_alignment_notes(resolved_periods, result),
+        notes=_alignment_notes(resolved_periods, result)
+        + _granularity_notes(result),
     )
 
 
@@ -147,6 +153,7 @@ def _describe_result(
         companies=len(ciks),
         periods=len(distinct_periods),
         metrics=metrics,
+        granularities=sorted({p.granularity for p in periods}),
     )
 
 
@@ -194,9 +201,98 @@ def _alignment_notes(periods: list[ResolvedPeriod], result: ResultSpec) -> list[
     ]
 
 
+def _granularity_notes(result: ResultSpec) -> list[Note]:
+    """Warn when annual and quarterly figures share a result.
+
+    A 363-day value next to four 90-day values is not five comparable points;
+    on a shared axis the annual reads as a fourfold spike. The question is
+    legitimate -- "2024, both quarterly and yearly" is a normal ask -- so this
+    is a note rather than a refusal, but the two series want plotting
+    separately.
+    """
+    if len(result.granularities) < 2:
+        return []
+    return [
+        Note(
+            kind="mixed_granularity",
+            message="This result mixes "
+            + " and ".join(result.granularities)
+            + " periods. They measure different spans, so they are not "
+            "comparable points on one axis and should be shown separately.",
+        )
+    ]
+
+
+def _merge_ciks(named: list[int], from_groups: list[int]) -> list[int]:
+    """Named companies first, then group members, without duplicates."""
+    merged = list(named)
+    for cik in from_groups:
+        if cik not in merged:
+            merged.append(cik)
+    return merged
+
+
 # --------------------------------------------------------------------------- #
 # Companies -- deterministic lookup
 # --------------------------------------------------------------------------- #
+
+
+async def _resolve_company_groups(
+    elements: list[CompanyGroupElementIn], session: AsyncSession
+) -> tuple[list[int], list[Unresolved]]:
+    """Filers matching an attribute, rather than named one at a time.
+
+    The SIC columns exist but nothing populates them yet, so this reports
+    "not loaded" rather than returning an empty set -- an empty set would read
+    as "no company is in that sector", which is a different and wrong answer.
+    The distinction is made by asking whether *any* filer has the column set,
+    which also means this starts working the moment the data lands, with no
+    code change.
+    """
+    if not elements:
+        return [], []
+
+    ciks: list[int] = []
+    problems: list[Unresolved] = []
+
+    for element in elements:
+        column, value = _group_selector(element)
+        populated = await session.execute(
+            select(Company.cik).where(column.is_not(None)).limit(1)
+        )
+        if populated.first() is None:
+            problems.append(
+                Unresolved(
+                    element_id=element.id,
+                    reason=f"{element.text!r} selects companies by "
+                    f"{column.key}, which is not populated for any filer; "
+                    "SIC data has not been loaded into the database yet",
+                )
+            )
+            continue
+
+        where = column.ilike(f"%{value}%") if column is Company.sic_description else column == value
+        matched = await session.execute(select(Company.cik).where(where))
+        found = list(matched.scalars().all())
+        if not found:
+            problems.append(
+                Unresolved(
+                    element_id=element.id,
+                    reason=f"no loaded company matches {column.key}={value!r}",
+                )
+            )
+        ciks.extend(found)
+
+    return ciks, problems
+
+
+def _group_selector(element: CompanyGroupElementIn):
+    """The column and value one group element selects on, most specific first."""
+    if element.sic_code:
+        return Company.sic_code, element.sic_code
+    if element.sic_office:
+        return Company.sic_office, element.sic_office
+    return Company.sic_description, element.sic_description
 
 
 async def _resolve_companies(

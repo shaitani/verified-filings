@@ -18,6 +18,7 @@ from app.schemas.query import (
     Binding,
     Candidate,
     CompanyElementIn,
+    CompanyGroupElementIn,
     ComponentCoverage,
     ConceptRef,
     Coverage,
@@ -66,14 +67,35 @@ def test_elements_dispatch_on_kind() -> None:
             {"id": "e1", "text": "revenue", "kind": "metric"},
             {"id": "e2", "text": "Apple", "kind": "company", "ticker": "AAPL"},
             {"id": "e3", "text": "last 5 years", "kind": "period", "last_n_years": 5},
-            {"id": "e4", "text": "annual", "kind": "qualifier"},
+            {
+                "id": "e4",
+                "text": "semiconductors",
+                "kind": "company_group",
+                "sic_description": "semiconductor",
+            },
         )
     )
 
     assert isinstance(query.elements[0], MetricElementIn)
     assert isinstance(query.elements[1], CompanyElementIn)
     assert isinstance(query.elements[2], PeriodElementIn)
+    assert isinstance(query.elements[3], CompanyGroupElementIn)
     assert query.version == "1"
+
+
+def test_retired_qualifier_kind_is_rejected() -> None:
+    """`qualifier` was inert -- nothing ever resolved it -- so a producer
+    emitting one had its intent silently dropped. Removing the kind turns that
+    into a loud error."""
+    with pytest.raises(ValidationError):
+        QueryIn.model_validate(_query({"id": "e1", "text": "annual", "kind": "qualifier"}))
+
+
+def test_company_group_needs_a_selector() -> None:
+    """An unconstrained group is every loaded filer, which is already what
+    omitting the element means -- so an empty one is a mistake, not a wildcard."""
+    with pytest.raises(ValidationError, match="at least one of sic_code"):
+        QueryIn.model_validate(_query({"id": "e1", "text": "companies", "kind": "company_group"}))
 
 
 def test_unknown_kind_is_rejected() -> None:

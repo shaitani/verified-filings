@@ -18,7 +18,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy import update
 
+from app.db import Company
 from app.db.loader import load_file
 from app.schemas.query import (
     Binding,
@@ -89,7 +91,6 @@ async def test_plan_shape_end_to_end(test_session_factory, clean_fake_company) -
             {"id": "e1", "text": "revenue", "kind": "metric"},
             {"id": "e2", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
             {"id": "e3", "text": "last 2 years", "kind": "period", "last_n_years": 2},
-            {"id": "e4", "text": "annual", "kind": "qualifier"},
         ),
         session_factory=test_session_factory,
     )
@@ -576,3 +577,107 @@ def test_single_company_is_never_flagged() -> None:
         _series_spec(1),
     )
     assert notes == []
+
+
+# --------------------------------------------------------------------------- #
+# Company groups -- selecting filers by attribute
+# --------------------------------------------------------------------------- #
+
+
+async def test_company_group_reports_that_sic_data_is_missing(
+    test_session_factory, clean_fake_company
+) -> None:
+    """Nothing populates the SIC columns yet. An empty result would read as
+    "no company is in that sector", which is a different and wrong answer, so
+    the absence of the data has to be stated."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {
+                "id": "g",
+                "text": "semiconductor companies",
+                "kind": "company_group",
+                "sic_description": "semiconductor",
+            }
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.filters.ciks == []
+    assert "SIC data has not been loaded" in plan.unresolved[0].reason
+
+
+async def test_company_group_resolves_once_sic_data_exists(
+    test_session_factory, clean_fake_company
+) -> None:
+    """The point of the whole exercise: the query path is complete, so loading
+    the data is the only remaining step. Populating one column is enough to
+    make a group resolve, with no code change."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    async with test_session_factory.begin() as session:
+        await session.execute(
+            update(Company)
+            .where(Company.cik == FAKE_CIK)
+            .values(sic_code="3674", sic_description="Semiconductors & Related Devices")
+        )
+
+    plan = await map_query(
+        _query(
+            {
+                "id": "g",
+                "text": "semiconductor companies",
+                "kind": "company_group",
+                "sic_description": "semiconductor",
+            }
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.filters.ciks == [FAKE_CIK]
+    assert plan.unresolved == []
+
+
+async def test_company_group_matches_an_exact_sic_code(
+    test_session_factory, clean_fake_company
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    async with test_session_factory.begin() as session:
+        await session.execute(
+            update(Company).where(Company.cik == FAKE_CIK).values(sic_code="3674")
+        )
+
+    plan = await map_query(
+        _query({"id": "g", "text": "SIC 3674", "kind": "company_group", "sic_code": "3674"}),
+        session_factory=test_session_factory,
+    )
+    assert plan.filters.ciks == [FAKE_CIK]
+
+    miss = await map_query(
+        _query({"id": "g", "text": "SIC 7372", "kind": "company_group", "sic_code": "7372"}),
+        session_factory=test_session_factory,
+    )
+    assert miss.filters.ciks == []
+    assert "no loaded company matches" in miss.unresolved[0].reason
+
+
+async def test_named_company_and_group_merge_without_duplicates(
+    test_session_factory, clean_fake_company
+) -> None:
+    """A question can name a filer AND a group it belongs to; the same company
+    must not be counted twice."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    async with test_session_factory.begin() as session:
+        await session.execute(
+            update(Company).where(Company.cik == FAKE_CIK).values(sic_code="3674")
+        )
+
+    plan = await map_query(
+        _query(
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "g", "text": "SIC 3674", "kind": "company_group", "sic_code": "3674"},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.filters.ciks == [FAKE_CIK]

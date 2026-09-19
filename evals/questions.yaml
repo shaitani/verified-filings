@@ -312,3 +312,154 @@ questions:
       which the producer has to pin down or the mapper will refuse it.
       Verified: resolves to 36 rows, 9 of them Q4 residuals, and 4 bindings
       because Alphabet changes revenue tags partway through the range.
+
+  # --- user provided: templates. <Company> is substituted before running, so
+  # --- these measure coverage of common asks rather than one concrete query.
+  - id: q046
+    question: "What is <Company>'s yearly revenue: gross, net"
+    template: true
+    expect: partial
+    shape: table
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      "net revenue" binds cleanly. "gross revenue" is refused as ambiguous
+      (nearest are Gross Profit and the revenue concepts), and rightly -- US
+      GAAP has no gross-vs-net revenue pair, so the question needs a curated
+      decision about what it means rather than an embedding guess.
+
+  - id: q047
+    question: "What is <Company>'s profit: net, gross"
+    template: true
+    expect: partial
+    shape: table
+    needs: [retrieval]
+    notes: >-
+      Both aliased. GrossProfit is only tagged by 9 of 20 filers, so this is
+      complete for some companies and partial for others.
+
+  - id: q048
+    question: What is <Company>'s profit margin
+    expect: answerable
+    needs: [retrieval, ratio]
+    exercises: [alias_gap, derived_metric]
+    notes: >-
+      Currently refused as ambiguous (Gross Profit vs Operating Income). Needs
+      a curated entry, and the entry has to decide WHICH margin -- gross,
+      operating or net. That choice is exactly what the alias layer is for.
+
+  - id: q049
+    question: "What is <Company>'s stock price, market cap"
+    template: true
+    expect: refuse
+    blocked_by: [not_in_dataset]
+    notes: >-
+      Neither is in XBRL. EntityPublicFloat exists for all 20 filers and is NOT
+      market cap -- the plausible wrong binding worth guarding against. Overlaps
+      q037 and q039.
+
+  - id: q050
+    question: "What are <Company>'s quarterly revenues: gross, net"
+    template: true
+    expect: partial
+    shape: table
+    needs: [retrieval]
+    exercises: [q4_residual, alias_gap]
+    notes: Same gross/net problem as q046, plus Q4 has to be derived.
+
+  - id: q051
+    question: "Which companies in a given sector performed best: highest revenue, profit both quarterly and yearly"
+    expect: refuse
+    shape: ranking
+    blocked_by: [sector_classification]
+    notes: >-
+      The schema half is now built: CompanyGroupElementIn expresses "every
+      filer matching this attribute", Company has sic_code / sic_description /
+      sic_office, and the mapper resolves groups. What remains is DATA -- the
+      columns are unpopulated, so this reports "SIC data has not been loaded"
+      rather than an empty set. Loading sic_numbers.json into the company table
+      is the only remaining step.
+
+  - id: q052
+    question: "Which companies by sic office performed best: highest revenue, profit both quarterly and yearly"
+    expect: refuse
+    shape: ranking
+    blocked_by: [sector_classification]
+    notes: >-
+      Same as q051, grouped by SIC office. Note sic_office has no source at all
+      -- sic_numbers.json carries code and description only. The SEC assigns
+      offices by SIC range, so it is derivable given that mapping, which this
+      project does not have.
+
+  - id: q053
+    question: "What is <Company>'s cash flow: operating, investing, financing"
+    template: true
+    expect: partial
+    shape: table
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      Operating is aliased; investing and financing are not, and both are
+      currently refused as ambiguous against each other -- they sit adjacent in
+      embedding space, so a guess would be a coin flip. All three exist for all
+      20 filers, so this is purely a curation gap.
+
+  - id: q054
+    question: "What are <Company>'s balance sheet totals: assets, liabilities, stockholders' equity, cash, goodwill, inventory"
+    template: true
+    expect: answerable
+    shape: table
+    needs: [retrieval]
+    exercises: [instant_fact]
+    notes: >-
+      All six aliased, all instant facts. PP&E was removed from this question:
+      it is refused as ambiguous between PropertyPlantAndEquipmentNet (18
+      filers) and ...Gross (14), which is a real choice someone has to make
+      rather than a tie to break on distance. Coverage still varies by filer
+      (Liabilities 15 of 20, StockholdersEquity 18, InventoryNet 17), so some
+      companies will come back with fewer than six.
+
+  - id: q055
+    question: "What are <Company>'s shareholder returns: share buyback spend, dividends per share"
+    template: true
+    expect: answerable
+    shape: table
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      Neither aliased. PaymentsForRepurchaseOfCommonStock covers 19 filers;
+      dividends split across CommonStockDividendsPerShareDeclared (13),
+      PaymentsOfDividendsCommonStock (9) and PaymentsOfDividends (6) -- an
+      ordered-alternatives entry, exactly the divergence case the alias format
+      was built for.
+
+  - id: q056
+    question: What is <Company>'s capital expenditure
+    expect: partial
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      Aliased, but only 14 of 20 filers use
+      PaymentsToAcquirePropertyPlantAndEquipment. AMZN, BAC, CVX, JPM, NVDA and
+      QCOM need their concept added as an alternative.
+
+  - id: q057
+    question: What is <Company>'s interest expense
+    expect: answerable
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      InterestExpense covers 17 filers, with InterestExpenseDebt (5) and
+      InterestIncomeExpenseNet (4) as fallbacks. Not aliased, so currently
+      unresolved.
+
+  - id: q058
+    question: What is <Company>'s effective tax rate
+    expect: answerable
+    needs: [retrieval]
+    exercises: [alias_gap]
+    notes: >-
+      EffectiveIncomeTaxRateContinuingOperations covers all 20 filers but is
+      filed under TWO units -- "pure" and "Rate" -- so it is the live case for
+      PITFALLS 1.14. The multi-unit guard will bind one unit and exclude the
+      other filers' facts; that needs checking once an alias entry exists.

@@ -64,6 +64,12 @@ question asking for a figure needs one row. Mirrors `QueryIn.shape`.
 Deliberately separate from `needs`: mixing *what to compute* with *what to
 return* is how the dimension got missed in the first draft of this file.
 
+## `template`
+
+Set `true` when the question uses a `<Company>` placeholder rather than naming
+a filer. These measure coverage of a common ask rather than one concrete query,
+and a runner has to substitute before executing them.
+
 ## `needs` — what answering takes, beyond fetching facts
 
 | tag | meaning |
@@ -87,6 +93,7 @@ return* is how the dimension got missed in the first draft of this file.
 | `causal` | asks *why*, which facts alone cannot answer |
 | `company_not_loaded` | names a filer that was never ingested |
 | `restatement_metadata` | needs the fact that a value changed (PITFALLS 2.2) |
+| `sector_classification` | needs SIC or sector; `QueryIn` can express it, but the columns are unpopulated |
 
 ## `exercises` — which known hazard a question probes
 

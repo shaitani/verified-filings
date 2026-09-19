@@ -496,3 +496,61 @@ options read as "Income Taxes Paid, Net" rather than `IncomeTaxesPaidNet`.
 Refusing without saying what you nearly matched is not much better than
 guessing.
 
+### 8.17 `CompanyGroupElementIn` — selecting filers by attribute
+
+`CompanyElementIn` names one filer. "Which companies in a given sector
+performed best" needs a *population*, which nothing could express — a schema
+gap, not a data gap, and the most structural one the eval set surfaced.
+
+A separate kind rather than optional fields on `CompanyElementIn`: naming one
+filer and selecting a set are different operations with different failure
+modes, and collapsing them would make "which company" and "which companies" the
+same request. Named companies and group members merge without duplicates, so a
+question may do both.
+
+`Company` gained `sic_code` / `sic_description` / `sic_office` (migration
+`3011d3c40ff8`), all nullable and **unpopulated** — the load step does not
+write them yet. `_resolve_company_groups` therefore checks whether *any* filer
+has the column set and reports "SIC data has not been loaded" when none does.
+An empty result would read as "no company is in that sector", which is a
+different and wrong answer. The check also means the path starts working the
+moment the data lands, with no code change; a test proves that by populating
+one column and re-resolving.
+
+`sic_office` has no source: `sic_numbers.json` carries code and description
+only. The SEC assigns review offices by SIC *range*, so it is derivable given
+that mapping, which this project does not have.
+
+### 8.18 Granularity is tracked apart from period
+
+`ResolvedPeriod.granularity` derives `annual` / `quarterly` from
+`fiscal_period`, and `ResultSpec.granularities` reports what a result mixes.
+
+Measured: asking for "2024, both quarterly and yearly" produced
+`axes=['period'], rows=5` with a 363-day value and four 90-day values on one
+undifferentiated axis and no warning. Plotted together the annual reads as a
+fourfold spike. The question is perfectly normal, so this is a plan-level
+`mixed_granularity` note rather than a refusal — but the two series want
+showing separately.
+
+### 8.19 `QualifierElementIn` removed
+
+It was inert: `map_query` never looked at it, so a producer emitting
+`kind: "qualifier"` had its intent silently dropped. The things it was meant to
+carry are better served elsewhere — "diluted" and "basic" are already separate
+alias entries, and every fact in this store is consolidated because
+companyfacts has no dimensional data at all (PITFALLS §3.2).
+
+Removing the kind converts a silent drop into a `ValidationError`, which is the
+house rule everywhere else on this boundary.
+
+### 8.20 Not built: metric groups
+
+Questions like "cash flow: operating, investing, financing" name a category and
+enumerate it. That needs no schema support — it is several `MetricElementIn`
+resolving to several bindings along a metric axis, which already works. The
+only open question is whether anything knows that "balance sheet totals" means
+a particular list, and that belongs to the *producer*, not to the query model.
+Recorded here because it was briefly designed as a "bundle" concept before
+being recognised as nothing new.
+

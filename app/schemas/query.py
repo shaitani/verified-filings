@@ -74,6 +74,11 @@ PeriodRule = Literal["direct", "residual"]
 #:   "ranking" -- entities ordered by one metric.
 ResultShape = Literal["scalar", "series", "table", "ranking"]
 
+#: Annual and quarterly figures are not interchangeable points. A 363-day
+#: value and a 90-day value on one axis reads as a fourfold spike, so the two
+#: are tracked apart rather than merged into an undifferentiated "period".
+PeriodGranularity = Literal["annual", "quarterly"]
+
 #: A dimension the result varies along. The retrieval step must not collapse
 #: these: "revenue by quarter for three companies" varies along both, and
 #: returning one row per company would silently answer a different question.
@@ -89,11 +94,14 @@ ResultAxis = Literal["company", "period", "metric"]
 #:                           from this binding.
 #:   "period_misalignment" -- companies being compared put very different dates
 #:                           under the same fiscal label. Plan-level.
+#:   "mixed_granularity"  -- annual and quarterly figures in one result.
+#:                           Plan-level.
 NoteKind = Literal[
     "concept_switch",
     "unverified_switch",
     "partial_coverage",
     "period_misalignment",
+    "mixed_granularity",
 ]
 
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...
@@ -171,17 +179,46 @@ class PeriodElementIn(_ElementBase):
         return self
 
 
-class QualifierElementIn(_ElementBase):
-    """A modifier that shapes the query without naming data: "annual",
-    "per share", "consolidated". Passed through to the SQL step untouched --
-    the mapper has nothing to resolve it against.
+class CompanyGroupElementIn(_ElementBase):
+    """A *set* of filers chosen by attribute rather than named one by one --
+    "every company in semiconductors", "all the ones in the same SIC office".
+
+    Separate from ``CompanyElementIn`` on purpose: naming one filer and
+    selecting a population are different operations with different failure
+    modes, and collapsing them would make "which company" and "which companies"
+    the same request.
+
+    All three selectors are optional and at least one must be set. The columns
+    behind them (``Company.sic_code`` / ``sic_description`` / ``sic_office``)
+    exist but are **not populated yet**, so this currently resolves to nothing
+    and the mapper says so rather than returning an empty set silently.
     """
 
-    kind: Literal["qualifier"] = "qualifier"
+    kind: Literal["company_group"] = "company_group"
+
+    #: Exact 4-digit SIC code.
+    sic_code: str | None = Field(default=None, min_length=1, max_length=4)
+
+    #: Substring match against the SEC's ``sicDescription`` -- "semiconductor"
+    #: rather than "3674", since that is how people ask.
+    sic_description: str | None = Field(default=None, min_length=1, max_length=120)
+
+    #: SEC review office. No source populates this today; see Company.sic_office.
+    sic_office: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _at_least_one_selector(self) -> CompanyGroupElementIn:
+        if not any((self.sic_code, self.sic_description, self.sic_office)):
+            raise ValueError(
+                "a company group needs at least one of sic_code, sic_description "
+                "or sic_office; an unconstrained group is every loaded filer, "
+                "which is what omitting the element already means"
+            )
+        return self
 
 
 ElementIn = Annotated[
-    MetricElementIn | CompanyElementIn | PeriodElementIn | QualifierElementIn,
+    MetricElementIn | CompanyElementIn | CompanyGroupElementIn | PeriodElementIn,
     Field(discriminator="kind"),
 ]
 
@@ -458,6 +495,10 @@ class ResolvedPeriod(_Base):
     period_start: date
     period_end: date
 
+    @property
+    def granularity(self) -> PeriodGranularity:
+        return "annual" if self.fiscal_period == "FY" else "quarterly"
+
     #: Set exactly when this period has no filing of its own (Q4). The windows
     #: are supplied whatever the metric turns out to be; whether they get used
     #: is ``Binding.period_rule``'s call, because an instant concept reads the
@@ -508,6 +549,10 @@ class ResultSpec(_Base):
     companies: int = Field(ge=0)
     periods: int = Field(ge=0)
     metrics: int = Field(ge=0)
+
+    #: Which period granularities the result mixes. More than one means annual
+    #: and quarterly figures share an axis, which is rarely what was wanted.
+    granularities: list[PeriodGranularity] = Field(default_factory=list)
 
     @property
     def row_count(self) -> int:

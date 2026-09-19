@@ -186,6 +186,27 @@ class Company(Base):
     entity_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    #: Industry classification, so a question can select companies by *attribute*
+    #: rather than by name ("every filer in semiconductors"). All three are
+    #: nullable and currently unpopulated -- the load step does not write them
+    #: yet. Querying an all-null column returns nothing rather than erroring,
+    #: which is the behaviour the query mapper reports as "sector data is not
+    #: loaded".
+    #:
+    #: ``sic_code`` / ``sic_description`` mirror the ``sic`` and
+    #: ``sic_description`` fields already collected into ``sic_numbers.json``
+    #: by ``app/ingest/sic_index.py``; wiring that file into the load step is
+    #: all that is needed to fill them.
+    #:
+    #: ``sic_office`` has NO source today. The SEC assigns filings to review
+    #: offices ("Office of Life Sciences" and so on) by SIC *range*, so it is
+    #: derivable from ``sic_code`` given that mapping -- which this project does
+    #: not have. The column exists so the query path is complete; populating it
+    #: is a separate decision.
+    sic_code: Mapped[str | None] = mapped_column(String(4), nullable=True, index=True)
+    sic_description: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sic_office: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+
     filings: Mapped[list[Filing]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",

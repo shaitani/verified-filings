@@ -34,6 +34,7 @@ BLOCKED_BY = {
     "causal",
     "company_not_loaded",
     "restatement_metadata",
+    "sector_classification",
 }
 SHAPES = {"scalar", "series", "table", "ranking"}
 EXERCISES = {
@@ -70,6 +71,12 @@ def test_tags_come_from_the_vocabulary(questions, field, vocabulary) -> None:
     for q in questions:
         unknown = set(q.get(field, [])) - vocabulary
         assert not unknown, f"{q['id']} has unknown {field}: {sorted(unknown)}"
+
+
+def test_template_flag_is_boolean(questions) -> None:
+    for q in questions:
+        if "template" in q:
+            assert isinstance(q["template"], bool), q["id"]
 
 
 def test_shape_values_are_known(questions) -> None:
