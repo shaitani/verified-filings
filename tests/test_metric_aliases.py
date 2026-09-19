@@ -57,8 +57,8 @@ def test_shipped_file_reaches_every_metric_by_its_own_name() -> None:
 def test_shipped_file_only_references_known_taxonomies() -> None:
     document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
     for alias in document.metrics.values():
-        for slot in alias.terms:
-            for ref in slot:
+        for concepts, _ in alias.slots:
+            for ref in concepts:
                 taxonomy, _ = split_concept_ref(ref)
                 assert taxonomy in {"dei", "us-gaap", "srt"}
 
@@ -173,3 +173,35 @@ def test_fake_alias_file_loads() -> None:
 
 def test_unknown_phrase_returns_none_so_the_caller_can_fall_through() -> None:
     assert alias_index().lookup("blorptastic synergy index") is None
+
+
+def test_operand_slot_accepts_both_spellings() -> None:
+    """A bare list means sign: signed; the object form is only for when the
+    sign is load-bearing."""
+    alias = MetricAlias.model_validate(
+        {
+            "label": "X",
+            "expression": "c0 - c1",
+            "terms": [
+                ["us-gaap:A"],
+                {"concepts": ["us-gaap:B"], "sign": "magnitude"},
+            ],
+        }
+    )
+    assert alias.slots == [(["us-gaap:A"], "signed"), (["us-gaap:B"], "magnitude")]
+
+
+def test_unknown_sign_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        MetricAlias.model_validate(
+            {"label": "X", "terms": [{"concepts": ["us-gaap:A"], "sign": "positive"}]}
+        )
+
+
+def test_shipped_file_declares_magnitude_only_inside_arithmetic() -> None:
+    """A sign assumption only means something when an operator supplies the
+    direction -- on a plain `c0` lookup a negative value is just data."""
+    document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
+    for metric, alias in document.metrics.items():
+        if alias.expression == "c0":
+            assert all(sign == "signed" for _, sign in alias.slots), metric

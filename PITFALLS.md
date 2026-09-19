@@ -33,6 +33,7 @@ are "true today" rather than "true by construction".
 | 1.12 | Two equally good embedding matches | `Ambiguity`, never a guess |
 | 1.13 | Short query vs long description retrieval | nomic task prefixes |
 | 1.14 | One concept filed in several units | `_gather_evidence` |
+| 1.15 | Sign assumptions inside an expression | alias `sign:` + `_sign_violation` |
 
 ### 1.1 `Filing.fiscal_year` is provenance, not the period a number describes
 
@@ -111,7 +112,7 @@ FY2023 moved 166.7B → 201.8B.
 **Handled:** the load step maintains `Fact.is_latest` per
 `(company, concept, unit, window)`, so analytics see the most recent figure.
 **Caveat:** per-share figures are only comparable within one filing vintage,
-and nothing surfaces *that* a value was restated — see §2.3.
+and nothing surfaces *that* a value was restated — see §2.2.
 
 ### 1.7 Filers tag the same metric differently
 
@@ -202,27 +203,44 @@ keeps only that unit's windows, so a binding cannot pass coverage on EUR facts
 and be reported as USD. No currently-aliased concept is multi-unit, so this is
 a guard rather than a live fix.
 
+### 1.15 Sign assumptions inside an expression
+
+Arithmetic assumes a sign for each operand. Capex is a *magnitude* — filers tag
+it positive and the `-` in `c0 - c1` supplies the direction — so a filer
+tagging it negative would make free cash flow *add* and come out inflated, with
+nothing downstream able to tell.
+
+A blunt "must be positive" rule would be wrong, which is why this took a
+declaration rather than a global check:
+
+```
+PaymentsToAcquirePropertyPlantAndEquipment   14 companies +,  0 −
+NetCashProvidedByUsedInOperatingActivities   20 companies +,  7 −  (47 facts)
+GrossProfit                                   9 companies +,  1 −  (6 facts)
+```
+
+Operating cash flow going negative is real cash burn — the element is literally
+`ProvidedByUsedIn`. Micron's negative gross profit is real. Those are *signed
+quantities* and must be left alone.
+
+**Handled:** an operand slot may declare `sign: magnitude`, and
+`_sign_violation` checks the chosen concept's actual values over the requested
+windows at bind time. A violation **refuses** the binding rather than noting
+it — the same line drawn for a missing residual component: refuse when the
+number would be wrong, note when it is right but needs context. The default is
+`signed`, so only the two arithmetic entries in `metric_aliases.yaml` carry an
+annotation, and a test asserts no plain `c0` lookup declares one.
+
+**Still open:** `PaymentsForProceedsFromOtherInvestingActivities` is positive
+for 16 companies and negative for 15 — genuinely bidirectional, and nothing
+stops someone aliasing it into an expression where neither sign is right. The
+declaration is per slot, not per filer.
+
 ---
 
 ## 2. Partially handled — know the edges
 
-### 2.1 Sign conventions
-
-The US GAAP taxonomy expects most elements positive, and filers get this wrong
-often enough that XBRL US publishes a rule set for it (DQC 0015). A sign error
-inside an `expression` silently inverts the result.
-
-**Measured:** `PaymentsToAcquirePropertyPlantAndEquipment` is positive for all
-14 filers that report it, so `free_cash_flow: c0 - c1` is correct as written.
-But `PaymentsForProceedsFromOtherInvestingActivities` is positive for 16
-companies and negative for 15 — genuinely bidirectional.
-
-**Gap:** nothing *enforces* the sign assumption. A future alias doing
-arithmetic over a `PaymentsForProceedsFrom*` or similarly bidirectional concept
-would be wrong for half the corpus with no signal. Adding a sign expectation to
-the alias entry, checked at bind time, would close this.
-
-### 2.2 `unit` on a derived binding
+### 2.1 `unit` on a derived binding
 
 `Binding.unit` is read from the first operand. For `expression: "c0"` that is
 exact; for `gross_margin` (`c0 / c1`) the result is dimensionless and "USD"
@@ -232,14 +250,14 @@ describes the operands, not the answer.
 a unit algebra or an explicit "derived/dimensionless" marker before anything
 renders values.
 
-### 2.3 Restatement disclosure
+### 2.2 Restatement disclosure
 
 `is_latest` picks the right value, but the plan never says a value *was*
 restated, or by how much.
 
 **Gap:** the `Note` channel now exists and this would fit it. Not wired up.
 
-### 2.4 Company name ambiguity
+### 2.3 Company name ambiguity
 
 `Ambiguity` is concept-shaped, so a company element matching several filers is
 reported through `Unresolved` with the colliding ciks named — correct, but it

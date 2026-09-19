@@ -461,3 +461,51 @@ def test_note_survives_on_a_binding() -> None:
         notes=[Note(kind="concept_switch", message="tags changed in FY2025")],
     )
     assert binding.notes[0].kind == "concept_switch"
+
+
+# --------------------------------------------------------------------------- #
+# Sign conventions -- an operand whose direction the expression supplies
+# --------------------------------------------------------------------------- #
+
+
+async def test_negative_magnitude_operand_refuses_the_binding(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The fixture's second operand is negative and declared a magnitude, so
+    `c0 - c1` would add where it means to subtract. That is a wrong number
+    rather than a caveated one, so it is refused, not noted."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget burn", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings == []
+    assert not plan.is_complete
+    assert "declared a magnitude" in plan.unresolved[0].reason
+
+
+async def test_negative_signed_operand_still_binds(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Same negative operand, left unannotated. A negative operating cash flow
+    or gross profit is real data, so the default must not over-refuse."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget signed burn", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    (binding,) = plan.bindings
+    assert binding.expression == "c0 - c1"
+    assert [c.name for c in binding.concepts] == ["ZzzTestRevenues", "ZzzTestNetLoss"]

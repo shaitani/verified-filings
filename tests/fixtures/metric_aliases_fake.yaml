@@ -37,3 +37,23 @@ metrics:
     terms:
       - [us-gaap:ZzzTestNetLoss]
       - [us-gaap:ZzzTestRevenues]
+
+  # ZzzTestNetLoss is -150000.75 in the fixture. Declared a magnitude here, so
+  # the subtraction's sign assumption is violated and the binding must be
+  # refused rather than silently computing the wrong direction.
+  widget_burn:
+    label: Widget burn
+    expression: c0 - c1
+    terms:
+      - [us-gaap:ZzzTestRevenues]
+      - concepts: [us-gaap:ZzzTestNetLoss]
+        sign: magnitude
+
+  # Same operands, but the second is left unannotated (so "signed"). A negative
+  # value there is information, not an error, and must still bind.
+  widget_signed_burn:
+    label: Widget signed burn
+    expression: c0 - c1
+    terms:
+      - [us-gaap:ZzzTestRevenues]
+      - [us-gaap:ZzzTestNetLoss]

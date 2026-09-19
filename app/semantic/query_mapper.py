@@ -422,6 +422,7 @@ async def _resolve_metrics(
                 )
                 continue
             expression = hit.expression
+            signs = list(hit.signs)
             resolved_by = "alias"
             source = f"curated alias {hit.metric!r}"
         else:
@@ -437,6 +438,9 @@ async def _resolve_metrics(
                 continue
             slots = [nearest]
             expression = "c0"
+            # An embedding hit is a single lookup, never arithmetic, so there
+            # is no operator for a magnitude assumption to attach to.
+            signs = ["signed"]
             resolved_by = "embedding"
             source = "embedding search"
 
@@ -449,6 +453,7 @@ async def _resolve_metrics(
         _bind_per_company(
             element,
             slots=slots,
+            signs=signs,
             expression=expression,
             resolved_by=resolved_by,
             source=source,
@@ -467,6 +472,7 @@ def _bind_per_company(
     element: MetricElementIn,
     *,
     slots: list[list[_Candidate]],
+    signs: list[str],
     expression: str,
     resolved_by: str,
     source: str,
@@ -566,6 +572,10 @@ def _bind_per_company(
 
         for key, covered in groups.items():
             chosen = chosen_by_key[key]
+            violation = _sign_violation(chosen, signs, cik=cik, periods=covered, evidence=evidence)
+            if violation is not None:
+                problems.append(Unresolved(element_id=element.id, reason=violation))
+                continue
             lead = evidence[(cik, chosen[0].concept_id)]
             residual = not lead.is_instant and any(p.residual_of for p in covered)
             years = [p.fiscal_year for p in covered]
@@ -691,6 +701,48 @@ def _seam_agrees(
                     if left.values[window] != right.values[window]:
                         return False, compared
     return True, compared
+
+
+def _sign_violation(
+    chosen: list[_Candidate],
+    signs: list[str],
+    *,
+    cik: int,
+    periods: list[ResolvedPeriod],
+    evidence: dict[tuple[int, int], _Evidence],
+) -> str | None:
+    """Reason to refuse, when an operand declared ``magnitude`` arrives negative.
+
+    A magnitude operand is a size whose direction the expression supplies:
+    capex is tagged positive and subtracted. A filer tagging it negative turns
+    ``c0 - c1`` into an addition and inflates the answer, and nothing
+    downstream can tell. That is a wrong number rather than a caveated one, so
+    it is refused here for the same reason a missing residual component is --
+    see PITFALLS.md section 1.15.
+
+    Operands declared ``signed`` are left alone: operating cash flow really
+    does go negative, and so does gross profit.
+    """
+    for candidate, sign in zip(chosen, signs, strict=False):
+        if sign != "magnitude":
+            continue
+        found = evidence.get((cik, candidate.concept_id))
+        if found is None:
+            continue
+        wanted = {
+            window
+            for period in periods
+            for window in _required_windows(period, is_instant=found.is_instant)
+        }
+        negative = [w for w in wanted if w in found.values and found.values[w] < 0]
+        if negative:
+            when = ", ".join(str(end) for _, end in sorted(negative, key=lambda w: w[1]))
+            return (
+                f"{candidate.taxonomy}:{candidate.name} is declared a magnitude but cik "
+                f"{cik} reports it negative for {when}; the expression would compute the "
+                "wrong sign, so no binding was made"
+            )
+    return None
 
 
 def _required_windows(

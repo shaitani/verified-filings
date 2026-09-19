@@ -59,6 +59,27 @@ def split_concept_ref(ref: str) -> tuple[Taxonomy, str]:
     return taxonomy, name  # type: ignore[return-value]
 
 
+#: What an operand's sign means, which only matters inside an expression.
+#:   "signed"    -- the value's sign is information. Operating cash flow goes
+#:                  negative on real cash burn; gross profit goes negative in a
+#:                  bad year. Left alone. The default.
+#:   "magnitude" -- the concept is a size and the expression's operator carries
+#:                  the direction. Capex is tagged positive and subtracted; a
+#:                  filer tagging it negative would make `c0 - c1` *add*.
+OperandSign = Literal["signed", "magnitude"]
+
+
+class OperandSlot(_Base):
+    """An operand slot that needs more than a bare list of alternatives.
+
+    Only worth writing when ``sign`` is load-bearing -- a plain list is still
+    accepted and means ``sign: signed``.
+    """
+
+    concepts: list[str] = Field(min_length=1)
+    sign: OperandSign = "signed"
+
+
 class MetricAlias(_Base):
     """One curated business term."""
 
@@ -70,16 +91,25 @@ class MetricAlias(_Base):
     expression: str = Field(default="c0", min_length=1, max_length=256)
 
     #: One entry per operand slot; each entry is alternatives in preference
-    #: order. ``min_length=1`` on both: a slot with no candidates, or a metric
-    #: with no slots, can never resolve and is a typo rather than a choice.
-    terms: list[list[str]] = Field(min_length=1)
+    #: order, either as a bare list or as an ``OperandSlot``. ``min_length=1``
+    #: on both: a slot with no candidates, or a metric with no slots, can never
+    #: resolve and is a typo rather than a choice.
+    terms: list[list[str] | OperandSlot] = Field(min_length=1)
+
+    @property
+    def slots(self) -> list[tuple[list[str], OperandSign]]:
+        """``terms`` with the two spellings collapsed to one shape."""
+        return [
+            (slot, "signed") if isinstance(slot, list) else (slot.concepts, slot.sign)
+            for slot in self.terms
+        ]
 
     @model_validator(mode="after")
     def _refs_are_wellformed(self) -> MetricAlias:
-        for slot in self.terms:
-            if not slot:
+        for concepts, _ in self.slots:
+            if not concepts:
                 raise ValueError("an operand slot must list at least one concept")
-            for ref in slot:
+            for ref in concepts:
                 split_concept_ref(ref)  # raises on a malformed reference
 
         for index in _OPERAND_REF.findall(self.expression):
@@ -145,6 +175,9 @@ class AliasHit:
     expression: str
     terms: tuple[tuple[tuple[Taxonomy, str], ...], ...]
 
+    #: One per entry in ``terms``. See ``OperandSign``.
+    signs: tuple[OperandSign, ...]
+
 
 class AliasIndex:
     """Normalized surface form -> ``AliasHit``."""
@@ -153,11 +186,15 @@ class AliasIndex:
         self._by_form: dict[str, AliasHit] = {}
 
         for metric, alias in document.metrics.items():
+            slots = alias.slots
             hit = AliasHit(
                 metric=metric,
                 label=alias.label,
                 expression=alias.expression,
-                terms=tuple(tuple(split_concept_ref(ref) for ref in slot) for slot in alias.terms),
+                terms=tuple(
+                    tuple(split_concept_ref(ref) for ref in concepts) for concepts, _ in slots
+                ),
+                signs=tuple(sign for _, sign in slots),
             )
             for form in (metric, *alias.synonyms):
                 key = normalize(form)

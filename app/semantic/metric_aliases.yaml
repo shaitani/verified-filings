@@ -166,19 +166,31 @@ metrics:
       - [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
 
   # --- derived: arithmetic over several concepts ----------------------------
+  # Both of these carry `sign: magnitude` on the operand whose direction is
+  # supplied by the operator rather than by the filer. Everything above is a
+  # plain lookup where a negative value is information, not an error -- Micron
+  # really did post negative gross profit in FY2023.
   gross_margin:
     label: Gross margin
     synonyms: [gross profit margin, gross margin percentage]
     expression: c0 / c1
     terms:
+      # Numerator stays signed: a negative gross margin is a real answer.
       - [us-gaap:GrossProfit]
-      - - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
-        - us-gaap:Revenues
+      # A negative denominator would invert the ratio into nonsense.
+      - concepts:
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+          - us-gaap:Revenues
+        sign: magnitude
 
   free_cash_flow:
     label: Free cash flow
     synonyms: [fcf, free cash]
     expression: c0 - c1
     terms:
+      # Operating cash flow is signed -- 7 of 20 filers post negative quarters.
       - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
-      - [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+      # Capex is tagged positive by all 14 reporting filers and subtracted. A
+      # negative one would make this add, inflating free cash flow silently.
+      - concepts: [us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+        sign: magnitude
