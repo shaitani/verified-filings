@@ -21,9 +21,11 @@ written by the retrieval step in `app/ingest/xbrl_store.py`) on the way IN,
 before the **load step** (`app/db/loader.py`, see `LOADER.md`) turns it into
 `app.db` ORM rows.
 
-- **Inbound validation only.** No outbound / read DTOs yet — those come if/when
-  there's an HTTP API or structured CLI output, as separate classes with
-  `from_attributes=True`. Never reuse the `*In` models for output.
+- **No read DTOs yet.** Nothing here mirrors ORM rows on the way out — those
+  come if/when there's an HTTP API or structured CLI output, as separate
+  classes with `from_attributes=True`. Never reuse the `*In` models for output.
+  (`query.py`'s `QueryPlan` *is* outbound, but it is computed, not a projection
+  of ORM rows, so `from_attributes` doesn't apply — see §8.)
 - Dependency direction: **schemas → nothing in the app**; **loader → (schemas,
   models)**. No cycles.
 
@@ -209,7 +211,8 @@ loader wants it elsewhere, moving it is trivial.
 
 ## 6. Not built yet / follow-ups
 
-- Outbound / read DTOs — deferred until there's an API or structured CLI output.
+- Read DTOs projecting ORM rows — deferred until there's an API or structured
+  CLI output. (`query.py`'s outbound models are computed, not projections.)
 - Possible `fy ∈ scope.fiscal_years` assertion (4.8).
 - Possible `accn` / `frame` regex (4.4).
 - A tighter `fy` bound than `2000..2100` once the scope-window rule is settled.
@@ -226,3 +229,200 @@ loader wants it elsewhere, moving it is trivial.
 - `fy`: only 2021–2025.
 - All 20 files pass `CompanyFactsFile.model_validate` (see
   `tests/test_xbrl_schema.py::test_real_store_file_validates`).
+
+---
+
+## 8. `query.py` — the query mapper's two ends
+
+Added 2026-09-18 alongside `app/semantic/query_mapper.py`. `QueryIn` is what a user's
+question looks like once some producer (an external LLM today) has parsed it;
+`QueryPlan` is what the mapper resolves that into, and what the SQL-generating
+model reads. Both live in one module because they are two ends of one contract
+— changing one almost always means changing the other.
+
+### 8.1 `QueryIn` speaks the user's language, never XBRL
+
+`text` is `"revenue"`, never `us-gaap:Revenues`. Translating between the two is
+the mapper's entire job, so an XBRL identifier appearing on the inbound side
+means the boundary has leaked and the producer has taken on work it has no
+business doing (it cannot see the database, and filer-specific tagging is not
+knowable from the question text).
+
+### 8.2 Elements are a discriminated union on `kind`
+
+`metric` / `company` / `period` / `qualifier`, dispatched by Pydantic on
+`kind`. A flat "list of things being asked about" was the original sketch and
+it does not survive contact: each kind needs a *different* resolver, and
+running embedding search over `"Apple"` returns noise. The discriminator is
+what routes each element correctly, and `extra="forbid"` then makes a
+mislabelled element (a `ticker` on a `metric`) fail instead of being silently
+ignored.
+
+### 8.3 A binding is keyed on `(element_id, company_cik)`
+
+Filers tag the same business concept differently — Apple reports revenue as
+`RevenueFromContractWithCustomerExcludingAssessedTax`, others as `Revenues`.
+So one `"revenue"` element legitimately resolves to *different* concepts for
+different companies, and a mapping shaped `element -> concept_id` structurally
+cannot say that. `Binding.company_cik = None` means "holds for every cik in
+`filters`"; a per-company binding is the override.
+
+### 8.4 `concepts` is a list, with an `expression` over it
+
+Some metrics exist as no single `Concept` row: gross margin is
+`GrossProfit / Revenues`, free cash flow is operating cash flow minus capex. A
+1:1 `element -> concept` assumption would have to be torn out the first time
+one of those is asked for, so the list is there from the start. The ordinary
+case is one operand and the default `expression` of `"c0"`.
+
+`expression` is a **string**, not a parsed tree. Its only consumer today is a
+language model that reads it as text, and a real AST can replace it the moment
+something needs to *evaluate* it. A `model_validator` keeps it honest: every
+`cN` it references must be an operand that was actually bound.
+
+### 8.5 Company ambiguity has no home in `Ambiguity`
+
+`Ambiguity.candidates` is `ConceptRef`-shaped, because concept ambiguity is the
+dominant case and the one the curated alias layer exists to settle. A company
+element matching several filers therefore reports through `Unresolved` with a
+reason naming the colliding ciks, which reads worse than it should.
+
+Accepted deliberately rather than generalising `Ambiguity` over element kinds:
+the generalisation costs a layer of indirection on every binding to serve a
+case that has not been hit yet. Revisit if company collisions turn out to be
+common in practice.
+
+### 8.6 `coverage` is evidence, and it outranks similarity
+
+`Coverage.fact_count == 0` means a binding is wrong. This matters more than it
+looks: a well-formed query over a wrongly-bound concept returns zero rows, and
+zero rows is indistinguishable from "the company reported nothing" — so the
+user-facing model cheerfully reports a false negative. Carrying the count makes
+that impossible to miss, and makes a verified binding tellable from a guess.
+
+Consequence for the resolver (documented on `_resolve_metrics`): coverage
+filters *before* ranking, and a candidate at 0.91 similarity with no facts
+loses to one at 0.78 with twenty.
+
+### 8.7 `unresolved` / `ambiguous` are fields, not exceptions
+
+A half-resolved plan is a normal outcome — one element of five failing should
+not discard the four that worked. `map_query` never raises on an unresolvable
+element; `QueryPlan.is_complete` is the caller's go/no-go signal.
+
+### 8.8 `resolved_by` is there to be measured
+
+Every binding records whether the alias layer or the embedding search produced
+it. As the curated YAML absorbs cases, the embedding share should fall — that
+ratio is the honest maturity metric for the mapping layer, and it costs one
+`Literal` field to have.
+
+### 8.9 `FilingForm` / `Taxonomy` are imported from `xbrl.py`
+
+Not redefined. They mirror the same DB enums, and two copies would drift.
+
+**Superseded in part (see §8.12):** this section originally also imported
+`FiscalPeriod` for `PeriodElementIn.fiscal_period`, and called the resulting
+rejection of `fiscal_period="Q4"` a useful side effect. It wasn't — it made
+every Q4 question unanswerable. Period *labels* a question may use are now
+`QueryFiscalPeriod`, defined in `query.py`; only the storage-level fields still
+borrow `xbrl.py`'s four-value Literal.
+
+### 8.10 `extra="forbid"` matters more here than in `xbrl.py`
+
+§4.1's reasoning was "we generate these files". Here the producer is a language
+model, which is *less* controlled — but the conclusion is the same and
+stronger: a silently-dropped key the model believed it was sending is far
+harder to debug than a loud `ValidationError` it can be shown and asked to
+correct.
+
+### 8.11 Periods are date windows, not fiscal-year integers
+
+`PlanFilters` carries `periods: list[ResolvedPeriod]` — `(company_cik,
+fiscal_year, fiscal_period, period_start, period_end)` — and deliberately has
+no `fiscal_years: list[int]`.
+
+**Why the integer version was wrong.** `Filing.fiscal_year` is the fiscal year
+*of the filing*, and a 10-K carries two years of comparative columns. Combined
+with `Fact.is_latest` (which keeps the most recently *filed* copy of a period),
+filtering facts through `filing.fiscal_year` selects by **provenance**, not by
+which period a number describes. Measured: Apple's FY2024-filed 10-K holds the
+`2021-09-26 → 2022-09-24` duration — FY2022's window — as its surviving
+`is_latest` row, because the FY2025 10-K later superseded Apple's copies of
+FY2023 and FY2024. A query filtered on `fiscal_year = 2024` would have returned
+FY2022 revenue and said nothing was wrong.
+
+**Why the window can't be computed from the label.** Fiscal years are named
+independently of the dates they cover. J&J's FY2021 runs `2021-01-04 →
+2022-01-02`; two of the store's 100 annual filings end in a different calendar
+year than their `fiscal_year`. Several filers (JNJ, NVDA, AAPL, QCOM) use
+52/53-week calendars, so quarters measure 83–97 days rather than 91. Any rule
+deriving dates from the year number is wrong for those.
+
+**How the window is resolved.** `query_mapper._load_windows` takes the label
+from `Filing.fiscal_year` and the dates from the facts: a filing's own window
+is its duration fact with the **latest `period_end`** (comparatives describe
+earlier periods), breaking `period_end` ties toward the **shortest span** (what
+separates a 10-Q's discrete quarter from the year-to-date duration filed beside
+it). Verified across the whole store: 100/100 annual and 298/298 quarterly
+filings resolve to exactly one unambiguous window.
+
+**Consequences.** Windows are per-company, because one "FY2024" is Jul→Jun for
+Microsoft and Oct→Sep for Apple — so cross-company period comparison is
+comparing different calendar spans, which the plan now makes visible rather
+than hiding behind a shared integer. A filing whose own window can't be
+identified (no duration fact of the expected length) is reported as
+`Unresolved` rather than guessed at, and `last_n_years` counts back from the
+newest year that actually *resolved* — not the newest `Filing` row — so
+"the last 5 years" means five years the database can answer for.
+
+This is also the groundwork for Q4: a derived fourth quarter is the annual
+window minus the 9-month year-to-date window sharing its `period_start`, which
+is only expressible once periods carry dates.
+
+### 8.12 Q4 is derived, and the schema makes the derivation provable
+
+No US filer files a fourth quarter — the store holds 100 `FY`, 99 `Q1`, 99
+`Q2`, 100 `Q3` and **zero** `Q4` filings. Q4 is therefore not an edge case to
+special-case per company; it is a derivation that must happen every time
+anyone asks for one.
+
+**Query vocabulary is wider than storage vocabulary.** `PeriodElementIn` uses
+`QueryFiscalPeriod` (`FY`/`Q1`/`Q2`/`Q3`/`Q4`) while `Filing.fiscal_period`
+stays at four values. An earlier version of §8.9 called rejecting `Q4` at the
+boundary "correct" — that was wrong. It conflated *no Q4 rows exist* with *Q4
+is not askable*, and translating between those is the mapper's entire purpose.
+
+**The derivation.** For duration (flow) facts,
+`Q4 = annual window − nine-month year-to-date window sharing its start`. Both
+components open on the fiscal year start, which is what lets the SQL step join
+them without guessing — hence `PeriodResidual.shared_start` as one field rather
+than two that happen to agree. For **instant** facts there is no arithmetic at
+all: the fiscal-year-end balance *is* the Q4-end balance.
+
+**Why the rule lives on `Binding`, not `ResolvedPeriod`.** Whether Q4 needs
+subtracting depends on the *concept*, not the period: at the same Q4, revenue
+is a residual and total assets is a plain instant read. So `ResolvedPeriod`
+always supplies the component windows for a Q4 and `Binding.period_rule`
+decides whether to use them.
+
+**The mapper needs no extra query.** Q4 runs from the day after Q3 closes to
+the fiscal year end, and Q3's discrete window already ends exactly where the
+nine-month term does — so `_with_derived_q4` builds it from windows §8.11
+already resolved. A company missing either component gets no Q4 key at all.
+
+**Why `Coverage.components` exists.** Verified against the store: NVIDIA
+carries four *annual* facts under the revenue concept Apple and Microsoft use
+quarterly, and zero nine-month ones. A Q4 binding to that concept passes a
+concept-level `fact_count > 0` check and then cannot be computed. Worse, a
+subtraction with a missing term does not error — drop the nine-month value and
+"Q4" silently becomes the whole year. `Binding` therefore *refuses* to validate
+a `residual` binding whose components aren't each proven non-empty, which makes
+that bug unrepresentable rather than merely discouraged.
+
+**Verified end to end.** The mapper's residual windows drive SQL that joins on
+exact plan-supplied dates — no day-span ranges — returning FY2025 Q4 revenue of
+102.5B (AAPL), 76.4B (MSFT) and 39.3B (NVDA), all matching reported figures.
+Note those are three different calendar quarters (Jun–Sep, Apr–Jun, Oct–Jan)
+carrying the same label, which is why §8.11's per-company windows had to land
+first.
