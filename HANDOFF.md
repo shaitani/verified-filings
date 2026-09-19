@@ -133,16 +133,17 @@ emitter might remove the LLM for most questions. **The user pushed back and was
 right.** `evals/` was built to settle it:
 
 ```
-44 answerable or partial questions
+45 answerable or partial questions
 ... of those, retrieval only  25
-... needing more than that    19   →  43%
+... needing more than that    20   →  44%
 ```
 
 (It read 56% when I had written all the questions; the user's 13 additions are
 more retrieval-heavy and pulled it down, and the two of mine they later deleted
-— an all-twenty ranking and a cross-company share-of-total — took the last
-three points with them. All three numbers say the same thing: a large minority
-needs more than retrieval.)
+— an all-twenty ranking and a cross-company share-of-total — took a few
+points with them, and q049 gave one back when loading the sector data turned
+it from a refusal into a ranking. Every reading says the same thing: a large
+minority needs more than retrieval.)
 
 So **Qwen stays.** The split:
 

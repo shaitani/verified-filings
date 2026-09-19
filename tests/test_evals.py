@@ -45,6 +45,7 @@ EXERCISES = {
     "instant_fact",
     "alias_gap",
     "clarification",
+    "mixed_granularity",
 }
 
 

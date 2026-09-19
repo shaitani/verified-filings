@@ -98,8 +98,8 @@ and a runner has to substitute before executing them.
 ## `exercises` — which known hazard a question probes
 
 `q4_residual`, `concept_drift`, `fiscal_calendar`, `derived_metric`,
-`instant_fact`, `alias_gap`, `clarification`. Each maps to a section of the root
-[`PITFALLS.md`](../PITFALLS.md).
+`instant_fact`, `alias_gap`, `clarification`, `mixed_granularity`. Each maps to
+a section of the root [`PITFALLS.md`](../PITFALLS.md).
 
 `alias_gap` is the most actionable: it marks a question that *should* work but
 does not, because `metric_aliases.yaml` is missing an entry. Those are the

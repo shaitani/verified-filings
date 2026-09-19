@@ -361,16 +361,25 @@ questions:
 
   - id: q049
     question: "Which companies in a given sector performed best: highest revenue, profit both quarterly and yearly"
-    expect: refuse
+    expect: answerable
     shape: ranking
-    blocked_by: [sector_classification]
+    needs: [retrieval, ranking]
+    exercises: [q4_residual, fiscal_calendar, mixed_granularity]
     notes: >-
-      The schema half is now built: CompanyGroupElementIn expresses "every
-      filer matching this attribute", Company has sic_code / sic_description /
-      sic_office, and the mapper resolves groups. What remains is DATA -- the
-      columns are unpopulated, so this reports "SIC data has not been loaded"
-      rather than an empty set. Loading sic_numbers.json into the company table
-      is the only remaining step.
+      Was refused for want of data, not for want of code. The query path had
+      been complete for a while -- CompanyGroupElementIn, the sic_* columns and
+      _resolve_company_groups -- and the columns were simply empty, so the
+      mapper said "SIC data has not been loaded" rather than returning an empty
+      set that would have read as "no company is in that sector".
+      app/db/loader.py now merges sic_numbers.json into the Company upsert,
+      keyed on cik rather than ticker, and all 20 filers are populated.
+      Verified for "semiconductors": resolves to AMD, INTC, MU and NVDA, 4
+      companies x 5 periods x 2 metrics = 40 rows over 16 bindings, complete.
+      "Both quarterly and yearly" is the part worth keeping: it is the only
+      question here that mixes granularities, so the plan carries a
+      mixed_granularity note alongside period_misalignment, and the Q4s split
+      into their own residual bindings. q050, grouping by SIC office instead,
+      is still correctly refused -- that column has no source at all.
 
   - id: q050
     question: "Which companies by sic office performed best: highest revenue, profit both quarterly and yearly"
