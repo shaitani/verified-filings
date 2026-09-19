@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from app.db import ALLOWED_UNITS, Company, Concept, Fact, Filing, LoadRun
+from app.db import ALLOWED_UNITS, Company, Concept, Fact, Filing, LoadRun, loader
 from app.db.loader import build_plan, load_batch, load_file
 from app.ingest.corpus import UnknownCompanyError
 from app.schemas.xbrl import CompanyFactsFile
@@ -192,3 +192,42 @@ async def test_load_batch_rejects_unknown_identifier() -> None:
 async def test_load_batch_requires_the_store_file() -> None:
     with pytest.raises(FileNotFoundError, match="get-xbrl"):
         await load_batch(["AAPL"])
+
+
+async def test_load_file_fills_the_sector_columns(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    """The sector columns come from a different source than the facts do --
+    sic_numbers.json, written by the ingest step -- so the loader merges them
+    in. Keyed on cik, never on ticker: a cik is permanent and a ticker is not.
+    """
+    monkeypatch.setattr(
+        loader, "sic_by_cik", lambda: {FAKE_CIK: ("3674", "Semiconductors & Related Devices")}
+    )
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    async with test_session_factory() as session:
+        company = (
+            await session.execute(select(Company).where(Company.cik == FAKE_CIK))
+        ).scalar_one()
+    assert company.sic_code == "3674"
+    assert company.sic_description == "Semiconductors & Related Devices"
+
+
+async def test_a_company_missing_from_the_sic_index_keeps_what_it_had(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    """Absent data must not overwrite present data. A reload while the index
+    is missing, stale or half-built would otherwise null out the sector of
+    every company it does not mention."""
+    monkeypatch.setattr(loader, "sic_by_cik", lambda: {FAKE_CIK: ("3674", "Semiconductors")})
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    monkeypatch.setattr(loader, "sic_by_cik", dict)
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    async with test_session_factory() as session:
+        company = (
+            await session.execute(select(Company).where(Company.cik == FAKE_CIK))
+        ).scalar_one()
+    assert company.sic_code == "3674"

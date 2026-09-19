@@ -56,6 +56,7 @@ from app.schemas.query import (
     ResultSpec,
     Unresolved,
 )
+from app.semantic.company_aliases import company_alias_index
 from app.semantic.metric_aliases import AliasHit, alias_index
 
 #: Day spans that identify a filing's *own* reporting window, separating it
@@ -97,6 +98,8 @@ async def map_query(
         group_ciks, group_problems = await _resolve_company_groups(groups, session)
         ciks = _merge_ciks(ciks, group_ciks)
         company_problems += group_problems
+        if not companies and not groups:
+            ciks = await _all_loaded_ciks(session)
         resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
         bindings, ambiguous, metric_problems, clarifications = await _resolve_metrics(
             metrics, session, ciks=ciks, periods=resolved_periods
@@ -240,6 +243,23 @@ def _merge_ciks(named: list[int], from_groups: list[int]) -> list[int]:
 # --------------------------------------------------------------------------- #
 
 
+#: Why a sector column has no values, per column. The three are not the same
+#: problem and a reader acts on them differently: ``sic_code`` and
+#: ``sic_description`` are loaded from ``sic_numbers.json`` and being empty
+#: means the load step has not run, while ``sic_office`` has no source at all
+#: and being empty is the permanent state until one is found.
+_WHY_UNPOPULATED = {
+    "sic_code": "Run the load step -- sic_numbers.json carries this and app/db/loader.py "
+    "writes it.",
+    "sic_description": "Run the load step -- sic_numbers.json carries this and "
+    "app/db/loader.py writes it.",
+    "sic_office": "No source for this exists: sic_numbers.json carries the SIC code and "
+    "description only. The SEC assigns review offices by SIC range, so it is derivable "
+    "given that mapping, which this project does not have. Selecting by sector "
+    "(sic_description) works today.",
+}
+
+
 async def _resolve_company_groups(
     elements: list[CompanyGroupElementIn], session: AsyncSession
 ) -> tuple[list[int], list[Unresolved]]:
@@ -267,9 +287,8 @@ async def _resolve_company_groups(
             problems.append(
                 Unresolved(
                     element_id=element.id,
-                    reason=f"{element.text!r} selects companies by "
-                    f"{column.key}, which is not populated for any filer; "
-                    "SIC data has not been loaded into the database yet",
+                    reason=f"{element.text!r} selects companies by {column.key}, "
+                    f"which is not populated for any filer. {_WHY_UNPOPULATED[column.key]}",
                 )
             )
             continue
@@ -317,11 +336,15 @@ async def _resolve_companies(
             # Company ambiguity has no home in ``Ambiguity`` -- that model is
             # concept-shaped. Reported here instead, naming the collisions so
             # the caller can re-ask. See DESIGN.md §8.5.
-            named = ", ".join(str(cik) for cik in matches)
+            #
+            # Named, not numbered. This reason is what a user-facing model
+            # quotes back, and "matches more than one company (ciks: 1652044,
+            # 320193, 1326801)" asks someone to choose between three integers.
             problems.append(
                 Unresolved(
                     element_id=element.id,
-                    reason=f"{element.text!r} matches more than one company (ciks: {named})",
+                    reason=f"{element.text!r} matches more than one company: "
+                    f"{await _describe_companies(matches, session)}. Name one of them.",
                 )
             )
         else:
@@ -330,13 +353,82 @@ async def _resolve_companies(
     return ciks, problems
 
 
+async def _describe_companies(ciks: list[int], session: AsyncSession) -> str:
+    """``"Alphabet Inc. (GOOGL), Apple Inc. (AAPL)"`` -- the companies behind a
+    list of ciks, for a message a person has to act on.
+
+    Falls back to the bare cik for a row carrying neither name nor ticker,
+    which is better than omitting a collision from the list of things to
+    choose between.
+    """
+    rows = await session.execute(
+        select(Company.cik, Company.ticker, Company.entity_name).where(Company.cik.in_(ciks))
+    )
+    labels = {
+        cik: f"{name} ({ticker})" if name and ticker else (name or ticker or f"cik {cik}")
+        for cik, ticker, name in rows
+    }
+    return ", ".join(labels.get(cik, f"cik {cik}") for cik in ciks)
+
+
+async def _all_loaded_ciks(session: AsyncSession) -> list[int]:
+    """Every filer in the database, for a question that names none.
+
+    "Rank all twenty companies by revenue" and "which company grew fastest"
+    carry no company element, because there is no company *to* name -- the
+    population is the answer. That used to resolve to an empty cik list, which
+    the metric resolver read as "no company in scope to verify coverage
+    against" and refused outright.
+
+    The distinction that makes this safe is between an absent element and a
+    *failed* one, so the expansion happens in ``map_query`` where both are
+    visible. "Apple versus Samsung" names two companies and resolves one; that
+    must stay a half-answer with Samsung reported unresolved, and must never
+    widen into every filer in the store.
+
+    Enumerated rather than left empty. ``PlanFilters.ciks`` treats an empty
+    list as unconstrained, which the SQL step could honour with no WHERE
+    clause -- but a plan whose bindings, coverage proofs and
+    ``ResultSpec.companies`` all name concrete ciks is the point of the plan,
+    and "however many rows come back" is not a cardinality anything can check.
+    """
+    rows = await session.execute(select(Company.cik).order_by(Company.cik))
+    return list(rows.scalars().all())
+
+
 async def _lookup_company(element: CompanyElementIn, session: AsyncSession) -> list[int]:
     """Ciks matching one company element, most specific hint first.
+
+    The derived lexicon goes first, then the database's own columns.
+
+    The lexicon exists because the columns are not what people say. Measured
+    against the corpus, name-only lookup missed Google (stored as "Alphabet
+    Inc."), Facebook (now Meta), Bank of America (whose ``entity_name`` is
+    "BofA Finance LLC"), Johnson and Johnson (EDGAR spells the ampersand) and
+    United Health. It also covers share classes -- "GOOG" is Alphabet even
+    though the stored ticker is GOOGL -- and former names, since a cik
+    outlives both the ticker and the name. See
+    ``app/semantic/company_aliases.py``.
+
+    A lexicon hit is intersected with what is actually loaded, so a corpus
+    company absent from this database falls through to "no loaded company
+    matches" rather than resolving to a cik with no rows behind it.
 
     Capped at three: the caller only needs to tell "none" from "one" from
     "several", and an unhinted substring like "Inc" would otherwise drag back
     the whole table.
     """
+    for hint in (element.ticker, element.name, element.text):
+        if not hint:
+            continue
+        known = company_alias_index().lookup(hint)
+        if not known:
+            continue
+        rows = await session.execute(select(Company.cik).where(Company.cik.in_(known)).limit(3))
+        found = list(rows.scalars().all())
+        if found:
+            return found
+
     if element.ticker:
         where = Company.ticker == element.ticker.upper()
     elif element.name:
@@ -777,6 +869,15 @@ def _bind_per_company(
     covering alternative wins, so two periods agree iff the same alternative
     covers both.
 
+    Periods are **also** grouped by whether they need the Q4 subtraction, so
+    ``Binding.period_rule`` describes every period the binding carries rather
+    than only some of them. It used to be set whenever *any* period in the
+    group was a Q4: "revenue by quarter for three years" produced one binding
+    over twelve quarters flagged ``residual``, and an emitter that believed it
+    would have subtracted the nine-month year-to-date from all twelve. The
+    per-period truth was recoverable from ``filters.periods[].residual_of``,
+    but a field that is wrong for three quarters in four is a trap, not a hint.
+
     Ambiguity is reported **once per element**, not once per company. The
     candidates differ per filer -- each keeps whichever concepts its own facts
     cover -- but the question they raise is the same one question, and asking
@@ -795,7 +896,11 @@ def _bind_per_company(
         if not in_scope:
             continue
 
-        groups: dict[tuple[int, ...], list[ResolvedPeriod]] = {}
+        # Keyed on (concepts, needs the Q4 subtraction). The concept-only view
+        # beside it is what the switch notes read, so splitting a series into
+        # its direct and residual halves is not mistaken for a tag change.
+        groups: dict[tuple[tuple[int, ...], bool], list[ResolvedPeriod]] = {}
+        concept_groups: dict[tuple[int, ...], list[ResolvedPeriod]] = {}
         chosen_by_key: dict[tuple[int, ...], list[_Candidate]] = {}
         uncovered: list[ResolvedPeriod] = []
         tied: list[_Candidate] = []
@@ -833,9 +938,17 @@ def _bind_per_company(
                 uncovered.append(period)
                 continue
 
-            key = tuple(c.concept_id for c in chosen)
-            groups.setdefault(key, []).append(period)
-            chosen_by_key[key] = chosen
+            concepts_key = tuple(c.concept_id for c in chosen)
+            # An instant needs no subtraction even at Q4 -- the fiscal-year-end
+            # balance already is the Q4-end balance -- so the lead operand's
+            # kind decides, not the period alone.
+            is_residual = (
+                period.residual_of is not None
+                and not evidence[(cik, chosen[0].concept_id)].is_instant
+            )
+            groups.setdefault((concepts_key, is_residual), []).append(period)
+            concept_groups.setdefault(concepts_key, []).append(period)
+            chosen_by_key[concepts_key] = chosen
 
         if weak is not None:
             weak_ciks.append(cik)
@@ -863,7 +976,7 @@ def _bind_per_company(
             )
             continue
 
-        shared_notes = _switch_notes(groups, chosen_by_key, cik=cik, evidence=evidence)
+        shared_notes = _switch_notes(concept_groups, chosen_by_key, cik=cik, evidence=evidence)
         if uncovered:
             missing = ", ".join(f"FY{p.fiscal_year} {p.fiscal_period}" for p in uncovered)
             shared_notes.append(
@@ -874,14 +987,17 @@ def _bind_per_company(
                 )
             )
 
-        for key, covered in groups.items():
-            chosen = chosen_by_key[key]
+        for (concepts_key, residual), covered in groups.items():
+            chosen = chosen_by_key[concepts_key]
             violation = _sign_violation(chosen, signs, cik=cik, periods=covered, evidence=evidence)
             if violation is not None:
                 problems.append(Unresolved(element_id=element.id, reason=violation))
                 continue
+            unit, mismatch = _binding_unit(chosen, expression, cik=cik, evidence=evidence)
+            if unit is None:
+                problems.append(Unresolved(element_id=element.id, reason=mismatch))
+                continue
             lead = evidence[(cik, chosen[0].concept_id)]
-            residual = not lead.is_instant and any(p.residual_of for p in covered)
             years = [p.fiscal_year for p in covered]
             span = f"FY{min(years)}-FY{max(years)}"
 
@@ -904,7 +1020,7 @@ def _bind_per_company(
                     ],
                     concepts=[c.as_ref() for c in chosen],
                     expression=expression,
-                    unit=lead.unit,
+                    unit=unit,
                     is_instant=lead.is_instant,
                     period_rule="residual" if residual else "direct",
                     coverage=_coverage_for(lead, covered, residual=residual),
@@ -947,6 +1063,47 @@ def _bind_per_company(
                 ],
             )
         )
+
+
+def _binding_unit(
+    chosen: list[_Candidate],
+    expression: str,
+    *,
+    cik: int,
+    evidence: dict[tuple[int, int], _Evidence],
+) -> tuple[str | None, str]:
+    """The unit of the binding's *result*, or ``(None, reason)`` to refuse.
+
+    A single-operand binding reports its fact's unit, which is what every
+    stored value already is. Arithmetic is where this used to go wrong:
+    ``gross_margin`` is ``c0 / c1`` over two USD concepts and the result is
+    dimensionless, but the lead operand's unit was copied through, so the plan
+    said a ratio of 0.46 was "USD" (PITFALLS §2.1). Anything formatting that
+    would render 46 cents.
+
+    Deliberately not a unit algebra -- one rule, matching what the alias file
+    actually contains: every expression here divides like-for-like or adds
+    like-for-like. A division of equal units gives ``"pure"``, which is XBRL's
+    own name for a dimensionless quantity and already appears in the store on
+    concepts like ``EffectiveIncomeTaxRateContinuingOperations``.
+
+    Operands in *different* units are refused rather than guessed at. No entry
+    does that today; the guard is here so that one written later (a per-share
+    figure, say, dividing USD by shares) fails loudly instead of inheriting a
+    unit that describes only its numerator.
+    """
+    units = [evidence[(cik, candidate.concept_id)].unit for candidate in chosen]
+    if len(units) == 1:
+        return units[0], ""
+
+    distinct = set(units)
+    if len(distinct) > 1:
+        return None, (
+            f"{expression!r} combines operands filed in different units "
+            f"({', '.join(sorted(distinct))}) for cik {cik}; the result's unit is not "
+            "one of them, so no binding was made"
+        )
+    return ("pure" if "/" in expression else units[0]), ""
 
 
 def _named_ciks(ciks: list[int], limit: int = 4) -> str:

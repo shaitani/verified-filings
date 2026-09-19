@@ -362,20 +362,49 @@ async def test_multi_slot_alias_binds_every_operand(
     assert [c.name for c in binding.concepts] == ["ZzzTestNetLoss", "ZzzTestRevenues"]
 
 
-async def test_metric_without_a_company_cannot_be_verified(
+async def test_naming_no_company_means_every_loaded_filer(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:
-    """Coverage is checked per company, so a metric with nothing to check it
-    against is reported rather than bound on faith."""
+    """"Rank all twenty companies" carries no company element, because the
+    population is the answer rather than something to name. That used to
+    resolve to an empty cik list and be refused as "no company in scope"."""
     await load_file(FIXTURE_PATH, session_factory=test_session_factory)
 
     plan = await map_query(
-        _query({"id": "m", "text": "widget sales", "kind": "metric"}),
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
         session_factory=test_session_factory,
     )
 
+    assert plan.filters.ciks == [FAKE_CIK]
+    assert [b.company_cik for b in plan.bindings] == [FAKE_CIK]
+    assert plan.is_complete
+
+
+async def test_a_company_that_failed_to_resolve_does_not_widen_the_scope(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The distinction that makes the expansion safe. "Apple versus Samsung"
+    names two companies and resolves one; it must stay a half-answer, and must
+    never quietly become every filer in the store."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c", "text": "Nonexistent Corp", "kind": "company"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.filters.ciks == []
     assert plan.bindings == []
-    assert "no company in scope" in plan.unresolved[0].reason
+    reasons = " ".join(u.reason for u in plan.unresolved)
+    assert "no loaded company" in reasons
+    assert "no company in scope" in reasons
 
 
 async def test_unaliased_term_makes_no_embedding_call_without_a_corpus(
@@ -594,9 +623,14 @@ def test_single_company_is_never_flagged() -> None:
 async def test_company_group_reports_that_sic_data_is_missing(
     test_session_factory, clean_fake_company
 ) -> None:
-    """Nothing populates the SIC columns yet. An empty result would read as
-    "no company is in that sector", which is a different and wrong answer, so
-    the absence of the data has to be stated."""
+    """An empty result would read as "no company is in that sector", which is a
+    different and wrong answer, so the absence of the data has to be stated.
+
+    The fixture company has no SIC values, which is the case this exercises.
+    The reason names the column and says what to do about it, because the
+    three sector columns fail for different reasons: `sic_code` and
+    `sic_description` are simply not loaded yet, while `sic_office` has no
+    source at all (see `test_sic_office_says_it_has_no_source`)."""
     await load_file(FIXTURE_PATH, session_factory=test_session_factory)
 
     plan = await map_query(
@@ -612,7 +646,37 @@ async def test_company_group_reports_that_sic_data_is_missing(
     )
 
     assert plan.filters.ciks == []
-    assert "SIC data has not been loaded" in plan.unresolved[0].reason
+    reason = plan.unresolved[0].reason
+    assert "sic_description" in reason
+    assert "not populated for any filer" in reason
+    assert "Run the load step" in reason
+
+
+async def test_sic_office_says_it_has_no_source(
+    test_session_factory, clean_fake_company
+) -> None:
+    """Not the same failure as an unloaded column, and the message must not
+    imply it is. `sic_office` has no source anywhere in this project -- the
+    SEC assigns review offices by SIC *range* and nothing here carries that
+    mapping -- so "run the load step" would send someone after data that does
+    not exist."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {
+                "id": "g",
+                "text": "office of technology",
+                "kind": "company_group",
+                "sic_office": "Office of Technology",
+            }
+        ),
+        session_factory=test_session_factory,
+    )
+
+    reason = plan.unresolved[0].reason
+    assert "No source for this exists" in reason
+    assert "Run the load step" not in reason
 
 
 async def test_company_group_resolves_once_sic_data_exists(
@@ -828,6 +892,160 @@ async def test_a_distant_match_is_refused_rather_than_offered(
     assert problem.element_id == "m"
     assert "plausibly measures" in problem.reason
     assert "0.60" in problem.reason
+
+
+def _fy2024(cik: int, fiscal_period: str) -> ResolvedPeriod:
+    """One period of a calendar-year filer, Q4 carrying its residual windows."""
+    if fiscal_period == "Q4":
+        return ResolvedPeriod(
+            company_cik=cik,
+            fiscal_year=2024,
+            fiscal_period="Q4",
+            period_start=date(2024, 10, 1),
+            period_end=date(2024, 12, 31),
+            residual_of=PeriodResidual(
+                shared_start=date(2024, 1, 1),
+                whole_end=date(2024, 12, 31),
+                subtract_end=date(2024, 9, 30),
+            ),
+        )
+    return ResolvedPeriod(
+        company_cik=cik,
+        fiscal_year=2024,
+        fiscal_period=fiscal_period,
+        period_start=date(2024, 7, 1),
+        period_end=date(2024, 9, 30),
+    )
+
+
+def test_residual_periods_split_into_their_own_binding() -> None:
+    """`period_rule` has to describe every period the binding carries.
+
+    It used to be set whenever *any* period in the group was a Q4, so "revenue
+    by quarter" came back as one binding over twelve quarters flagged
+    `residual` -- and an emitter that believed it would have subtracted the
+    nine-month year-to-date from all twelve. Splitting the group is what makes
+    the flag true rather than merely recoverable from `filters.periods`.
+    """
+    concept = query_mapper._Candidate(
+        concept_id=1, taxonomy="us-gaap", name="Revenues", score=1.0
+    )
+    periods = [_fy2024(11, "Q3"), _fy2024(11, "Q4")]
+    evidence = {
+        (11, 1): query_mapper._Evidence(
+            is_instant=False,
+            unit="USD",
+            values={
+                (date(2024, 7, 1), date(2024, 9, 30)): Decimal("25"),
+                (date(2024, 1, 1), date(2024, 9, 30)): Decimal("75"),
+                (date(2024, 1, 1), date(2024, 12, 31)): Decimal("100"),
+            },
+        )
+    }
+
+    bindings: list[Binding] = []
+    query_mapper._bind_per_company(
+        MetricElementIn(id="m", text="revenue"),
+        slots=[[concept]],
+        signs=["signed"],
+        expression="c0",
+        resolved_by="alias",
+        source="curated alias 'revenue'",
+        ciks=[11],
+        periods=periods,
+        evidence=evidence,
+        bindings=bindings,
+        ambiguous=[],
+        problems=[],
+    )
+
+    by_rule = {b.period_rule: b for b in bindings}
+    assert set(by_rule) == {"direct", "residual"}, "one flag cannot describe both"
+    assert [(p.fiscal_year, p.fiscal_period) for p in by_rule["direct"].periods] == [(2024, "Q3")]
+    assert [(p.fiscal_year, p.fiscal_period) for p in by_rule["residual"].periods] == [
+        (2024, "Q4")
+    ]
+    # The residual binding proves both of its component windows; the direct
+    # one has no components because it subtracts nothing.
+    assert len(by_rule["residual"].coverage.components) == 2
+    assert by_rule["direct"].coverage.components == []
+
+
+def test_a_ratio_is_dimensionless_not_the_numerator_s_unit() -> None:
+    """`gross_margin` is USD over USD and the answer is a ratio. Reporting the
+    lead operand's unit said 0.46 was "USD", which anything formatting values
+    would render as 46 cents (PITFALLS 2.1)."""
+    numerator = query_mapper._Candidate(
+        concept_id=1, taxonomy="us-gaap", name="GrossProfit", score=1.0
+    )
+    denominator = query_mapper._Candidate(
+        concept_id=2, taxonomy="us-gaap", name="Revenues", score=1.0
+    )
+    window = (date(2024, 7, 1), date(2024, 9, 30))
+    usd = query_mapper._Evidence(is_instant=False, unit="USD", values={window: Decimal("1")})
+    evidence = {(11, 1): usd, (11, 2): usd}
+
+    for expression, expected in (("c0 / c1", "pure"), ("c0 - c1", "USD")):
+        bindings: list[Binding] = []
+        query_mapper._bind_per_company(
+            MetricElementIn(id="m", text="gross margin"),
+            slots=[[numerator], [denominator]],
+            signs=["signed", "signed"],
+            expression=expression,
+            resolved_by="alias",
+            source="curated alias",
+            ciks=[11],
+            periods=[_fy2024(11, "Q3")],
+            evidence=evidence,
+            bindings=bindings,
+            ambiguous=[],
+            problems=[],
+        )
+        (binding,) = bindings
+        assert binding.unit == expected, expression
+
+
+def test_operands_in_different_units_are_refused() -> None:
+    """No shipped entry does this. The guard is so that one written later --
+    dividing USD by a share count, say -- fails loudly rather than inheriting
+    a unit that describes only its numerator."""
+    dollars = query_mapper._Candidate(
+        concept_id=1, taxonomy="us-gaap", name="NetIncomeLoss", score=1.0
+    )
+    shares = query_mapper._Candidate(
+        concept_id=2, taxonomy="us-gaap", name="CommonStockSharesOutstanding", score=1.0
+    )
+    window = (date(2024, 7, 1), date(2024, 9, 30))
+    evidence = {
+        (11, 1): query_mapper._Evidence(
+            is_instant=False, unit="USD", values={window: Decimal("1")}
+        ),
+        (11, 2): query_mapper._Evidence(
+            is_instant=False, unit="shares", values={window: Decimal("1")}
+        ),
+    }
+
+    bindings: list[Binding] = []
+    problems: list[Unresolved] = []
+    query_mapper._bind_per_company(
+        MetricElementIn(id="m", text="earnings per share"),
+        slots=[[dollars], [shares]],
+        signs=["signed", "signed"],
+        expression="c0 / c1",
+        resolved_by="alias",
+        source="curated alias",
+        ciks=[11],
+        periods=[_fy2024(11, "Q3")],
+        evidence=evidence,
+        bindings=bindings,
+        ambiguous=[],
+        problems=problems,
+    )
+
+    assert bindings == []
+    (problem,) = problems
+    assert "different units" in problem.reason
+    assert "USD" in problem.reason and "shares" in problem.reason
 
 
 def test_a_narrower_fallback_discloses_what_it_leaves_out() -> None:

@@ -288,13 +288,20 @@ something needs to *evaluate* it. A `model_validator` keeps it honest: every
 
 `Ambiguity.candidates` is `ConceptRef`-shaped, because concept ambiguity is the
 dominant case and the one the curated alias layer exists to settle. A company
-element matching several filers therefore reports through `Unresolved` with a
-reason naming the colliding ciks, which reads worse than it should.
+element matching several filers therefore reports through `Unresolved`.
 
 Accepted deliberately rather than generalising `Ambiguity` over element kinds:
 the generalisation costs a layer of indirection on every binding to serve a
 case that has not been hit yet. Revisit if company collisions turn out to be
 common in practice.
+
+What that left behind was a *message* problem rather than a schema one, and
+that part is fixed: the reason used to read "matches more than one company
+(ciks: 1652044, 320193, 1326801)", which asks a person to choose between three
+integers. It now names them — "Apple Inc. (AAPL), ADVANCED MICRO DEVICES INC
+(AMD), AMAZON COM INC (AMZN). Name one of them." The channel is still
+`Unresolved`; only the sentence changed, which is the whole point of having
+made `reason` free text.
 
 ### 8.6 `coverage` is evidence, and it outranks similarity
 

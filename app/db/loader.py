@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.db import ALLOWED_UNITS, Company, Concept, Fact, Filing, LoadRun
 from app.db.session import SessionLocal
 from app.ingest.corpus import UnknownCompanyError, find_company
+from app.ingest.sic_index import sic_by_cik
 from app.ingest.xbrl_store import store_path
 from app.schemas.xbrl import CompanyFactsFile
 
@@ -154,25 +155,27 @@ async def load_file(
     doc = CompanyFactsFile.model_validate(raw)
     plan = build_plan(doc)
 
+    # Sector columns come from a different source than the facts do -- the
+    # submissions endpoint, cached into sic_numbers.json by the ingest step --
+    # so they are merged in here rather than read off `doc`. A company with no
+    # row in that index keeps whatever it already had: absent data must not
+    # overwrite present data on a reload.
+    sector = sic_by_cik().get(plan.company.cik)
+    columns = {
+        "ticker": plan.company.ticker,
+        "entity_name": plan.company.entity_name,
+        "source_url": plan.company.source_url,
+    }
+    if sector is not None:
+        columns["sic_code"], columns["sic_description"] = sector
+
     async with session_factory.begin() as session:
         # Company: upsert so `id` (the inert identity column) stays stable
         # across reloads, rather than churning on every re-run.
         await session.execute(
             pg_insert(Company)
-            .values(
-                cik=plan.company.cik,
-                ticker=plan.company.ticker,
-                entity_name=plan.company.entity_name,
-                source_url=plan.company.source_url,
-            )
-            .on_conflict_do_update(
-                index_elements=[Company.cik],
-                set_={
-                    "ticker": plan.company.ticker,
-                    "entity_name": plan.company.entity_name,
-                    "source_url": plan.company.source_url,
-                },
-            )
+            .values(cik=plan.company.cik, **columns)
+            .on_conflict_do_update(index_elements=[Company.cik], set_=columns)
         )
 
         # Wipe this company's Filing rows -- Fact cascades away with them

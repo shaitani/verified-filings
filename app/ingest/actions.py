@@ -14,10 +14,11 @@ the action shares that one client, naturally covers the whole batch (e.g.
 identifier. Following this convention is what gets a new action that
 reporting for free, with no extra wiring per action.
 
-Side effect: `get_submissions()` refreshes `sic_numbers.json` (via
-`sic_index.update_sic_index()`) as its last step, so that derived index
-always covers exactly the companies fetched so far. Pass
-`refresh_sic_index=False` to suppress it. Likewise `get_xbrl_data()` writes
+Side effect: `get_submissions()` refreshes two derived indexes as its last
+step -- `sic_numbers.json` (via `sic_index.update_sic_index()`) and
+`company_aliases.json` (via `alias_index.update_alias_index()`) -- so both
+always cover exactly the companies fetched so far. Pass
+`refresh_sic_index=False` to suppress both. Likewise `get_xbrl_data()` writes
 the curated per-company store under `data/xbrl/` (via `xbrl_store.write_store()`)
 as it goes; pass `write_store=False` to compute the manifest without writing.
 """
@@ -28,6 +29,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from app.ingest import xbrl_store
+from app.ingest.alias_index import update_alias_index
 from app.ingest.corpus import UnknownCompanyError, find_company
 from app.ingest.sec_client import SECClient
 from app.ingest.sic_index import update_sic_index
@@ -63,8 +65,9 @@ async def get_submissions(
     rate limiter, cache, and request/cache-hit counters.
 
     As a final step (unless `refresh_sic_index=False`), the just-fetched
-    companies' rows in `sic_numbers.json` are refreshed from their
-    submissions JSON -- see `sic_index.update_sic_index()`.
+    companies' rows in `sic_numbers.json` and `company_aliases.json` are
+    refreshed from their submissions JSON -- see
+    `sic_index.update_sic_index()` and `alias_index.update_alias_index()`.
     """
     companies = []
     unresolved = []
@@ -94,6 +97,7 @@ async def get_submissions(
 
     if refresh_sic_index:
         update_sic_index(results)
+        update_alias_index(results)
     return results
 
 

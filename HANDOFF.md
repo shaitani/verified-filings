@@ -70,7 +70,9 @@ numbered decisions with their reasoning) and
 
 ### The three resolvers, in order
 
-1. **Companies** — deterministic lookup on ticker / entity name.
+1. **Companies** — deterministic lookup: the derived lexicon
+   (`company_aliases.json`, §5.6) first, then ticker / entity name. Naming
+   no company at all means every loaded filer.
 2. **Periods** — into concrete date windows *per company*. Never fiscal-year
    integers; `Filing.fiscal_year` is provenance, not the period a number
    describes (PITFALLS §1.1 — this one silently returned FY2022 revenue for a
@@ -194,35 +196,66 @@ would have to decide.
 Deterministic for retrieval, Qwen above it. Sequencing 5.1–5.4 first makes this
 mostly mechanical.
 
-### 5.6 The query-object producer — not started
+### 5.6 The query-object producer — not started, but two of its burdens lifted
 
 Something has to turn a question into a `QueryIn`. Deliberately left outside
 this project so far. Note that "how much money was made" is *metric-ambiguous*
 (revenue? net income?) — a different ambiguity from the concept-level one the
 mapper handles, and it belongs to this layer.
 
-### 5.7 Company grouping — SCHEMA BUILT, DATA MISSING
+Two things the mapper used to demand of it, and no longer does:
+
+**A ticker for every company.** The mapper now reads
+`company_aliases.json`, a lexicon derived from SEC data by
+`app/ingest/alias_index.py` and refreshed on every `get-submission`. All 26
+probe names now resolve; before it, name-only lookup missed Google, Facebook,
+Bank of America, AMD, Johnson and Johnson and United Health. Share classes
+work too — "GOOG" is Alphabet although the stored ticker is GOOGL.
+
+The names come from `corpus_companies.json` (the SEC's `company_tickers.json`:
+`title`, `input_name`, `all_tickers`) and the submissions endpoint (`name`,
+`tickers`, **`formerNames`** with dates — Meta was `Facebook Inc`, Chevron was
+`CHEVRONTEXACO CORP`). Short forms and "and"/"&" spellings are derived.
+
+**Historical tickers are not obtainable and the file says so.** Both SEC feeds
+give only the *current* symbol, so a question using a retired one (FB rather
+than META) will not resolve. The in-house source would be `dei:TradingSymbol`
+from each cover page — but the XBRL data endpoint returns only numeric facts
+and that is a string, so it is absent from the store entirely (three `dei`
+concepts are loaded, all numeric). This never threatens correctness, because
+**the cik never changes**: a missing alias costs a refusal, never a wrong
+company.
+
+**Enumerating "all companies".** A question with no company element now means
+every loaded filer rather than being refused as "no company in scope". The
+distinction that makes it safe: an *absent* element widens, a *failed* one
+does not — "Apple versus Samsung" stays a half-answer and must never quietly
+become the whole corpus. Both are pinned by tests.
+
+### 5.7 Company grouping — DONE for sector, still blocked for office
 
 From q049/q050 ("which companies in a given sector / by SIC office performed
-best"). The query path is **complete**; only the data is absent.
+best"). **q049 now answers**: "which companies in semiconductors" resolves to
+AMD, INTC, MU and NVDA and comes back complete.
 
-Built: `CompanyGroupElementIn` (`sic_code` / `sic_description` / `sic_office`),
-`Company.sic_code` / `sic_description` / `sic_office` (migration
-`3011d3c40ff8`, applied to both databases), and `_resolve_company_groups`.
-Named companies and group members merge without duplicates.
+`app/db/loader.py` merges `sic_code` and `sic_description` into the `Company`
+upsert from `sic_index.sic_by_cik()`. All 20 filers are populated across 14
+SIC codes. Two decisions worth keeping:
 
-**The one remaining step is loading the data.** `sic_numbers.json` already
-carries `sic` and `sic_description` per company (`app/ingest/sic_index.py`);
-nothing writes them into the `company` table. Until then the mapper reports
-*"SIC data has not been loaded into the database yet"* rather than an empty
-set — an empty set would read as "no company is in that sector", a different
-and wrong answer. A test populates one column and re-resolves, proving the
-path works the moment the data lands with no code change.
+- **Keyed on cik, not ticker**, although `sic_numbers.json` carries both. A
+  cik is permanent and a ticker is not (see §6.1 below) — matching on ticker
+  would silently drop a company the day it re-symboled. The loader does not
+  copy the ticker either; the XBRL data file already fills that column.
+- **Absent data never overwrites present data.** A company with no row in the
+  index keeps its existing sector, so a reload against a missing or half-built
+  index cannot null out what is already there. A test pins it.
 
-`sic_office` has **no source at all**. `sic_numbers.json` carries code and
-description only; the SEC assigns review offices by SIC *range*, so it is
-derivable given that mapping, which this project does not have. The column
-exists so the query path is complete; populating it is a separate decision.
+`sic_office` still has **no source at all**. `sic_numbers.json` carries code
+and description only; the SEC assigns review offices by SIC *range*, so it is
+derivable given that mapping, which this project does not have. The refusal
+now says exactly that rather than "SIC data has not been loaded", which would
+send someone after data that does not exist — the three sector columns fail
+for two different reasons and the message distinguishes them.
 
 ### 5.8 Alias curation — the 13 gaps are closed
 
@@ -296,13 +329,19 @@ and is the worst of the three.
   today. Whether anything knows that "balance sheet totals" means a particular
   list belongs to the *producer*. Briefly designed as a "bundle" concept before
   being recognised as nothing new — see DESIGN.md §8.20. Do not re-invent it.
-- `Binding.unit` is wrong on a derived metric — `gross_margin` reports "USD"
-  when the result is dimensionless (PITFALLS §2.1). Fix before anything renders
-  values.
 - Restatements are picked correctly by `is_latest` but never *disclosed*
   (PITFALLS §2.2). The `Note` channel exists and would carry it.
 - A derived *and* residual binding reports only the lead operand's components.
   The coverage check is complete; the reported `components` under-describes it.
+
+Two that were here are now fixed, both of which would have made the emitter
+return confident wrong numbers:
+
+- `Binding.unit` on a derived metric reported the lead operand's unit, so a
+  ratio came back as "USD" (PITFALLS §2.1).
+- `Binding.period_rule` was `residual` whenever *any* period in the group was
+  a Q4, so a twelve-quarter binding claimed all twelve needed the subtraction.
+  Residual periods now get their own binding.
 
 ### Explicitly deferred by the user
 
@@ -328,7 +367,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (205 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (224 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 7. Verifying things yourself

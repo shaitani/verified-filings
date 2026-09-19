@@ -264,15 +264,23 @@ attaching it to one of its sides would be arbitrary.
 
 ## 2. Partially handled — know the edges
 
-### 2.1 `unit` on a derived binding
+### 2.1 `unit` on a derived binding — FIXED 2026-09-19
 
-`Binding.unit` is read from the first operand. For `expression: "c0"` that is
-exact; for `gross_margin` (`c0 / c1`) the result is dimensionless and "USD"
-describes the operands, not the answer.
+`Binding.unit` used to be read from the first operand. For `expression: "c0"`
+that is exact; for `gross_margin` (`c0 / c1`) the result is dimensionless and
+"USD" described the operands, not the answer, so a display layer would have
+rendered "0.46 USD" — 46 cents.
 
-**Gap:** a display layer formatting these would render "0.46 USD". Needs either
-a unit algebra or an explicit "derived/dimensionless" marker before anything
-renders values.
+**Fixed** without inventing a unit algebra, because the alias file only ever
+divides like-for-like or adds like-for-like: a division of equal units reports
+`"pure"`, XBRL's own name for a dimensionless quantity (and already in the
+store on `EffectiveIncomeTaxRateContinuingOperations`); everything else reports
+the shared operand unit. Operands in *different* units are refused rather than
+guessed at — no entry does that today, so the guard exists to make one written
+later fail loudly.
+
+Measured across the eval set: 30 `c0 / c1` bindings and one `(c0 - c1) / c2`
+report `pure`, the one `c0 - c1` binding reports `USD`.
 
 ### 2.2 Restatement disclosure
 

@@ -139,14 +139,24 @@ concept with no facts for the requested windows loses to a later alternative
 that has them. Two entries in the file exist purely to make that testable
 against the fixture (`tests/fixtures/metric_aliases_fake.yaml`).
 
-## 6. Known rough edge: `unit` on a derived binding
+## 6. `unit` on a derived binding
 
-`Binding.unit` is read from the first operand's facts. For `expression: "c0"`
-that is exactly right; for `gross_margin` (`c0 / c1`) the result is
-dimensionless and "USD" describes the operands, not the answer. Left as is
-rather than inventing a unit algebra: `expression` is right there for a
-consumer to notice, and a real unit system should wait until something needs
-one. Worth fixing before any display layer formats these values.
+`Binding.unit` is the unit of the *result*, not of the lead operand. It used to
+be the latter, so `gross_margin` (`c0 / c1` over two USD concepts) reported
+"USD" for a ratio and anything formatting it would have shown 46 cents.
+
+Still not a unit algebra. One rule, matching what the file actually contains —
+every expression here divides like-for-like or adds like-for-like:
+
+- one operand → the fact's own unit
+- several operands, same unit, expression divides → `"pure"`
+- several operands, same unit, no division → that unit
+- several operands, **different** units → refuse
+
+The last case is a guard, not a behaviour: no entry does it. It is there so
+that a future entry dividing USD by a share count fails loudly instead of
+inheriting a unit that describes only its numerator. `"pure"` is XBRL's own
+name for a dimensionless quantity and already appears in the store.
 
 ## 7. What the resolver deliberately does not do
 

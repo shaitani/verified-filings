@@ -1,0 +1,313 @@
+[
+  {
+    "cik": "CIK0001652044",
+    "ticker": "GOOGL",
+    "names": [
+      "Alphabet Inc.",
+      "Alphabet",
+      "Google"
+    ],
+    "tickers": [
+      "GOOGL",
+      "GOOG",
+      "GOOGM",
+      "GOOGN"
+    ]
+  },
+  {
+    "cik": "CIK0000320193",
+    "ticker": "AAPL",
+    "names": [
+      "Apple Inc.",
+      "Apple"
+    ],
+    "tickers": [
+      "AAPL"
+    ]
+  },
+  {
+    "cik": "CIK0001326801",
+    "ticker": "META",
+    "names": [
+      "Meta Platforms, Inc.",
+      "Meta Platforms",
+      "Facebook",
+      "Facebook Inc"
+    ],
+    "tickers": [
+      "META"
+    ]
+  },
+  {
+    "cik": "CIK0000789019",
+    "ticker": "MSFT",
+    "names": [
+      "MICROSOFT CORP",
+      "MICROSOFT",
+      "Microsoft"
+    ],
+    "tickers": [
+      "MSFT"
+    ]
+  },
+  {
+    "cik": "CIK0001045810",
+    "ticker": "NVDA",
+    "names": [
+      "NVIDIA CORP",
+      "NVIDIA",
+      "Nvidia"
+    ],
+    "tickers": [
+      "NVDA"
+    ]
+  },
+  {
+    "cik": "CIK0001318605",
+    "ticker": "TSLA",
+    "names": [
+      "Tesla, Inc.",
+      "Tesla",
+      "TESLA MOTORS INC",
+      "TESLA MOTORS"
+    ],
+    "tickers": [
+      "TSLA"
+    ]
+  },
+  {
+    "cik": "CIK0001018724",
+    "ticker": "AMZN",
+    "names": [
+      "AMAZON COM INC",
+      "AMAZON COM",
+      "Amazon"
+    ],
+    "tickers": [
+      "AMZN"
+    ]
+  },
+  {
+    "cik": "CIK0001283699",
+    "ticker": "TMUS",
+    "names": [
+      "T-Mobile US, Inc.",
+      "T Mobile US",
+      "T-Mobile",
+      "T Mobile",
+      "METROPCS COMMUNICATIONS INC",
+      "METROPCS COMMUNICATIONS"
+    ],
+    "tickers": [
+      "TMUS",
+      "TMUSI",
+      "TMUSL",
+      "TMUSZ"
+    ]
+  },
+  {
+    "cik": "CIK0000723125",
+    "ticker": "MU",
+    "names": [
+      "MICRON TECHNOLOGY INC",
+      "MICRON TECHNOLOGY",
+      "Micron"
+    ],
+    "tickers": [
+      "MU"
+    ]
+  },
+  {
+    "cik": "CIK0000002488",
+    "ticker": "AMD",
+    "names": [
+      "ADVANCED MICRO DEVICES INC",
+      "ADVANCED MICRO DEVICES",
+      "AMD"
+    ],
+    "tickers": [
+      "AMD"
+    ]
+  },
+  {
+    "cik": "CIK0000050863",
+    "ticker": "INTC",
+    "names": [
+      "INTEL CORP",
+      "INTEL",
+      "Intel"
+    ],
+    "tickers": [
+      "INTC"
+    ]
+  },
+  {
+    "cik": "CIK0000804328",
+    "ticker": "QCOM",
+    "names": [
+      "QUALCOMM INC",
+      "QUALCOMM",
+      "QUALCOMM Inc (QCOM)",
+      "QUALCOMM Inc QCOM"
+    ],
+    "tickers": [
+      "QCOM"
+    ]
+  },
+  {
+    "cik": "CIK0001122904",
+    "ticker": "NTGR",
+    "names": [
+      "NETGEAR, INC.",
+      "NETGEAR",
+      "Netgear",
+      "NETGEAR, INC",
+      "NETGEAR INC"
+    ],
+    "tickers": [
+      "NTGR"
+    ]
+  },
+  {
+    "cik": "CIK0001341439",
+    "ticker": "ORCL",
+    "names": [
+      "ORACLE CORP",
+      "ORACLE",
+      "Oracle",
+      "Ozark Holding Inc.",
+      "Ozark"
+    ],
+    "tickers": [
+      "ORCL",
+      "ORCL-PD"
+    ]
+  },
+  {
+    "cik": "CIK0000070858",
+    "ticker": "BAC",
+    "names": [
+      "BANK OF AMERICA CORP",
+      "BANK OF AMERICA",
+      "Bank Of America",
+      "BANKAMERICA CORP",
+      "BANKAMERICA",
+      "NATIONSBANK CORP",
+      "NATIONSBANK"
+    ],
+    "tickers": [
+      "BAC",
+      "BACRP",
+      "BML-PG",
+      "BML-PL",
+      "BAC-PB",
+      "BAC-PK",
+      "BAC-PE",
+      "BAC-PL",
+      "BAC-PM",
+      "BAC-PN",
+      "BAC-PO",
+      "BAC-PP",
+      "BAC-PQ",
+      "BAC-PS",
+      "BML-PH",
+      "BML-PJ",
+      "MER-PK"
+    ]
+  },
+  {
+    "cik": "CIK0000093410",
+    "ticker": "CVX",
+    "names": [
+      "CHEVRON CORP",
+      "CHEVRON",
+      "Chevron Corp (CVX)",
+      "Chevron Corp CVX",
+      "CHEVRONTEXACO CORP",
+      "CHEVRONTEXACO"
+    ],
+    "tickers": [
+      "CVX"
+    ]
+  },
+  {
+    "cik": "CIK0000200406",
+    "ticker": "JNJ",
+    "names": [
+      "JOHNSON & JOHNSON",
+      "JOHNSON and JOHNSON",
+      "JOHNSON JOHNSON",
+      "Johnson & Johnson",
+      "Johnson and Johnson",
+      "Johnson Johnson",
+      "JOHNSON & JOHNSON ET AL",
+      "JOHNSON and JOHNSON ET AL",
+      "JOHNSON JOHNSON ET AL"
+    ],
+    "tickers": [
+      "JNJ"
+    ]
+  },
+  {
+    "cik": "CIK0000909832",
+    "ticker": "COST",
+    "names": [
+      "COSTCO WHOLESALE CORP W",
+      "Costco",
+      "COSTCO COMPANIES INC",
+      "COSTCO COMPANIES",
+      "PRICE STCO INC",
+      "PRICE STCO"
+    ],
+    "tickers": [
+      "COST"
+    ]
+  },
+  {
+    "cik": "CIK0000019617",
+    "ticker": "JPM",
+    "names": [
+      "JPMORGAN CHASE & CO",
+      "JPMORGAN CHASE and CO",
+      "JPMORGAN CHASE",
+      "JPMORGAN CHASE and",
+      "JPMorgan Chase & Co (JPM)",
+      "JPMorgan Chase and Co (JPM)",
+      "JPMorgan Chase Co JPM",
+      "JPMorgan Chase and Co JPM",
+      "J P MORGAN CHASE & CO",
+      "J P MORGAN CHASE and CO",
+      "J P MORGAN CHASE",
+      "J P MORGAN CHASE and",
+      "CHASE MANHATTAN CORP",
+      "CHASE MANHATTAN",
+      "CHEMICAL BANKING CORP",
+      "CHEMICAL BANKING"
+    ],
+    "tickers": [
+      "JPM",
+      "JPM-PC",
+      "AMJB",
+      "JPM-PD",
+      "JPM-PJ",
+      "JPM-PK",
+      "JPM-PL",
+      "JPM-PM",
+      "VYLD"
+    ]
+  },
+  {
+    "cik": "CIK0000731766",
+    "ticker": "UNH",
+    "names": [
+      "UNITEDHEALTH GROUP INC",
+      "UNITEDHEALTH",
+      "United Health",
+      "UNITED HEALTHCARE CORP",
+      "UNITED HEALTHCARE"
+    ],
+    "tickers": [
+      "UNH"
+    ]
+  }
+]

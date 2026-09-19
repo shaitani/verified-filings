@@ -101,3 +101,21 @@ def update_sic_index(
     )
     target.write_text(json.dumps(ordered, indent=2) + "\n", encoding="utf-8")
     return ordered
+
+
+def sic_by_cik(path: Path | None = None) -> dict[int, tuple[str, str]]:
+    """``cik -> (sic, sic_description)``, for the load step.
+
+    Keyed on **cik, not ticker**, although the file carries both. A cik is
+    permanent and a ticker is not -- Meta filed as FB, and the SEC's own feeds
+    only ever give the *current* symbol (see ``alias_index.py``). Matching on
+    ticker would silently drop a company the day it re-symboled, leaving its
+    sector columns null and the mapper reporting "SIC data has not been
+    loaded". The ticker stays in the file because a human reading it wants to
+    see one; nothing keys on it, and the load step does not copy it into
+    ``Company.ticker``, which the XBRL data file already fills.
+    """
+    return {
+        int(row["cik"].removeprefix("CIK")): (row["sic"], row["sic_description"])
+        for row in load_sic_index(path)
+    }
