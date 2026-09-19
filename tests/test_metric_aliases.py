@@ -1,4 +1,4 @@
-"""Tests for app/schemas/aliases.py and app/semantic/aliases.py.
+"""Tests for app/semantic/metric_aliases.py.
 
 Pure -- no database. Two jobs here: that the real curated file stays valid (it
 is edited by hand, so a typo should fail the suite rather than surface as a
@@ -14,10 +14,18 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from app.schemas.aliases import AliasFile, MetricAlias, split_concept_ref
-from app.semantic.aliases import ALIAS_FILE, AliasIndex, alias_index, load_aliases, normalize
+from app.semantic.metric_aliases import (
+    ALIAS_FILE,
+    AliasFile,
+    AliasIndex,
+    MetricAlias,
+    alias_index,
+    load_aliases,
+    normalize,
+    split_concept_ref,
+)
 
-FAKE_ALIASES = Path(__file__).parent / "fixtures" / "aliases_fake.yaml"
+FAKE_ALIASES = Path(__file__).parent / "fixtures" / "metric_aliases_fake.yaml"
 
 
 def _document(metrics: dict) -> dict:

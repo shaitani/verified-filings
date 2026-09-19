@@ -1,8 +1,8 @@
 # Curated business-term -> XBRL concept mappings: the accounting judgment the
 # embedding search cannot supply.
 #
-# Read by app/semantic/aliases.py, validated by app/schemas/aliases.py.
-# Rationale and the rules for editing: app/schemas/DESIGN.md section 9.
+# Read and validated by app/semantic/metric_aliases.py.
+# Rationale and the rules for editing: app/semantic/DESIGN.md.
 #
 # How an entry is used
 # --------------------

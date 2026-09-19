@@ -48,7 +48,7 @@ from app.schemas.query import (
     ResolvedPeriod,
     Unresolved,
 )
-from app.semantic.aliases import AliasHit, alias_index
+from app.semantic.metric_aliases import AliasHit, alias_index
 
 #: Day spans that identify a filing's *own* reporting window, separating it
 #: from the year-to-date and comparative durations filed alongside it.
@@ -359,7 +359,7 @@ async def _resolve_metrics(
 
     The cascade, in order:
 
-    1. curated alias lookup (``aliases.yaml``). A hit **skips step 2** -- a
+    1. curated alias lookup (``metric_aliases.yaml``). A hit **skips step 2** -- a
        curated entry is accounting judgment, and re-checking it against cosine
        distance could only add noise.
     2. embedding search, as a recall net for whatever the file does not cover

@@ -7,9 +7,8 @@ resolvers are checked against actually-loaded rows rather than mocks.
 Expected windows are derived from the fixture (`_fixture_windows`), never
 retyped as literals, so editing the fixture can't silently desync them.
 
-The metric resolver is a stub today; the test below pins the stub's *contract*
-(every metric element comes back unresolved, nothing raises) so that filling it
-in has to update a test rather than silently change behaviour.
+Metric tests patch in tests/fixtures/metric_aliases_fake.yaml so the resolver
+cascade runs against the fixture's own concepts rather than the real corpus.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ import pytest
 from app.db.loader import load_file
 from app.schemas.query import QueryIn
 from app.semantic import query_mapper
-from app.semantic.aliases import load_aliases
+from app.semantic.metric_aliases import load_aliases
 from app.semantic.query_mapper import map_query
 from tests.conftest import FAKE_CIK
 
@@ -242,14 +241,14 @@ async def test_q4_is_unresolved_without_a_q3_window(
 # Metrics -- the alias cascade, against the fixture's own concepts
 # --------------------------------------------------------------------------- #
 
-FAKE_ALIASES = Path(__file__).parent / "fixtures" / "aliases_fake.yaml"
+FAKE_ALIASES = Path(__file__).parent / "fixtures" / "metric_aliases_fake.yaml"
 
 
 @pytest.fixture
 def fake_aliases(monkeypatch):
     """Point the resolver at the fixture alias file.
 
-    Patched on ``query_mapper`` rather than on ``app.semantic.aliases`` because
+    Patched on ``query_mapper`` rather than on ``app.semantic.metric_aliases`` because
     the name is bound at import; ``alias_index`` is also lru_cached, and
     replacing it here keeps the real file's cache untouched for other tests.
     """
