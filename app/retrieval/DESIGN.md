@@ -19,10 +19,10 @@ list seen from two ends, and neither is coherent alone.
 
 **Built so far:** the view (`xbrl.reported_fact`, migration `3fcc714d6050`,
 applied to both databases), the grant narrowing (§6), the contract itself
-(`app/schemas/result.py`), and the binding lookup it needs
-(`QueryPlan.binding_for`). The four functions above are **not** written yet;
-§4's statement shape is verified by hand against the real database, not by
-code.
+(`app/schemas/result.py`), the binding lookup it needs
+(`QueryPlan.binding_for`), and **`validate()`** (`validator.py`).
+`build_prompt`, `generate` and `execute` are stubs with settled signatures;
+each module's docstring says what it owes.
 
 ---
 
@@ -371,17 +371,53 @@ Do the view and this together. Either alone is a fence with no posts.
 
 ---
 
-## 7. `validate()` still cannot be skipped
+## 7. `validate()` — built
 
-The role stops writes and DDL, but `statement_timeout` and
-`default_transaction_read_only` are `USERSET` — a statement beginning
-`SET statement_timeout = 0` shrugs them off, and only a string-level refusal
-stops that. PostgreSQL also has no per-role row cap, so the `LIMIT` lives here.
+The role stops writes and DDL, but two of the guards around it are not
+boundaries at all. `statement_timeout` and `default_transaction_read_only` are
+`USERSET`, and PostgreSQL has no per-role row cap. Those two controls can only
+live here, which is what makes this module load-bearing rather than
+defence-in-depth decoration.
 
-The contract adds one check to the list: the projected column names must be
-exactly `RESULT_COLUMNS` (`app/schemas/result.py`, derived from `ResultRow` so
-the two cannot drift). A statement that returns the right numbers under the
-wrong labels is not usable, and finding that out in `execute()` is late.
+**It parses with PostgreSQL's own grammar.** `pglast` wraps libpg_query, so
+there is no gap between how the validator reads a string and how the server
+that executes it will. A validator built on a reimplemented parser has such a
+gap, and the gap is the whole attack.
+
+What it enforces, conservatively — anything not positively understood is
+refused:
+
+1. The text parses, and is exactly one statement.
+2. **Every** statement node in the tree is a `SelectStmt`. Not "starts with
+   SELECT": `WITH d AS (DELETE FROM xbrl.fact RETURNING *) SELECT * FROM d`
+   starts with `WITH` and deletes rows, and a check on the top of the tree
+   passes it.
+3. No `SELECT ... INTO`, no locking clause.
+4. No denied function anywhere. **`set_config` is the one that matters** — it
+   is `SET` in an expression, so it reaches `statement_timeout` from inside an
+   otherwise ordinary select list and needs no `SET` statement. The bare name
+   is what is matched, so `pg_catalog.set_config(...)` is refused too.
+5. Every relation named is the view or a CTE of the same statement. Redundant
+   with the grant on purpose: the error names the problem instead of arriving
+   as `permission denied` from a live connection.
+6. The projection is exactly `RESULT_COLUMNS` (`app/schemas/result.py`,
+   derived from `ResultRow` so the two cannot drift), in any order. Every
+   column needs an explicit alias or to be a bare column reference — an
+   unnamed `NULL::text` is a column called `text`, and guessing that name is
+   how a projection goes silently wrong.
+7. A `LIMIT` at or under `max_rows`, appended on its own line when absent and
+   **re-parsed to confirm it took**. `FETCH ... WITH TIES` is refused: it
+   returns however many rows tie at the cut-off, so its own count is not a cap.
+
+The returned string is not always the one passed in — a missing `LIMIT` is
+added, because the cap cannot live anywhere else. Nothing else is rewritten: a
+statement that would need changing to be safe is refused instead, so what runs
+is what was read.
+
+Every message is written to be shown to a model. Whether a rejected statement
+is handed back for another attempt is **undecided** (see `generator.py`): the
+messages invite it, but a retry loop is also how a validator's error text
+becomes a map of what to get around.
 
 ---
 

@@ -1,0 +1,305 @@
+"""app/retrieval/validator.py -- the two controls the database cannot hold.
+
+``vf_retrieval_role`` already cannot write, cannot issue DDL and can read one
+view. What it cannot do is stop a statement turning ``statement_timeout`` off
+(the setting is USERSET) or returning a million rows (PostgreSQL has no
+per-role row cap). Those live here, so these tests are mostly about what gets
+*refused*.
+
+The last test runs a validated statement against the real test database, which
+is what proves the validator's allow-list and the grant agree with each other.
+"""
+
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import text
+
+from app.retrieval import MAX_ROWS, InvalidSQL, validate
+from app.schemas.result import RESULT_COLUMNS
+
+#: The shape app/retrieval/DESIGN.md §4 settles on: the plan's coordinates as a
+#: VALUES list, joined against the view, projecting exactly the contract.
+PLAN_JOIN = """
+WITH plan(element_id, company_cik, fiscal_year, fiscal_period,
+          period_start, period_end, concept_id, unit, is_instant) AS (
+  VALUES ('e1', 320193, 2024, 'FY',
+          DATE '2023-10-01', DATE '2024-09-28', 252, 'USD', false)
+)
+SELECT p.element_id, v.company_cik, v.ticker, v.entity_name,
+       p.fiscal_year, p.fiscal_period,
+       v.period_start, v.period_end, v.is_instant,
+       v.value, v.unit, NULL::text AS derivation
+FROM plan p
+JOIN xbrl.reported_fact v
+  ON  v.company_cik = p.company_cik
+  AND v.concept_id  = p.concept_id
+  AND v.unit        = p.unit
+  AND v.is_instant  = p.is_instant
+  AND v.period_end  = p.period_end
+  AND (p.is_instant OR v.period_start = p.period_start)
+"""
+
+#: A single branch, for the UNION ALL that mixing direct and residual bindings
+#: needs. Self-contained so the two halves can be concatenated.
+BRANCH = """SELECT 'e1' AS element_id, v.company_cik, v.ticker, v.entity_name,
+       2024 AS fiscal_year, 'FY' AS fiscal_period,
+       v.period_start, v.period_end, v.is_instant,
+       v.value, v.unit, NULL::text AS derivation
+FROM xbrl.reported_fact v"""
+
+
+def _without_derivation(sql: str, replacement: str) -> str:
+    return sql.replace("NULL::text AS derivation", replacement)
+
+
+# --------------------------------------------------------------------------- #
+# Accepted -- the statements the layer is actually built to run
+# --------------------------------------------------------------------------- #
+
+
+def test_the_plan_join_is_accepted_and_capped() -> None:
+    out = validate(PLAN_JOIN)
+    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+
+
+def test_a_union_of_two_branches_is_accepted() -> None:
+    """Mixing a direct and a residual binding in one statement needs this."""
+    out = validate(f"{BRANCH}\nUNION ALL\n{BRANCH}")
+    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+
+
+def test_aggregates_and_window_functions_are_accepted() -> None:
+    """Qwen's half of the work -- ranking, growth, ratios -- is 44% of the
+    answerable eval set. Refusing it would refuse the reason it is here."""
+    sql = _without_derivation(
+        PLAN_JOIN.replace("v.value, v.unit", "sum(v.value) OVER () AS value, v.unit"),
+        "'share_of_total' AS derivation",
+    )
+    assert validate(sql)
+
+
+def test_a_statement_already_under_the_cap_keeps_its_own_limit() -> None:
+    out = validate(f"{PLAN_JOIN} LIMIT 36")
+    assert "LIMIT 36" in out
+    assert f"LIMIT {MAX_ROWS}" not in out
+
+
+def test_a_trailing_semicolon_is_stripped_not_rejected() -> None:
+    out = validate(f"{PLAN_JOIN.strip()};")
+    assert ";" not in out
+    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+
+
+def test_the_limit_survives_a_trailing_line_comment() -> None:
+    """Appended on its own line, so it cannot land inside the comment and
+    quietly not apply."""
+    out = validate(f"{PLAN_JOIN.strip()}\n-- that is all")
+    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+
+
+# --------------------------------------------------------------------------- #
+# The USERSET escape -- the reason this module exists
+# --------------------------------------------------------------------------- #
+
+
+def test_a_set_statement_is_refused() -> None:
+    with pytest.raises(InvalidSQL, match="only SELECT runs here"):
+        validate("SET statement_timeout = 0")
+
+
+def test_set_config_inside_a_projection_is_refused() -> None:
+    """The one that matters. `set_config` is SET in an expression: it needs no
+    SET statement and hides in an otherwise ordinary select list."""
+    sql = _without_derivation(
+        PLAN_JOIN, "set_config('statement_timeout', '0', false) AS derivation"
+    )
+    with pytest.raises(InvalidSQL, match="set_config"):
+        validate(sql)
+
+
+def test_a_schema_qualified_denied_call_is_still_refused() -> None:
+    """The bare name is what is checked, so qualification is not a way past."""
+    sql = _without_derivation(
+        PLAN_JOIN, "pg_catalog.set_config('statement_timeout', '0', false) AS derivation"
+    )
+    with pytest.raises(InvalidSQL, match="set_config"):
+        validate(sql)
+
+
+@pytest.mark.parametrize("call", ["pg_sleep(30)::text", "pg_read_file('/etc/passwd')"])
+def test_catalogue_and_system_functions_are_refused(call: str) -> None:
+    with pytest.raises(InvalidSQL, match="not allowed"):
+        validate(_without_derivation(PLAN_JOIN, f"{call} AS derivation"))
+
+
+# --------------------------------------------------------------------------- #
+# One statement, and it is a read
+# --------------------------------------------------------------------------- #
+
+
+def test_two_statements_are_refused() -> None:
+    with pytest.raises(InvalidSQL, match="2 statements"):
+        validate("SELECT 1; SELECT 2")
+
+
+@pytest.mark.parametrize(
+    ("label", "sql"),
+    [
+        ("delete", "WITH d AS (DELETE FROM xbrl.fact RETURNING *) SELECT 1 AS x FROM d"),
+        (
+            "update",
+            "WITH u AS (UPDATE xbrl.fact SET value = 0 RETURNING *) SELECT 1 AS x FROM u",
+        ),
+        (
+            "insert",
+            "WITH i AS (INSERT INTO xbrl.fact DEFAULT VALUES RETURNING *) "
+            "SELECT 1 AS x FROM i",
+        ),
+    ],
+)
+def test_a_writing_cte_is_refused_though_the_statement_starts_with_with(
+    label: str, sql: str
+) -> None:
+    """`WITH d AS (DELETE ...) SELECT ...` starts with WITH and deletes rows.
+    Checking only the top of the tree would pass it."""
+    with pytest.raises(InvalidSQL, match="data-modifying statement inside a CTE"):
+        validate(sql)
+
+
+def test_select_into_is_refused() -> None:
+    with pytest.raises(InvalidSQL, match="creates a table"):
+        validate("SELECT 1 AS element_id INTO mine FROM xbrl.reported_fact")
+
+
+def test_a_locking_clause_is_refused() -> None:
+    with pytest.raises(InvalidSQL, match="not a read"):
+        validate(f"{PLAN_JOIN} FOR UPDATE")
+
+
+def test_unparseable_text_is_refused() -> None:
+    with pytest.raises(InvalidSQL, match="does not parse"):
+        validate("not sql at all")
+
+
+@pytest.mark.parametrize("sql", ["", "   \n  "])
+def test_nothing_is_refused(sql: str) -> None:
+    with pytest.raises(InvalidSQL, match="no statement"):
+        validate(sql)
+
+
+# --------------------------------------------------------------------------- #
+# The view is the only relation
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "relation", ["xbrl.fact", "xbrl.filing", "xbrl.load_run", "pg_catalog.pg_authid"]
+)
+def test_naming_anything_but_the_view_is_refused(relation: str) -> None:
+    """Redundant with the grant on purpose: the error names the problem here,
+    instead of arriving as `permission denied` from a live connection."""
+    with pytest.raises(InvalidSQL, match="cannot be read"):
+        validate(PLAN_JOIN.replace("xbrl.reported_fact", relation))
+
+
+def test_a_base_table_hidden_in_a_second_union_branch_is_refused() -> None:
+    sql = f"{BRANCH}\nUNION ALL\n{BRANCH.replace('xbrl.reported_fact', 'xbrl.fact')}"
+    with pytest.raises(InvalidSQL, match="xbrl.fact cannot be read"):
+        validate(sql)
+
+
+def test_the_unqualified_view_name_is_accepted() -> None:
+    """search_path is set to xbrl for the role, so this is how it will usually
+    be written."""
+    assert validate(PLAN_JOIN.replace("xbrl.reported_fact", "reported_fact"))
+
+
+# --------------------------------------------------------------------------- #
+# The projection is the contract
+# --------------------------------------------------------------------------- #
+
+
+def test_a_wrong_projection_is_refused_and_says_what_is_missing() -> None:
+    with pytest.raises(InvalidSQL) as caught:
+        validate("SELECT 1 AS element_id FROM xbrl.reported_fact")
+    message = str(caught.value)
+    assert "missing" in message
+    assert "company_cik" in message
+
+
+def test_an_extra_column_is_refused() -> None:
+    sql = PLAN_JOIN.replace(
+        "NULL::text AS derivation", "NULL::text AS derivation, v.concept_id"
+    )
+    with pytest.raises(InvalidSQL, match=r"unexpected \['concept_id'\]"):
+        validate(sql)
+
+
+def test_select_star_is_refused() -> None:
+    """A star projection cannot be checked against a contract, and would not
+    satisfy it anyway."""
+    with pytest.raises(InvalidSQL, match="no name"):
+        validate("SELECT * FROM xbrl.reported_fact")
+
+
+def test_an_unnamed_expression_is_refused_rather_than_guessed_at() -> None:
+    """`NULL::text` with no alias is a column called `text`. Guessing the name
+    is how that becomes a silently wrong projection."""
+    sql = _without_derivation(PLAN_JOIN, "NULL::text")
+    with pytest.raises(InvalidSQL, match="no name"):
+        validate(sql)
+
+
+def test_a_duplicated_column_name_is_refused() -> None:
+    sql = PLAN_JOIN.replace("v.unit,", "v.unit AS value, v.unit,")
+    with pytest.raises(InvalidSQL, match="more than once"):
+        validate(sql)
+
+
+# --------------------------------------------------------------------------- #
+# The row cap -- PostgreSQL has nowhere else to put it
+# --------------------------------------------------------------------------- #
+
+
+def test_a_limit_over_the_ceiling_is_refused() -> None:
+    with pytest.raises(InvalidSQL, match="exceeds the ceiling"):
+        validate(f"{PLAN_JOIN} LIMIT 100000")
+
+
+def test_a_non_constant_limit_is_refused() -> None:
+    """It cannot be compared with a ceiling without evaluating it, and
+    evaluating it is the database's job -- after this decision, not before."""
+    with pytest.raises(InvalidSQL, match="plain integer"):
+        validate(f"{PLAN_JOIN} LIMIT (SELECT 9999)")
+
+
+def test_with_ties_is_refused() -> None:
+    """It returns however many rows tie at the cut-off, so its own count is
+    not a cap."""
+    sql = f"{PLAN_JOIN} ORDER BY v.value FETCH FIRST 5 ROWS WITH TIES"
+    with pytest.raises(InvalidSQL, match="WITH TIES"):
+        validate(sql)
+
+
+def test_the_cap_is_caller_settable() -> None:
+    out = validate(PLAN_JOIN, max_rows=36)
+    assert out.splitlines()[-1] == "LIMIT 36"
+    with pytest.raises(InvalidSQL, match="exceeds the ceiling of 36"):
+        validate(f"{PLAN_JOIN} LIMIT 100", max_rows=36)
+
+
+# --------------------------------------------------------------------------- #
+# Against the real database
+# --------------------------------------------------------------------------- #
+
+
+async def test_a_validated_statement_runs_and_returns_the_contract(
+    test_session_factory,
+) -> None:
+    """The one test that proves the validator's allow-list and the database
+    agree. A validator that accepted only statements PostgreSQL rejects would
+    pass every test above."""
+    async with test_session_factory() as session:
+        result = await session.execute(text(validate(PLAN_JOIN)))
+        assert tuple(result.keys()) == RESULT_COLUMNS

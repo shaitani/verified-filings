@@ -182,20 +182,24 @@ view and nothing else. Verified — it is refused on `fact`, `filing`, `company`
 Both halves, and every measurement behind them, are in
 [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md).
 
-### 4.3 The retrieval layer — `app/retrieval/` — NEXT
+### 4.3 The retrieval layer — `app/retrieval/` — one of four built
 
-The four functions in §2; the directory exists but holds only its `DESIGN.md`.
-`app/retrieval/` is the slot the original brief
+`validate()` is done (`validator.py`, 36 tests). `build_prompt`, `generate`
+and `execute` are stubs that raise, with settled signatures and a docstring
+each saying what they owe. `app/retrieval/` is the slot the original brief
 reserves ([`sec-retriever.md`](sec-retriever.md) §3); the name is a leftover
 from an earlier design that meant BM25-plus-vectors over document chunks, but
 it is the right home and inventing a new directory should be a deliberate
 decision, not a drive-by one.
 
-`validate()` is the part that cannot be skipped. The database role stops writes
-and DDL, but `statement_timeout` and `default_transaction_read_only` are
-`USERSET` — a generated statement beginning `SET statement_timeout = 0` would
-shrug them off. Only `validate()` can refuse that string. PostgreSQL also has
-no per-role row limit, so the `LIMIT` lives here too.
+`validate()` is the part that cannot be skipped, and it is built. It parses
+with `pglast` — libpg_query, PostgreSQL's own grammar — so there is no gap
+between how it reads a statement and how the server will. It refuses anything
+whose tree holds a non-`SELECT` statement (a `DELETE` inside a CTE passes a
+top-of-tree check), any `set_config` call (`SET` in expression form, the real
+USERSET escape), any relation but the view, any projection that is not exactly
+`RESULT_COLUMNS`, and any missing or over-large `LIMIT`. Full list in
+`app/retrieval/DESIGN.md` §7.
 
 ### 4.4 Composition convention — decided
 
@@ -328,7 +332,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (288 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (324 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself
