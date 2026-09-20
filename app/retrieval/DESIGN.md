@@ -308,40 +308,61 @@ whether or not anyone inspects a return value.
 
 ### 4.3 What the model actually does, measured
 
-`qwen2.5-coder:7b`, asked to write the statement from the coordinate table.
-Three distinct failures, in the order they appeared:
+`qwen2.5-coder:7b`, writing the statement from the filter table. Five distinct
+failures. **Four were the prompt's fault, not the model's** — worth stating,
+because "the model is too small" is where diagnosis stops rather than starts.
 
-1. **`is_instant = 'no'`** — boolean compared with text, failing at execution.
-   That one was ours: the table rendered the column as `yes`/`no`. A model
-   copies what it is shown, so the table now renders `true`/`false`.
+| # | failure | cause | fix |
+|---|---|---|---|
+| 1 | `is_instant = 'no'` | the table rendered a boolean as `yes`/`no` | render `true`/`false` |
+| 2 | invented every value, no `FROM` | the table read as *output*, not *filter* | reframe + worked example |
+| 3 | `fiscal_period = 'Q12023'` | a combined `Q12023` label needed splitting | give `fy` and `fp` as separate columns |
+| 4 | paraphrased dates | downstream of #2 | went away with #2 |
+| 5 | **skipped the Q4 subtraction** | — | not fixed; see below |
 
-2. **Fabrication.** It returned a `UNION ALL` of invented literals —
-   `285000000000 AS value`, `'Apple Inc.' AS entity_name` — with no `FROM` at
-   all. One statement, a SELECT, the right twelve columns, a LIMIT: **every
-   check passed**. Apple's real FY2025 revenue is 416,161,000,000.
+The instructive one is **#2**. The filter table was introduced with "one row
+here = one row the answer needs", which says the rows *are* the output. With
+one filter row the model still wrote a correct query; with two, transcribing
+the table into a `UNION ALL` of literals became the more obvious completion
+than joining against it — column for column, in the table's own order, with an
+invented `1000000000 AS value`.
 
-   This is the worst failure the project can have, and it is decidable from
-   the text: a statement that never names the view cannot have got its values
-   from the database. `validate` now refuses that as `OutOfRole`. It is the
-   cheapest guard in the file. It does not catch *partial* fabrication — a
-   statement that reads the view and overrides one column with a literal —
-   and nothing static can; that is what `execute`'s attribution and row-count
-   verdict are for.
+Three things fixed it, and it was the third that mattered: calling the table a
+filter, saying the values are in the database and not here, and a worked
+example on **invented data** (cik `11111`, dates in 2019) whose closing line
+names the three columns the model kept inventing. The example teaches form and
+answers no part of the plan it is attached to.
 
-3. **Paraphrased coordinates.** It now reads the view, but writes
-   `period_end IN ('2022-09-29', '2023-09-28', '2024-09-27')` where the table
-   says `2022-09-25`, `2023-09-30`, `2024-09-28`. Plausible-looking dates,
-   near-misses, zero rows matched. The verdict says `empty`, which is not
-   answerable, so it refuses.
+Isolation tests ruled out the obvious suspects first: the model copies six
+dates verbatim at `repeat_penalty` 1.1 and 1.0 alike, and no prompt came near
+the context limit (1,176–2,086 tokens against 8,192).
 
-**Every one of those failed safe.** At no point did a wrong number reach a
-reader: the contract, the validator and the verdict each caught what they were
-built to catch. That is the design working. It is not the same as the layer
-being *useful* yet — a refusal is better than a lie and worse than an answer.
+### 4.4 The one that is not fixed: the Q4 subtraction
 
-The open question is the model, not the structure. A 7B paraphrasing a table
-of dates is a capability limit, not a prompt bug, and three rounds of prompt
-work moved it from fabricating to refusing rather than to answering.
+A residual value is the whole window minus the shorter one. Told in prose and
+then shown a worked self-join, the model **returned Apple's FY2024 annual
+revenue, 391,035,000,000, as its Q4** — against a real Q4 of 94,930,000,000.
+
+Thirty-six of thirty-six rows came back. Every one attributed. Verdict
+`complete`, `is_answerable` true. **Nothing downstream could tell that a
+quarter was really a year**, because the verdict checks cardinality and
+attribution, not arithmetic — and a year-sized number in a revenue series
+looks like revenue.
+
+It is caught now, by the cheapest thing that works: **two windows subtracted
+cannot come from one read of the relation.** `validate(sql, min_view_reads=2)`
+refuses a single-read statement for a plan that has a residual cell. The
+arithmetic is invisible to a parser; the shape it requires is not.
+
+`answer()` derives `min_view_reads` from the plan and passes it in, so the
+validator still knows nothing about plans — it is told a property the
+statement must have, and checks it.
+
+The consequence is honest rather than good: **Q4 questions are now refused**
+rather than answered with a year. Closing that properly means either a model
+that will write the self-join, or moving the residual back into deterministic
+code — which is a real decision, not a bug fix, because it puts SQL-writing
+back on this side of the line.
 
 ---
 

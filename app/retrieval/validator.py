@@ -244,7 +244,7 @@ def _check_projection(statement: ast.SelectStmt) -> None:
         )
 
 
-def _check_reads_the_view(inspector: _Inspector) -> None:
+def _check_reads_the_view(inspector: _Inspector, min_reads: int) -> None:
     """The statement must actually read the view.
 
     Measured, not hypothetical. Asked to write the whole statement from a
@@ -263,15 +263,24 @@ def _check_reads_the_view(inspector: _Inspector) -> None:
     and then overrides one column with a literal. Nothing here can; that is
     what ``execute()``'s attribution and row-count verdict are for.
     """
-    if not any(
-        relation == VIEW_NAME and schema in (None, VIEW_SCHEMA)
+    reads = sum(
+        1
         for schema, relation in inspector.relations
-    ):
+        if relation == VIEW_NAME and schema in (None, VIEW_SCHEMA)
+    )
+    if reads == 0:
         raise _out_of_role(
             "answering without reading the database",
             f"the statement never reads {VIEW_SCHEMA}.{VIEW_NAME}, so whatever it "
             f"returns was written into the SQL rather than looked up. Every value "
             f"must come from the relation",
+        )
+    if reads < min_reads:
+        raise ContractViolation(
+            f"the statement reads {VIEW_SCHEMA}.{VIEW_NAME} {reads} time(s), and this "
+            f"plan needs at least {min_reads}. A value that is a subtraction of two "
+            f"windows cannot come from one read, and the single read would return the "
+            f"whole year where a quarter was asked for"
         )
 
 
@@ -346,7 +355,7 @@ def _parse_one(sql: str) -> ast.SelectStmt:
     return statement
 
 
-def validate(sql: str, *, max_rows: int = MAX_ROWS) -> str:
+def validate(sql: str, *, max_rows: int = MAX_ROWS, min_view_reads: int = 1) -> str:
     """Return the statement **unchanged**, or raise.
 
     Raises ``OutOfRole`` when the model tried to step outside what it is for
@@ -357,6 +366,12 @@ def validate(sql: str, *, max_rows: int = MAX_ROWS) -> str:
 
     Nothing is rewritten. What comes back is byte-identical to what went in,
     so ``execute()`` runs exactly the statement that was inspected.
+
+    ``min_view_reads`` is how a caller says "this answer needs a subtraction".
+    The validator still knows nothing about plans -- it is told a property the
+    statement must have, and checks it. Two windows subtracted cannot come
+    from one read of the relation, and a Q4 answered with one read is a full
+    year wearing a quarter's label.
     """
     if not sql or not sql.strip():
         raise ContractViolation("no statement was given")
@@ -387,7 +402,7 @@ def validate(sql: str, *, max_rows: int = MAX_ROWS) -> str:
 
     _check_no_denied_calls(inspector)
     _check_relations(inspector)
-    _check_reads_the_view(inspector)
+    _check_reads_the_view(inspector, min_view_reads)
     _check_projection(statement)
 
     limit = _limit_value(statement)

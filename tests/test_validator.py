@@ -121,6 +121,28 @@ def test_a_statement_that_reads_nothing_is_refused() -> None:
         validate(f"SELECT {columns} LIMIT 1")
 
 
+def test_a_plan_needing_a_subtraction_refuses_a_single_read() -> None:
+    """The most dangerous failure measured so far. Told in prose *and* shown a
+    worked example, qwen2.5-coder:7b returned Apple's FY2024 annual revenue --
+    391,035,000,000 -- as its Q4, against a real Q4 of 94,930,000,000. Every
+    row came back, every one attributed, verdict `complete`. Nothing
+    downstream could see that a quarter was really a year.
+
+    Two windows subtracted cannot come from one read of the relation, so the
+    skipped subtraction is visible in the parse tree even though the arithmetic
+    is not."""
+    with pytest.raises(ContractViolation, match="needs at least 2"):
+        validate(PLAN_JOIN, min_view_reads=2)
+
+
+def test_two_reads_satisfy_it() -> None:
+    sql = PLAN_JOIN_UNCAPPED.replace(
+        "FROM plan p",
+        "FROM plan p JOIN xbrl.reported_fact sub ON sub.company_cik = p.company_cik",
+    ) + f"LIMIT {MAX_ROWS}"
+    assert validate(sql, min_view_reads=2) == sql
+
+
 # --------------------------------------------------------------------------- #
 # The USERSET escape -- the reason this module exists
 # --------------------------------------------------------------------------- #

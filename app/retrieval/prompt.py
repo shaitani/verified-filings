@@ -134,6 +134,20 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     return cells
 
 
+#: Column names for the filter table. One constant so the worked example below
+#: and the real table can never drift apart -- a model shown two different
+#: headers has been given a reason to invent a third.
+#: `fy` and `fp` are separate columns rather than one "Q12023" label, because
+#: a combined label has to be split before it can be projected -- and a model
+#: asked to split it emitted `fiscal_period = 'Q12023'`, which the contract
+#: then rejected. Handing over values already in the shape the answer needs
+#: removes the step rather than explaining it.
+_TABLE_HEADER = (
+    "  element | cik      | fy   | fp | concept_id | unit  | instant | "
+    "window_start | window_end | minus_window_ending"
+)
+
+
 def _coordinate_table(cells: list[PlanCell]) -> str:
     """The plan as data: one row per value the answer needs.
 
@@ -141,16 +155,14 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
     the model's job, not this one's -- handing it a half-written statement is
     how the line between the two blurs.
     """
-    header = (
-        "  element | cik      | period | concept_id | unit  | instant | "
-        "window_start | window_end | minus_window_ending"
-    )
-    rule = "  " + "-" * (len(header) - 2)
+    rule = "  " + "-" * (len(_TABLE_HEADER) - 2)
     rows = [
-        "  {:<7} | {:<8} | {:<6} | {:<10} | {:<5} | {:<7} | {:<12} | {:<10} | {}".format(
+        "  {:<7} | {:<8} | {:<4} | {:<2} | {:<10} | {:<5} | {:<7} | {:<12} | "
+        "{:<10} | {}".format(
             cell.element_id,
             cell.company_cik,
-            f"{cell.fiscal_period}{cell.fiscal_year}",
+            cell.fiscal_year,
+            cell.fiscal_period,
             cell.concept_id,
             cell.unit,
             # the literal the column actually holds: a model copies what it
@@ -163,7 +175,7 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
         )
         for cell in cells
     ]
-    return chr(10).join([header, rule, *rows])
+    return chr(10).join([_TABLE_HEADER, rule, *rows])
 
 
 #: ``QueryIn.intent`` is the producer saying what kind of answer is wanted, and
@@ -204,6 +216,91 @@ computed number actually is ('pure' for a ratio or a growth rate). Leave
 `derivation` NULL only on rows whose `value` is a figure exactly as filed."""
 
 
+#: One worked example, on **invented data**.
+#:
+#: Not a retreat from "the model writes the SQL": the cik, concept ids and
+#: dates here belong to no company in the store, so this teaches the *form*
+#: and answers no part of the plan it is attached to.
+#:
+#: It exists because of a measured failure. Without it, qwen2.5-coder:7b
+#: transcribed the filter table into a ``UNION ALL`` of literal rows -- column
+#: for column, in the table's own order -- and invented a value to go with
+#: them. One filter row still produced a correct query; two did not, because
+#: with two rows "transcribe the table" becomes the more obvious completion
+#: than "join against it". The example makes the join the obvious one instead.
+#:
+#: The closing sentence does most of the work: it names the three columns the
+#: model was inventing and says where they come from.
+_WORKED_EXAMPLE = f"""WORKED EXAMPLE (different company and dates -- copy the FORM, not the values)
+
+If the filter table were:
+
+{_TABLE_HEADER}
+  e9      | 11111    | 2019 | FY | 77         | USD   | false   | 2018-01-01   | 2018-12-31 | -
+  e9      | 22222    | 2019 | FY | 88         | USD   | false   | 2018-07-01   | 2019-06-30 | -
+
+the statement would be:
+
+  WITH wanted(element_id, company_cik, fiscal_year, fiscal_period,
+              concept_id, unit, is_instant, window_start, window_end) AS (
+    VALUES ('e9', 11111, 2019, 'FY', 77, 'USD', false, DATE '2018-01-01', DATE '2018-12-31'),
+           ('e9', 22222, 2019, 'FY', 88, 'USD', false, DATE '2018-07-01', DATE '2019-06-30')
+  )
+  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
+         w.fiscal_year, w.fiscal_period,
+         v.period_start, v.period_end, v.is_instant,
+         v.value, v.unit, NULL::text AS derivation
+  FROM wanted w
+  JOIN xbrl.reported_fact v
+    ON  v.company_cik = w.company_cik
+    AND v.concept_id  = w.concept_id
+    AND v.unit        = w.unit
+    AND v.is_instant  = w.is_instant
+    AND v.period_end  = w.window_end
+    AND (w.is_instant OR v.period_start = w.window_start)
+  LIMIT 500
+
+Note that value, ticker and entity_name appear ONLY as v.<column>. They are
+never written as literals -- they are what you are querying FOR.
+"""
+
+
+#: Shown only when the filter table has a `minus_window_ending`.
+#:
+#: Prose alone was not enough. Told in words to subtract, qwen2.5-coder:7b
+#: returned Apple's FY2024 annual revenue -- 391,035,000,000 -- as its Q4,
+#: against a real Q4 of 94,930,000,000. Thirty-six of thirty-six rows came
+#: back, every one attributed, verdict `complete`: nothing downstream can see
+#: that a quarter is really a year. It is the most dangerous single thing in
+#: this prompt, so it gets its own worked example rather than a sentence.
+_RESIDUAL_HELP = """
+{count} row(s) in the filter table have a date in `minus_window_ending`. Those
+values are NOT filed directly. Reading `window_start`..`window_end` for them
+returns a FULL YEAR, and reporting that as a quarter is the worst mistake you
+can make here.
+
+Each one is a subtraction of two rows of the relation that share a start date:
+
+  (value for window_start..window_end) MINUS (value for window_start..minus_window_ending)
+
+which means joining the relation to itself:
+
+  JOIN xbrl.reported_fact v
+    ON v.company_cik = w.company_cik AND v.concept_id = w.concept_id
+   AND v.unit = w.unit AND v.period_start = w.window_start
+   AND v.period_end = w.window_end
+  JOIN xbrl.reported_fact sub
+    ON sub.company_cik = w.company_cik AND sub.concept_id = w.concept_id
+   AND sub.unit = w.unit AND sub.period_start = w.window_start
+   AND sub.period_end = w.minus_window_ending
+  ...
+  v.value - sub.value AS value
+
+Use an inner join for the second one: if the row to subtract is missing, the
+answer must be left out entirely, never returned unsubtracted.
+"""
+
+
 def _plan_notes(plan: QueryPlan) -> list[str]:
     notes = [f"- {note.kind}: {note.message}" for note in plan.notes]
     for index, binding in enumerate(plan.bindings):
@@ -221,19 +318,7 @@ def build_prompt(plan: QueryPlan) -> str:
     job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
     residual = [cell for cell in cells if cell.subtract_end]
 
-    residual_help = (
-        f"""
-{len(residual)} of the rows below have a date in `minus_window_ending`. Those
-values are not filed directly and must be computed: take the value for
-`window_start`..`window_end` and SUBTRACT the value for
-`window_start`..`minus_window_ending`, same company, same concept_id, same
-unit. Both terms start on the same day. If either term is missing, leave the
-row out entirely -- returning the unsubtracted figure would report a full year
-as if it were one quarter.
-"""
-        if residual
-        else ""
-    )
+    residual_help = _RESIDUAL_HELP.format(count=len(residual)) if residual else ""
 
     return f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
 
@@ -259,9 +344,12 @@ THE ONLY RELATION YOU CAN READ
     company, concept and period can be filed under two units, and ignoring it
     returns each value twice.
 
-THE VALUES THE ANSWER NEEDS
-One row here = one row the answer needs. `concept_id` differs per company on
-purpose: filers tag the same business concept differently.
+FILTER TABLE -- WHICH ROWS TO FETCH
+This is a filter, not data to output. Each line says how to FIND one row in
+the relation. The values themselves are in the database and are the whole
+point of the query; they are not here, and they are not yours to supply.
+`concept_id` differs per company on purpose: filers tag the same business
+concept differently.
 
 {_coordinate_table(cells)}
 
@@ -279,6 +367,7 @@ The straightforward way is a VALUES list of the table above joined to the
 relation, which also keeps `element_id` and the period labels attached to the
 right rows.
 {residual_help}
+{_WORKED_EXAMPLE}
 YOUR JOB
 {job}
 
@@ -286,8 +375,9 @@ OUTPUT
 Project exactly these column names, in any order:
   {columns}
 
-  - `fiscal_year` and `fiscal_period` come from the table above (the relation
-    has no such column). Split "FY2024" into 2024 and 'FY'.
+  - `fiscal_year` and `fiscal_period` are the `fy` and `fp` columns of the
+    filter table, used exactly as given (the relation has no such columns).
+    `fp` is one of 'FY', 'Q1', 'Q2', 'Q3', 'Q4' and nothing else.
   - `period_start`, `period_end`, `is_instant`, `value`, `unit`, `ticker`,
     `entity_name`, `company_cik` come from the relation.
   - `element_id` comes from the table above.
