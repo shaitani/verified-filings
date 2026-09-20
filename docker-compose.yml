@@ -6,6 +6,16 @@ services:
       POSTGRES_DB: verified_filings
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    # So a cold start can wait for readiness instead of guessing. The very
+    # first boot of an empty volume initialises the cluster and restarts it
+    # once, so a plain "port is open" check can pass on a server that is
+    # about to go away -- start_period covers that window. See BOOTSTRAP.md.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d verified_filings"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   # Separate server, separate volume -- used only by tests/. Its own
   # POSTGRES_DB creates verified_filings_test on first boot, same as "db"
@@ -18,6 +28,12 @@ services:
       POSTGRES_DB: verified_filings_test
     ports: ["5433:5432"]
     volumes: ["pgdata-test:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d verified_filings_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   pgadmin:
     image: dpage/pgadmin4
@@ -29,13 +45,43 @@ services:
 
   # Local embedding model server. Serves nomic-embed-text-v1.5 over Ollama's
   # HTTP API for concept-search embeddings -- nothing leaves the machine.
-  # 11434 is Ollama's standard port. The image ships no models baked in --
-  # after first `docker compose up`, pull the model once with:
-  #   docker compose exec ollama ollama pull nomic-embed-text
+  # 11434 is Ollama's standard port. The image ships no models baked in;
+  # "ollama-pull" below fetches them.
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
     volumes: ["ollama-models:/root/.ollama"]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot: pulls the models into the "ollama-models" volume, then exits.
+  #
+  # Here rather than in BOOTSTRAP.md's command list because `docker compose
+  # down -v` wipes this volume along with the database ones, and a pull that
+  # lives only in a doc is the step that gets forgotten -- after which concept
+  # search fails with a connection-level error that looks nothing like a
+  # missing model. Runs on every `up`, which is harmless: a pull of a model
+  # already in the volume verifies the digest and exits in about a second.
+  #
+  # It talks to the "ollama" service rather than storing anything itself --
+  # with OLLAMA_HOST set, the CLI is a client, so the model lands in the
+  # server's volume and not in this throwaway container.
+  #
+  # Qwen is not listed yet: `generate()` is a stub and no tag has been chosen
+  # (app/retrieval/generator.py). Add it here when it is.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["ollama", "pull", "nomic-embed-text"]
+    restart: "no"
 
 volumes:
   pgdata:

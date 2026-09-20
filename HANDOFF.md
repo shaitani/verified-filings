@@ -51,7 +51,9 @@ ResultSet                   rows + citations + verdict + notes
 ```
 
 Two Docker Postgres containers: `db` (real) and `db-test` (tests). Ollama
-serves both the embedding model and Qwen. See `docker-compose.yml`.
+serves both the embedding model and Qwen. See `docker-compose.yml`, and
+[`BOOTSTRAP.md`](BOOTSTRAP.md) for bringing it all up from nothing — the roles
+and the model pull do **not** come back with the schema.
 
 **Qwen never touches the database.** It is a language model behind an HTTP
 endpoint: it takes text and returns text. It has no driver, no credentials and
@@ -373,6 +375,7 @@ found, including two the unit tests did not catch.
 
 | file | what |
 |---|---|
+| [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
 | [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) | the curated alias layer |
