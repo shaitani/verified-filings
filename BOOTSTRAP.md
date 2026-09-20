@@ -118,6 +118,16 @@ docker compose exec ollama ollama list
 `nomic-embed-text` must be present.
 
 ```bash
+docker compose logs ollama | grep "inference compute"
+```
+
+Must name the card (`library=CUDA`). If it says nothing, the container is not
+seeing the GPU and Ollama has silently fallen back to the CPU — it starts,
+answers, and passes every other check here, just slowly. `gpus: all` in
+`docker-compose.yml` is what grants it; Docker Desktop supplies the runtime,
+so nothing has to be installed on the host.
+
+```bash
 uv run pytest -q
 ```
 

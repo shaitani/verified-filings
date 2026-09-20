@@ -67,6 +67,11 @@ services:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
     volumes: ["ollama-models:/root/.ollama"]
+    # Without this the container cannot see the card at all and Ollama runs on
+    # the CPU -- which is survivable for embeddings and is not for generation.
+    # Docker Desktop already registers the "nvidia" runtime, so no NVIDIA
+    # Container Toolkit install is needed; this line is the whole change.
+    gpus: all
     entrypoint: ["/bin/sh", "-c"]
     # List form: a plain string is parsed as shell words by compose, and the
     # "&" does not survive that.

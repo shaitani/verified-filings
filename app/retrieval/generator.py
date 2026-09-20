@@ -4,6 +4,14 @@ NOT BUILT. Ollama serves Qwen alongside the embedding model
 (``docker-compose.yml``), and ``app/embedding_client.py`` is the pattern for
 talking to it.
 
+**When the model is chosen, add its tag to the pull line in
+``docker-compose.yml``** -- the ``ollama`` service pulls its models on startup
+because ``docker compose down -v`` wipes the model volume along with the
+database ones. A model that only ever arrives by someone running ``ollama
+pull`` by hand is the step that goes missing after a wipe, and it fails as a
+connection-level error that looks nothing like a missing model. See
+``BOOTSTRAP.md``.
+
 What it owes, when it is written:
 
 * **Return the statement and nothing else.** A model that answers with prose
