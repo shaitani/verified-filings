@@ -77,8 +77,10 @@ automatically — see `ALEMBIC.md` step 5. Skipping it means `tests/` fails
 against a schema that does not exist, which reads as a broken test suite
 rather than a missing step.
 
-There is no `ollama pull` step: `docker compose up -d` runs the `ollama-pull`
-service, which fetches the model into the `ollama` service's volume and exits.
+There is no `ollama pull` step: the `ollama` service pulls the model itself on
+startup, in the background, while the server takes over PID 1. On a cold start
+that means it reports `starting` for as long as the 274MB download takes, and
+only then `healthy`.
 
 ---
 
@@ -90,8 +92,10 @@ Each check fails loudly rather than returning something plausible-looking.
 docker compose ps --format "table {{.Service}}\t{{.Status}}"
 ```
 
-`db`, `db-test` and `ollama` must all say `(healthy)`. `ollama-pull` is a
-one-shot and is absent once it has exited — that is success, not a failure.
+`db`, `db-test` and `ollama` must all say `(healthy)`. Ollama's health check
+asserts the **model is present**, not merely that the server is listening, so
+`healthy` here means concept search will actually work. On a cold start it sits
+at `starting` until the pull finishes.
 
 ```bash
 uv run alembic check
@@ -175,3 +179,8 @@ The schema and the view stay in migrations, where they are idempotent,
 re-runnable and versioned. What `docker-compose.yml` *does* carry is the part
 that genuinely belongs to the container lifecycle: health checks, and the model
 pull.
+
+The pull is folded into the `ollama` service rather than given a one-shot
+"puller" service of its own. Both work, but a one-shot leaves an exited
+container behind after every `up`, and a permanent row of dead containers is
+how a real failure stops being noticed.

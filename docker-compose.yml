@@ -45,43 +45,42 @@ services:
 
   # Local embedding model server. Serves nomic-embed-text-v1.5 over Ollama's
   # HTTP API for concept-search embeddings -- nothing leaves the machine.
-  # 11434 is Ollama's standard port. The image ships no models baked in;
-  # "ollama-pull" below fetches them.
+  # 11434 is Ollama's standard port.
+  #
+  # The image ships no models baked in, and `docker compose down -v` wipes the
+  # "ollama-models" volume along with the database ones -- so the pull happens
+  # here, on startup, rather than as a step in BOOTSTRAP.md that gets
+  # forgotten. A forgotten pull surfaces as a connection-level error from the
+  # embedder that looks nothing like a missing model.
+  #
+  # The pull runs in a background subshell that waits for the server to answer,
+  # while `exec ollama serve` takes over PID 1 so signals still reach it and
+  # `docker compose stop` stays fast. A one-shot "puller" service would do the
+  # same job but leave an exited container behind after every `up`.
+  #
+  # Pulling a model already in the volume verifies its digest and returns in
+  # about a second, so this costs nothing on a warm start.
+  #
+  # Qwen is not listed yet: `generate()` is a stub and no tag has been chosen
+  # (app/retrieval/generator.py). Add it to the pull line when it is.
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
     volumes: ["ollama-models:/root/.ollama"]
+    entrypoint: ["/bin/sh", "-c"]
+    # List form: a plain string is parsed as shell words by compose, and the
+    # "&" does not survive that.
+    command:
+      - "( until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text ) & exec ollama serve"
+    # Healthy means *usable*, not merely listening: the model has to be there.
+    # On a cold start this stays unhealthy until the 274MB pull finishes, which
+    # is the honest answer -- concept search cannot work until then.
     healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "ollama list 2>/dev/null | grep -q nomic-embed-text"]
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 10s
-
-  # One-shot: pulls the models into the "ollama-models" volume, then exits.
-  #
-  # Here rather than in BOOTSTRAP.md's command list because `docker compose
-  # down -v` wipes this volume along with the database ones, and a pull that
-  # lives only in a doc is the step that gets forgotten -- after which concept
-  # search fails with a connection-level error that looks nothing like a
-  # missing model. Runs on every `up`, which is harmless: a pull of a model
-  # already in the volume verifies the digest and exits in about a second.
-  #
-  # It talks to the "ollama" service rather than storing anything itself --
-  # with OLLAMA_HOST set, the CLI is a client, so the model lands in the
-  # server's volume and not in this throwaway container.
-  #
-  # Qwen is not listed yet: `generate()` is a stub and no tag has been chosen
-  # (app/retrieval/generator.py). Add it here when it is.
-  ollama-pull:
-    image: ollama/ollama:latest
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: "http://ollama:11434"
-    entrypoint: ["ollama", "pull", "nomic-embed-text"]
-    restart: "no"
 
 volumes:
   pgdata:
