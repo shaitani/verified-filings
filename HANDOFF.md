@@ -42,9 +42,10 @@ QueryPlan                   concrete coordinates, caveats, cardinality
        build_prompt(plan) → text to send Qwen              no DB
        generate(plan)     → calls Qwen, returns SQL        no DB
        validate(sql)      → raises, or returns             no DB  ← LOAD-BEARING
-       execute(sql)       → rows    ── reads DB as vf_retrieval_role
-   ↓
-rows + the plan's notes
+       execute(sql, plan) → ResultSet
+                ── reads xbrl.reported_fact as vf_retrieval_role
+   ↓  app/schemas/result.py           ── BUILT
+ResultSet                   rows + citations + verdict + notes
    ↓
 [presenter LLM]             renders, cites, discloses caveats     ← NOT BUILT
 ```
@@ -153,31 +154,38 @@ and a 90-day value are not comparable points — mixing them raises a plan-level
 
 In the order I would do it.
 
-### 4.1 Result contract — not designed
+### 4.1 Result contract — BUILT
 
-Cheapest item, widest unblocking effect. Nothing says what columns come back,
-so neither the retrieval layer nor the presenter can be written against
-anything. Needs: company, period label, period start/end, element id, value,
-unit, the concept actually used (for citation), and the notes. Two fields are
-now meaningful enough to build on — `Binding.unit` is `pure` for a ratio and
-the real unit otherwise, and `Note` carries curated prose a reader must see.
+`app/schemas/result.py`. `ResultRow` is the column list generated SQL must
+project; `ResultSet` is what the presenter reads — annotated rows, citations
+keyed by binding, a verdict, and the notes. `RESULT_COLUMNS` is the projection
+`validate()` will check against.
 
-### 4.2 A narrow query surface (view)
+Citation is a **lookup, not a column**: a row carries no `concept_id`, and
+`QueryPlan.binding_for()` resolves `(element_id, cik, fiscal_year,
+fiscal_period)` to exactly one binding, raising when two claim a cell. The
+refuse rule lives on `ResultVerdict.is_answerable` — answer only when the
+shortfall was already disclosed by the plan.
 
-There are **no views** in the `xbrl` schema. Without one, every emitted query
-must get `is_latest`, three joins and instant-vs-duration period matching right
-by itself. A view that pre-bakes those collapses most of the surface Qwen can
-hallucinate over.
+### 4.2 A narrow query surface (view) — BUILT
 
-It is also half of a security change: once the view exists, `vf_retrieval_role`
-gets `GRANT SELECT` on it and `REVOKE SELECT ON ALL TABLES IN SCHEMA xbrl`, so
-Qwen's SQL *cannot name* `fact` or `filing`. That is a grant change on a role
-that already exists (§4.7), not a re-wiring. Do the view and the narrowing
-together — either alone is a fence with no posts.
+`xbrl.reported_fact` (migration `3fcc714d6050`), applied to both databases. It
+bakes in `is_latest` and the three joins, and deliberately exposes **no**
+`fiscal_year` / `fiscal_period`: that column on `filing` is provenance, not the
+period a fact describes, and having one in reach is an invitation to PITFALLS
+§1.1. Period labels reach the result from the plan instead.
 
-### 4.3 The retrieval layer — `app/retrieval/`
+The grant half is done with it: `vf_retrieval_role` now holds `SELECT` on the
+view and nothing else. Verified — it is refused on `fact`, `filing`, `company`,
+`concept` and `load_run`.
 
-The four functions in §2. `app/retrieval/` is the slot the original brief
+Both halves, and every measurement behind them, are in
+[`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md).
+
+### 4.3 The retrieval layer — `app/retrieval/` — NEXT
+
+The four functions in §2; the directory exists but holds only its `DESIGN.md`.
+`app/retrieval/` is the slot the original brief
 reserves ([`sec-retriever.md`](sec-retriever.md) §3); the name is a leftover
 from an earlier design that meant BM25-plus-vectors over document chunks, but
 it is the right home and inventing a new directory should be a deliberate
@@ -189,10 +197,14 @@ and DDL, but `statement_timeout` and `default_transaction_read_only` are
 shrug them off. Only `validate()` can refuse that string. PostgreSQL also has
 no per-role row limit, so the `LIMIT` lives here too.
 
-### 4.4 Composition convention — undecided
+### 4.4 Composition convention — decided
 
-Three bindings across two companies: one query or three? Nothing says, and the
-emitter has to know.
+**One statement per question.** It falls out of the contract: because a row
+carries `element_id`, several bindings coexist in one result set, and the
+plan's coordinates are injected as a `VALUES` list the statement joins against
+— so per-company concept divergence is data rather than SQL cleverness. The
+open edge is that mixing `direct` and `residual` bindings needs a `UNION ALL`
+of two blocks. See `app/retrieval/DESIGN.md` §4.
 
 ### 4.5 The query-object producer — not started
 
@@ -250,7 +262,7 @@ them. `app/db/roles.py` explains every grant.
 | role | used by | difference |
 |---|---|---|
 | `vf_query_mapper_role` | `app/semantic/query_mapper.py` | needs `concept.embedding` for the pgvector fallback, so it also gets `public` on its `search_path` |
-| `vf_retrieval_role` | `app/retrieval/` | column-level grant on `concept` withholds `embedding`; no vector operators; 4 connections |
+| `vf_retrieval_role` | `app/retrieval/` | one relation only: `SELECT` on the `xbrl.reported_fact` view, nothing on any base table; no vector operators; 4 connections |
 
 Neither can reach `load_run`. The **grants** are a real boundary — verified
 with `default_transaction_read_only` deliberately off. The **session settings**
@@ -316,7 +328,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (251 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (288 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself
@@ -361,6 +373,7 @@ found, including two the unit tests did not catch.
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
 | [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) | the curated alias layer |
 | [`app/db/DESIGN.md`](app/db/DESIGN.md) | ORM models, layout |
+| [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, and the refuse rule |
 | [`app/db/roles.py`](app/db/roles.py) | the two read-only roles, and which half of them is a real boundary |
 | [`LOADER.md`](LOADER.md) | the load step |
 | [`ALEMBIC.md`](ALEMBIC.md) | migrations — note step 5, the test database is NOT migrated automatically |

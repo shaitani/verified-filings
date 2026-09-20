@@ -104,6 +104,13 @@ ResultAxis = Literal["company", "period", "metric"]
 #:                           carries $8.0B of commercial paper outside that
 #:                           figure, so the number is 8% light and nothing else
 #:                           in the plan would say so.
+#:   "incomplete_result"  -- rows the plan promised did not come back. Made
+#:                           *after* execution, unlike every other kind here:
+#:                           the plan proved the facts exist, so a shortfall is
+#:                           a fault in the query or the run, not in the data.
+#:                           Distinct from "partial_coverage", which is the
+#:                           plan saying up front that some periods have no
+#:                           facts at all.
 NoteKind = Literal[
     "concept_switch",
     "unverified_switch",
@@ -111,6 +118,7 @@ NoteKind = Literal[
     "period_misalignment",
     "mixed_granularity",
     "narrower_than_asked",
+    "incomplete_result",
 ]
 
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...
@@ -635,3 +643,72 @@ class QueryPlan(_Base):
         while these mean it might once the asker narrows it.
         """
         return bool(self.clarifications or self.ambiguous)
+
+    @staticmethod
+    def binding_key(index: int) -> str:
+        """The stable handle a result row cites a binding by. Positional,
+        because the position is what makes plan and result auditable against
+        each other."""
+        return f"b{index}"
+
+    def binding_for(
+        self,
+        element_id: str,
+        company_cik: int,
+        fiscal_year: int,
+        fiscal_period: QueryFiscalPeriod,
+    ) -> tuple[int, Binding]:
+        """The one binding that answers for this cell, and its index.
+
+        This is what makes citation a *lookup* rather than a guess. A result
+        row carries no ``concept_id``; it carries this key, and the concepts
+        come from the plan, which is trustworthy. Resolution order mirrors
+        §8.3: a company-specific binding beats the ``company_cik=None``
+        fallback, and ``Binding.periods`` separates a filer that changed tags
+        mid-range.
+
+        Raises ``LookupError`` when nothing answers for the cell -- the row
+        was invented -- and ``ValueError`` when two bindings claim it, which
+        means the plan itself is malformed and nothing else would notice.
+        """
+        wanted = PeriodRef(fiscal_year=fiscal_year, fiscal_period=fiscal_period)
+        matches = [
+            (index, binding)
+            for index, binding in enumerate(self.bindings)
+            if binding.element_id == element_id
+            and binding.company_cik in (None, company_cik)
+            and (not binding.periods or wanted in binding.periods)
+        ]
+        specific = [pair for pair in matches if pair[1].company_cik is not None]
+        chosen = specific or matches
+        if not chosen:
+            raise LookupError(
+                f"no binding answers for element {element_id!r}, cik {company_cik}, "
+                f"{fiscal_period}{fiscal_year}"
+            )
+        if len(chosen) > 1:
+            raise ValueError(
+                f"{len(chosen)} bindings claim element {element_id!r}, cik "
+                f"{company_cik}, {fiscal_period}{fiscal_year}: indices "
+                f"{[index for index, _ in chosen]}. A cell with two answers has none."
+            )
+        return chosen[0]
+
+    def bindings_for_company(
+        self, element_id: str, company_cik: int
+    ) -> list[tuple[int, Binding]]:
+        """Every binding of one element for one company, with indices.
+
+        Coarse attribution, for a *derived* row: a growth figure spanning a
+        tag change is computed from two bindings, and a row labelled with one
+        period cannot name the other end. This says "computed from these",
+        which is true, rather than claiming a precision the row lacks.
+        """
+        matches = [
+            (index, binding)
+            for index, binding in enumerate(self.bindings)
+            if binding.element_id == element_id
+            and binding.company_cik in (None, company_cik)
+        ]
+        specific = [pair for pair in matches if pair[1].company_cik is not None]
+        return specific or matches

@@ -497,6 +497,16 @@ covers one about the result as a whole. Period misalignment (PITFALLS §1.16) is
 the plan-level case — it is a statement about a *comparison*, and attaching it
 to one of its sides would be arbitrary.
 
+`incomplete_result` (added with the result contract) is the one kind raised
+**after** execution rather than by the mapper. Every other kind describes
+something the mapper learned about the data; this one says the run did not
+return rows the plan had already proved were there, which makes it a fault in
+the query or the execution, not in the filings. It is deliberately not folded
+into `partial_coverage`: that one is the plan disclosing up front that some
+requested periods have no facts, and a reader told "some periods are missing"
+should be able to tell those two apart — one is the filer's doing, the other is
+ours.
+
 ### 8.16 `Ambiguity` holds one candidate, and carries the phrase
 
 Originally `min_length=2`, on the reasoning that a lone survivor is a binding

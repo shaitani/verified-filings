@@ -15,10 +15,15 @@ Two roles, because two different things read and they are not equally trusted
     the metric fallback is a pgvector similarity search against that column.
 
 ``vf_retrieval_role``
-    ``app/retrieval/`` (not built yet). Executes SQL *written by Qwen*. Never
-    needs the embedding column -- by the time it runs, the QueryPlan already
-    names concrete ``concept_id``s -- so it cannot read 1,904 x 768 floats.
+    ``app/retrieval/``. Executes SQL *written by Qwen*, so it holds SELECT on
+    exactly one relation: the ``xbrl.reported_fact`` view. Generated SQL
+    therefore cannot name ``fact``, ``filing``, ``concept`` or ``company`` at
+    all, which is what makes the view's baked-in ``is_latest`` filter and
+    joins unskippable rather than merely conventional. The view also withholds
+    ``concept.embedding`` -- by the time this role runs, the QueryPlan already
+    names concrete ``concept_id``s, so it never needs 1,904 x 768 floats.
     Capped connections, and no automatic grant on tables added later.
+    See ``app/retrieval/DESIGN.md`` 3 and 6.
 
 Neither gets ``load_run``, an append-only log of every load that ever ran.
 Nothing that answers a question has any business reading it.
@@ -110,11 +115,15 @@ QUERY_MAPPER = RoleSpec(
 RETRIEVAL = RoleSpec(
     name="vf_retrieval_role",
     used_by="app/retrieval/ (executes Qwen-written SQL)",
-    tables=("company", "filing", "fact"),
-    # Everything a citation needs, and nothing else. `embedding` is withheld
-    # because the plan already names concept_ids; `description` because
-    # nothing downstream reads it.
-    columns={"concept": ("id", "taxonomy", "name", "label")},
+    # One relation, and it is a view. Generated SQL cannot *name* `fact`,
+    # `filing` or `concept`, so the `is_latest` filter and the three joins
+    # cannot be got wrong by omitting them -- and no column called
+    # `fiscal_year` is in reach to be mistaken for a period (PITFALLS 1.1).
+    # `REVOKE ALL ON ALL TABLES IN SCHEMA` covers views, and it runs before
+    # these grants, so this narrowing takes effect on the next provision.
+    # The view's own SELECT withholds `concept.embedding` and
+    # `concept.description`, which is why no column grant is needed here.
+    tables=("reported_fact",),
     inherit_future_tables=False,
     needs_vector_operators=False,
     connection_limit=4,

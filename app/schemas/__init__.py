@@ -10,4 +10,9 @@ Currently:
 * ``xbrl`` -- validates one curated XBRL-data file (``data/xbrl/<TICKER>.json``)
   on the way in, before the load step turns it into ``app.db`` rows. See
   ``app/schemas/DESIGN.md``.
+* ``query`` -- the query mapper's two ends, ``QueryIn`` and ``QueryPlan``. See
+  ``app/schemas/DESIGN.md`` section 8.
+* ``result`` -- the result contract: ``ResultRow`` (what generated SQL must
+  project) and ``ResultSet`` (what the presenter reads). See
+  ``app/retrieval/DESIGN.md``.
 """

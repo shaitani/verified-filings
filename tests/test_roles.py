@@ -144,16 +144,45 @@ async def test_neither_role_can_read_load_run(provisioned, role: str) -> None:
         await engine.dispose()
 
 
-@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
-async def test_both_roles_can_read_the_data(provisioned, role: str) -> None:
-    engine = _engine(provisioned, role)
+async def test_the_mapper_role_reads_the_base_tables(provisioned) -> None:
+    engine = _engine(provisioned, roles.QUERY_MAPPER.name)
     try:
         async with engine.connect() as connection:
             who = (await connection.execute(text("SELECT current_user"))).scalar_one()
-            assert who == role
+            assert who == roles.QUERY_MAPPER.name
             # Unqualified, so this also proves search_path reaches xbrl.
             await connection.execute(text("SELECT count(*) FROM company"))
             await connection.execute(text("SELECT count(*) FROM fact"))
+    finally:
+        await engine.dispose()
+
+
+async def test_the_retrieval_role_reads_the_view(provisioned) -> None:
+    engine = _engine(provisioned, roles.RETRIEVAL.name)
+    try:
+        async with engine.connect() as connection:
+            who = (await connection.execute(text("SELECT current_user"))).scalar_one()
+            assert who == roles.RETRIEVAL.name
+            # Unqualified, so this also proves search_path reaches xbrl.
+            await connection.execute(text("SELECT count(*) FROM reported_fact"))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("table", ["fact", "filing", "company", "concept"])
+async def test_the_retrieval_role_cannot_name_the_base_tables(
+    provisioned, table: str
+) -> None:
+    """The other half of the fence (app/retrieval/DESIGN.md 6). The view bakes
+    in the is_latest filter and the three joins; this is what stops generated
+    SQL routing around it -- and what keeps every column called `fiscal_year`
+    out of reach, since Filing's is provenance, not a period (PITFALLS 1.1)."""
+    engine = _engine(provisioned, roles.RETRIEVAL.name)
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text(f"SELECT count(*) FROM {table}"))
+            assert "InsufficientPrivilege" in str(caught.value)
     finally:
         await engine.dispose()
 
