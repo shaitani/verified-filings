@@ -187,13 +187,19 @@ Both halves, and every measurement behind them, are in
 ### 4.3 The retrieval layer — `app/retrieval/` — BUILT
 
 All four functions, plus `answer(plan)` which runs generate → validate →
-execute. Verified end to end against the real database with
-`qwen2.5-coder:7b`: the §6 smoke test returns `complete`, 36 of 36 rows.
+execute. 
+**Qwen writes the SQL, all of it.** Each function does one job and only it
+does that job: `build_prompt` assembles text and writes no SQL, `generate` is
+the only thing that talks to Qwen, `validate` judges without running or
+*modifying* (it returns its input byte-identical), `execute` is the only thing
+that touches the database.
 
-The shape that matters: **`build_prompt` writes the retrieval SQL itself** and
-hands it to the model, which either returns it unchanged or wraps it. Nothing
-fragile — `is_latest`, instant-vs-duration, the Q4 subtraction, `unit` in the
-join key — is asked of a 7B model. `app/retrieval/` is the slot the original brief
+Measured with `qwen2.5-coder:7b`, the layer currently **refuses more than it
+answers** — see `app/retrieval/DESIGN.md` §4.3 for the three failure modes and
+what each one cost. Everything failed safe; nothing returned a wrong number.
+The open question is the model, not the structure.
+
+`app/retrieval/` is the slot the original brief
 reserves ([`sec-retriever.md`](sec-retriever.md) §3); the name is a leftover
 from an earlier design that meant BM25-plus-vectors over document chunks, but
 it is the right home and inventing a new directory should be a deliberate
@@ -349,7 +355,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (349 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (342 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself

@@ -15,12 +15,20 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from app.retrieval import MAX_ROWS, InvalidSQL, validate
+from app.retrieval import (
+    MAX_ROWS,
+    ContractViolation,
+    InvalidSQL,
+    OutOfRole,
+    validate,
+)
 from app.schemas.result import RESULT_COLUMNS
 
-#: The shape app/retrieval/DESIGN.md §4 settles on: the plan's coordinates as a
+#: A statement of the shape the model is asked for: the plan's coordinates as a
 #: VALUES list, joined against the view, projecting exactly the contract.
-PLAN_JOIN = """
+#: Written here rather than generated -- `build_prompt` writes no SQL, and a
+#: test that needs Qwen to agree with it is not a test.
+PLAN_JOIN_UNCAPPED = """
 WITH plan(element_id, company_cik, fiscal_year, fiscal_period,
           period_start, period_end, concept_id, unit, is_instant) AS (
   VALUES ('e1', 320193, 2024, 'FY',
@@ -40,6 +48,11 @@ JOIN xbrl.reported_fact v
   AND (p.is_instant OR v.period_start = p.period_start)
 """
 
+#: The same with the LIMIT the contract requires. `validate()` no longer adds
+#: one -- it does not modify the statement at all -- so every accepted case has
+#: to carry its own.
+PLAN_JOIN = PLAN_JOIN_UNCAPPED + f"LIMIT {MAX_ROWS}"
+
 #: A single branch, for the UNION ALL that mixing direct and residual bindings
 #: needs. Self-contained so the two halves can be concatenated.
 BRANCH = """SELECT 'e1' AS element_id, v.company_cik, v.ticker, v.entity_name,
@@ -58,15 +71,16 @@ def _without_derivation(sql: str, replacement: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_plan_join_is_accepted_and_capped() -> None:
-    out = validate(PLAN_JOIN)
-    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+def test_an_accepted_statement_comes_back_byte_identical() -> None:
+    """validate() judges; it does not edit. What executes is exactly what was
+    inspected, so a wrong answer traces back to a statement somebody read."""
+    assert validate(PLAN_JOIN) == PLAN_JOIN
 
 
 def test_a_union_of_two_branches_is_accepted() -> None:
     """Mixing a direct and a residual binding in one statement needs this."""
-    out = validate(f"{BRANCH}\nUNION ALL\n{BRANCH}")
-    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+    sql = BRANCH + "\nUNION ALL\n" + BRANCH + f"\nLIMIT {MAX_ROWS}"
+    assert validate(sql) == sql
 
 
 def test_aggregates_and_window_functions_are_accepted() -> None:
@@ -79,23 +93,32 @@ def test_aggregates_and_window_functions_are_accepted() -> None:
     assert validate(sql)
 
 
-def test_a_statement_already_under_the_cap_keeps_its_own_limit() -> None:
-    out = validate(f"{PLAN_JOIN} LIMIT 36")
-    assert "LIMIT 36" in out
-    assert f"LIMIT {MAX_ROWS}" not in out
+def test_a_statement_under_the_cap_keeps_its_own_limit() -> None:
+    sql = PLAN_JOIN_UNCAPPED + "LIMIT 36"
+    assert validate(sql) == sql
 
 
-def test_a_trailing_semicolon_is_stripped_not_rejected() -> None:
-    out = validate(f"{PLAN_JOIN.strip()};")
-    assert ";" not in out
-    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+def test_a_trailing_semicolon_is_accepted_and_kept() -> None:
+    """One statement plus a terminator is still one statement, and tidying it
+    away is not validate()'s job."""
+    sql = PLAN_JOIN + ";"
+    assert validate(sql) == sql
 
 
-def test_the_limit_survives_a_trailing_line_comment() -> None:
-    """Appended on its own line, so it cannot land inside the comment and
-    quietly not apply."""
-    out = validate(f"{PLAN_JOIN.strip()}\n-- that is all")
-    assert out.splitlines()[-1] == f"LIMIT {MAX_ROWS}"
+def test_a_statement_with_no_limit_is_refused() -> None:
+    """PostgreSQL has no per-role row cap, and nothing appends one any more."""
+    with pytest.raises(ContractViolation, match="no LIMIT"):
+        validate(PLAN_JOIN_UNCAPPED)
+
+
+def test_a_statement_that_reads_nothing_is_refused() -> None:
+    """The worst failure this project has. Asked to write the whole statement
+    from a table of coordinates, qwen2.5-coder:7b returned a UNION ALL of
+    invented literals -- `285000000000 AS value` -- with no FROM at all. Every
+    other check passed. Apple's real FY2025 revenue is 416,161,000,000."""
+    columns = ", ".join(f"NULL AS {name}" for name in RESULT_COLUMNS)
+    with pytest.raises(OutOfRole, match="never reads"):
+        validate(f"SELECT {columns} LIMIT 1")
 
 
 # --------------------------------------------------------------------------- #
@@ -264,29 +287,29 @@ def test_a_duplicated_column_name_is_refused() -> None:
 
 def test_a_limit_over_the_ceiling_is_refused() -> None:
     with pytest.raises(InvalidSQL, match="exceeds the ceiling"):
-        validate(f"{PLAN_JOIN} LIMIT 100000")
+        validate(PLAN_JOIN_UNCAPPED + "LIMIT 100000")
 
 
 def test_a_non_constant_limit_is_refused() -> None:
     """It cannot be compared with a ceiling without evaluating it, and
     evaluating it is the database's job -- after this decision, not before."""
     with pytest.raises(InvalidSQL, match="plain integer"):
-        validate(f"{PLAN_JOIN} LIMIT (SELECT 9999)")
+        validate(PLAN_JOIN_UNCAPPED + "LIMIT (SELECT 9999)")
 
 
 def test_with_ties_is_refused() -> None:
     """It returns however many rows tie at the cut-off, so its own count is
     not a cap."""
-    sql = f"{PLAN_JOIN} ORDER BY v.value FETCH FIRST 5 ROWS WITH TIES"
+    sql = PLAN_JOIN_UNCAPPED + "ORDER BY v.value FETCH FIRST 5 ROWS WITH TIES"
     with pytest.raises(InvalidSQL, match="WITH TIES"):
         validate(sql)
 
 
 def test_the_cap_is_caller_settable() -> None:
-    out = validate(PLAN_JOIN, max_rows=36)
-    assert out.splitlines()[-1] == "LIMIT 36"
-    with pytest.raises(InvalidSQL, match="exceeds the ceiling of 36"):
-        validate(f"{PLAN_JOIN} LIMIT 100", max_rows=36)
+    sql = PLAN_JOIN_UNCAPPED + "LIMIT 36"
+    assert validate(sql, max_rows=36) == sql
+    with pytest.raises(ContractViolation, match="exceeds the ceiling of 10"):
+        validate(sql, max_rows=10)
 
 
 # --------------------------------------------------------------------------- #

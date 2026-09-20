@@ -1,26 +1,21 @@
-"""``build_prompt(plan)`` -- the plan, rendered as text for Qwen. No database.
+"""``build_prompt(plan)`` -- the prompt. Nothing else, and nobody else.
 
-The division of labour, from ``app/retrieval/DESIGN.md``: retrieval is bounded
--- four shapes over one view -- and should be deterministic code, while the
-model writes the layer above it (ranking, growth, ratios across companies).
+This module's only output is text for Qwen. It writes **no SQL**: it assembles
+the input the model needs -- what the one readable relation contains, what the
+plan resolved to, and what the answer has to look like -- and the model writes
+the statement.
 
-So this module **writes the retrieval SQL itself** and hands it to the model
-already correct. ``base_query(plan)`` is complete, runnable, and satisfies the
-contract on its own. The prompt asks for it back unchanged when the question
-needs nothing more, and for it to be wrapped when the question needs a
-computed answer.
+That division is the point. ``build_prompt`` prompts, ``generate`` asks,
+``validate`` judges, ``execute`` runs. Each of those is the only thing that
+does its job, and a function that quietly does a second one makes the whole
+chain impossible to reason about.
 
-That is a deliberate choice about what a 7B model is being asked to do. The
-parts that are easy to get quietly wrong -- the ``is_latest`` filter, the
-instant-versus-duration period match, the residual subtraction, keeping
-``unit`` in the join key -- are not asked of it at all. What is asked of it is
-arithmetic over rows that are already correct, and ``validate()`` refuses
-anything that deviates from the contract.
-
-The plan reaches the SQL as a literal ``VALUES`` list. That is what makes
-per-company concept divergence *data*: Apple binds one concept id and NVIDIA
-another, and the difference is two rows of a table, not a branch the model has
-to invent.
+The plan reaches the model as a **table of coordinates**, one row per value
+the answer needs. Every hazard the data holds is spelled out beside it:
+per-company concept ids (filers tag the same business concept differently),
+date windows rather than fiscal-year labels (a 10-K carries prior-year
+comparatives), ``unit`` as part of the key, instants having no start date, and
+the two windows a Q4 has to be computed from.
 """
 
 from __future__ import annotations
@@ -28,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from app.retrieval.validator import MAX_ROWS
 from app.schemas.query import Binding, QueryPlan, ResolvedPeriod
 from app.schemas.result import RESULT_COLUMNS
 
@@ -138,97 +134,36 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     return cells
 
 
-def _sql_date(value: date | None) -> str:
-    """A date literal, or a **typed** NULL.
+def _coordinate_table(cells: list[PlanCell]) -> str:
+    """The plan as data: one row per value the answer needs.
 
-    The cast is not decoration. PostgreSQL infers a ``VALUES`` column's type
-    from its literals, and a column that is NULL in every row -- which
-    ``subtract_end`` is for any plan with no Q4 in it -- comes out as ``text``.
-    Comparing it to a date then fails with "operator does not exist: date =
-    text" at *execution* time. ``validate()`` cannot catch this: libpg_query
-    parses, it does not type-check.
+    Deliberately not a ``VALUES`` list. That would be SQL, and writing SQL is
+    the model's job, not this one's -- handing it a half-written statement is
+    how the line between the two blurs.
     """
-    return "NULL::date" if value is None else f"DATE '{value.isoformat()}'"
-
-
-def _sql_text(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def _values_rows(cells: list[PlanCell]) -> str:
+    header = (
+        "  element | cik      | period | concept_id | unit  | instant | "
+        "window_start | window_end | minus_window_ending"
+    )
+    rule = "  " + "-" * (len(header) - 2)
     rows = [
-        "    ("
-        + ", ".join(
-            [
-                _sql_text(cell.element_id),
-                str(cell.company_cik),
-                str(cell.fiscal_year),
-                _sql_text(cell.fiscal_period),
-                _sql_date(cell.period_start),
-                _sql_date(cell.period_end),
-                _sql_date(cell.subtract_end),
-                str(cell.concept_id),
-                _sql_text(cell.unit),
-                "true" if cell.is_instant else "false",
-            ]
+        "  {:<7} | {:<8} | {:<6} | {:<10} | {:<5} | {:<7} | {:<12} | {:<10} | {}".format(
+            cell.element_id,
+            cell.company_cik,
+            f"{cell.fiscal_period}{cell.fiscal_year}",
+            cell.concept_id,
+            cell.unit,
+            # the literal the column actually holds: a model copies what it
+            # is shown, and "yes" produced `is_instant = 'no'` -> boolean =
+            # text at execution time.
+            "true" if cell.is_instant else "false",
+            cell.period_start.isoformat(),
+            cell.period_end.isoformat(),
+            cell.subtract_end.isoformat() if cell.subtract_end else "-",
         )
-        + ")"
         for cell in cells
     ]
-    return ",\n".join(rows)
-
-
-def base_query(plan: QueryPlan) -> str:
-    """The retrieval SQL for this plan: complete, correct, contract-shaped.
-
-    Every hazard the view does not already close is closed here:
-
-    * the period match is ``period_end`` plus ``period_start`` *only when the
-      value is a duration* -- an instant fact has no start;
-    * ``unit`` is in the join key, because without it one cell can be two rows;
-    * a residual subtracts the shorter window from the whole one, sharing a
-      start, and the ``WHERE`` drops the cell entirely if the subtrahend is
-      missing. That last clause is the important one: a missing subtrahend
-      would otherwise make ``LIMIT``-shaped nonsense of a Q4 by returning the
-      whole year, which is the exact plausible-wrong-number this project
-      exists to refuse. Dropping the row makes it a missing cell instead, and
-      the verdict says so.
-    """
-    cells = plan_cells(plan)
-    return f"""WITH plan(element_id, company_cik, fiscal_year, fiscal_period,
-          period_start, period_end, subtract_end, concept_id, unit, is_instant) AS (
-  VALUES
-{_values_rows(cells)}
-)
-SELECT p.element_id,
-       v.company_cik,
-       v.ticker,
-       v.entity_name,
-       p.fiscal_year,
-       p.fiscal_period,
-       v.period_start,
-       v.period_end,
-       v.is_instant,
-       v.value - COALESCE(s.value, 0) AS value,
-       v.unit,
-       NULL::text AS derivation
-FROM plan p
-JOIN {VIEW} v
-  ON  v.company_cik = p.company_cik
-  AND v.concept_id  = p.concept_id
-  AND v.unit        = p.unit
-  AND v.is_instant  = p.is_instant
-  AND v.period_end  = p.period_end
-  AND (p.is_instant OR v.period_start = p.period_start)
-LEFT JOIN {VIEW} s
-  ON  p.subtract_end IS NOT NULL
-  AND s.company_cik  = p.company_cik
-  AND s.concept_id   = p.concept_id
-  AND s.unit         = p.unit
-  AND s.is_instant   = false
-  AND s.period_start = p.period_start
-  AND s.period_end   = p.subtract_end
-WHERE p.subtract_end IS NULL OR s.value IS NOT NULL"""
+    return chr(10).join([header, rule, *rows])
 
 
 #: ``QueryIn.intent`` is the producer saying what kind of answer is wanted, and
@@ -284,6 +219,21 @@ def build_prompt(plan: QueryPlan) -> str:
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
     job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
+    residual = [cell for cell in cells if cell.subtract_end]
+
+    residual_help = (
+        f"""
+{len(residual)} of the rows below have a date in `minus_window_ending`. Those
+values are not filed directly and must be computed: take the value for
+`window_start`..`window_end` and SUBTRACT the value for
+`window_start`..`minus_window_ending`, same company, same concept_id, same
+unit. Both terms start on the same day. If either term is missing, leave the
+row out entirely -- returning the unsubtracted figure would report a full year
+as if it were one quarter.
+"""
+        if residual
+        else ""
+    )
 
     return f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
 
@@ -291,55 +241,72 @@ QUESTION
 {plan.question}
 
 WHAT THE ANSWER MUST CONTAIN
-shape={spec.shape}, varies along {spec.axes or ['nothing']}, {spec.row_count} row(s) of
+shape={spec.shape}, varies along {spec.axes or ["nothing"]}, {spec.row_count} row(s) of
 underlying data ({spec.companies} compan(ies) x {spec.periods} period(s) x
 {spec.metrics} metric(s)). Do not collapse an axis the answer varies along.
 
-THE RETRIEVAL QUERY IS ALREADY WRITTEN
-It returns exactly {len(cells)} row(s), one per company/period/metric, with the
-right concept per company and the Q4 subtractions already done:
+THE ONLY RELATION YOU CAN READ
+{VIEW}(company_cik, ticker, entity_name, concept_id, taxonomy, concept_name,
+                   concept_label, unit, is_instant, period_start, period_end, value)
 
-{base_query(plan)}
+  - One row per reported value. Superseded restatements are already filtered
+    out; you do not need to think about that.
+  - `period_end` is the date the value is as of (is_instant = true) or ends on
+    (is_instant = false). `period_start` is NULL for every instant.
+  - It has NO fiscal_year or fiscal_period column, on purpose. Match on the
+    dates given below, never on a year.
+  - `unit` MUST be part of every join or filter that selects a value. The same
+    company, concept and period can be filed under two units, and ignoring it
+    returns each value twice.
 
+THE VALUES THE ANSWER NEEDS
+One row here = one row the answer needs. `concept_id` differs per company on
+purpose: filers tag the same business concept differently.
+
+{_coordinate_table(cells)}
+
+Every value in that table is a literal you write into the SQL. `element_id`,
+`fiscal_year` and `fiscal_period` exist ONLY there -- the relation has no such
+columns, so they have to be selected as constants per row.
+
+Match each row with an EXACT equality on all of:
+  company_cik, concept_id, unit, is_instant, period_end = window_end
+and, only when is_instant is false, period_start = window_start.
+Do not use BETWEEN or a date range: two different periods can end in the same
+year, and a range returns both.
+
+The straightforward way is a VALUES list of the table above joined to the
+relation, which also keeps `element_id` and the period labels attached to the
+right rows.
+{residual_help}
 YOUR JOB
 {job}
 
-Worked example of (b), for "rank these companies by year-over-year revenue
-growth in FY2024":
+OUTPUT
+Project exactly these column names, in any order:
+  {columns}
 
-  WITH plan(...) AS (VALUES ...),        -- copied unchanged from above
-  base AS (
-      SELECT ... FROM plan p JOIN ...    -- the rest of the query above
-  ),
-  growth AS (
-      SELECT element_id, company_cik, ticker, entity_name,
-             fiscal_year, fiscal_period, period_start, period_end, is_instant,
-             value / NULLIF(lag(value) OVER (PARTITION BY company_cik
-                                             ORDER BY fiscal_year), 0) - 1 AS value
-      FROM base
-  )
-  SELECT element_id, company_cik, ticker, entity_name,
-         fiscal_year, fiscal_period, period_start, period_end, is_instant,
-         value, 'pure' AS unit, 'yoy_growth' AS derivation
-  FROM growth
-  WHERE value IS NOT NULL AND fiscal_year = 2024
-  ORDER BY value DESC
-
-Note what that example does: the computed rows say `unit = 'pure'` because a
-growth rate is dimensionless, and `derivation = 'yoy_growth'` because the
-number is no longer revenue.
+  - `fiscal_year` and `fiscal_period` come from the table above (the relation
+    has no such column). Split "FY2024" into 2024 and 'FY'.
+  - `period_start`, `period_end`, `is_instant`, `value`, `unit`, `ticker`,
+    `entity_name`, `company_cik` come from the relation.
+  - `element_id` comes from the table above.
 
 RULES (the statement is rejected if it breaks one)
-1. Project exactly these column names, in any order:
-   {columns}
+0. EVERY value must be read from the relation. Never write a number, a ticker
+   or a company name into the SQL as a literal -- a statement that does not
+   read `{VIEW}` is rejected outright. The table above tells you WHICH rows to
+   fetch; it does not contain the values, and the values are not yours to
+   supply.
+1. One statement. SELECT only -- no SET, no set_config(), no data-modifying
+   CTE, no SELECT INTO, no locking clause.
 2. `{VIEW}` is the only readable relation. `fact`, `filing`, `company` and
    `concept` will raise a permission error.
-3. One statement. SELECT only -- no SET, no set_config(), no data-modifying
-   CTE, no SELECT INTO, no locking clause.
+3. End with `LIMIT {MAX_ROWS}` or less. A statement with no LIMIT is rejected;
+   nothing adds one for you.
 4. Give every projected column an explicit alias unless it is a bare column
    reference. `NULL::text` without an alias is a column named "text".
-5. No LIMIT above 500.
-6. Never mix rows of different `unit` in one arithmetic expression.
+5. Never mix rows of different `unit` in one arithmetic expression.
 
 CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
 {chr(10).join(notes) if notes else "- none"}

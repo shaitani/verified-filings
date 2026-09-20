@@ -1,13 +1,14 @@
-"""app/retrieval/prompt.py, generator.py and executor.py.
+"""app/retrieval/prompt.py and generator.py.
 
-Everything here is pure except the last section, which runs a generated
-statement against the test database. Nothing calls Qwen: a test that needs a
-language model to agree with it is not a test.
+All pure. Nothing here calls Qwen: a test that needs a language model to agree
+with it is not a test.
 
-The invariant worth stating plainly: **`base_query(plan)` must always survive
-`validate(base_query(plan))`**. The prompt hands that query to the model as
-the thing to build on, so if it could not run, every generated statement would
-inherit the fault.
+`build_prompt` writes no SQL -- it assembles the coordinates the model needs
+and the model writes the statement -- so what is checked here is that the
+coordinates are right and that the prompt says what the data actually holds.
+The literal `is_instant` renders as `true`/`false` rather than `yes`/`no`
+because the model copies what it is shown, and `yes` produced
+`is_instant = 'no'` against a boolean column.
 """
 
 from __future__ import annotations
@@ -19,10 +20,8 @@ import pytest
 from app.retrieval import (
     GenerationError,
     UnsupportedPlan,
-    base_query,
     build_prompt,
     plan_cells,
-    validate,
 )
 from app.retrieval.generator import extract_sql
 from app.schemas.query import (
@@ -38,7 +37,6 @@ from app.schemas.query import (
     ResolvedPeriod,
     ResultSpec,
 )
-from app.schemas.result import RESULT_COLUMNS
 
 APPLE = 320193
 NVIDIA = 1045810
@@ -194,100 +192,6 @@ def test_a_plan_binding_nothing_is_refused() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# base_query -- must always be runnable
-# --------------------------------------------------------------------------- #
-
-
-def test_the_base_query_always_passes_validation() -> None:
-    """The prompt hands this to the model as the thing to build on. If it did
-    not validate, every generated statement would inherit the fault."""
-    plan = _plan(
-        [_binding(company_cik=APPLE), _binding(company_cik=NVIDIA, concepts=[_concept(254)])],
-        [_annual(APPLE, 2024), _annual(NVIDIA, 2024)],
-    )
-    assert validate(base_query(plan))
-
-
-def test_a_residual_base_query_also_validates() -> None:
-    plan = _plan(
-        [
-            _binding(
-                period_rule="residual",
-                coverage=Coverage(
-                    fact_count=2,
-                    components=[
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 9, 28),
-                            fact_count=1,
-                        ),
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 6, 29),
-                            fact_count=1,
-                        ),
-                    ],
-                ),
-            )
-        ],
-        [_q4()],
-    )
-    assert validate(base_query(plan))
-
-
-def test_a_null_subtract_end_is_cast_to_date() -> None:
-    """An all-NULL VALUES column is typed `text`, and `date = text` fails at
-    *execution* time -- libpg_query parses, it does not type-check, so
-    validate() cannot catch this."""
-    sql = base_query(_plan([_binding()], [_annual()]))
-    assert "NULL::date" in sql
-    assert ", NULL," not in sql
-
-
-def test_the_base_query_projects_exactly_the_contract() -> None:
-    sql = base_query(_plan([_binding()], [_annual()]))
-    for column in RESULT_COLUMNS:
-        assert column in sql
-
-
-def test_period_start_comes_from_the_view_not_the_plan() -> None:
-    """An instant fact has no start. Projecting the plan's date would give a
-    balance-sheet figure a span it does not have."""
-    sql = base_query(_plan([_binding()], [_annual()]))
-    assert "v.period_start," in sql
-    assert "p.period_start," not in sql
-
-
-def test_a_missing_subtrahend_drops_the_row_rather_than_returning_the_year() -> None:
-    sql = base_query(
-        _plan(
-            [
-                _binding(
-                    period_rule="residual",
-                    coverage=Coverage(
-                        fact_count=2,
-                        components=[
-                            ComponentCoverage(
-                                period_start=date(2023, 10, 1),
-                                period_end=date(2024, 9, 28),
-                                fact_count=1,
-                            ),
-                            ComponentCoverage(
-                                period_start=date(2023, 10, 1),
-                                period_end=date(2024, 6, 29),
-                                fact_count=1,
-                            ),
-                        ],
-                    ),
-                )
-            ],
-            [_q4()],
-        )
-    )
-    assert "WHERE p.subtract_end IS NULL OR s.value IS NOT NULL" in sql
-
-
-# --------------------------------------------------------------------------- #
 # build_prompt
 # --------------------------------------------------------------------------- #
 
@@ -351,53 +255,3 @@ def test_a_bare_answer_is_taken_from_the_first_keyword() -> None:
 def test_a_reply_with_no_statement_raises() -> None:
     with pytest.raises(GenerationError, match="no SELECT"):
         extract_sql("I cannot answer that.")
-
-
-# --------------------------------------------------------------------------- #
-# Against the real database
-# --------------------------------------------------------------------------- #
-
-
-async def test_a_base_query_runs_and_returns_the_contract(test_session_factory) -> None:
-    """Empty result, but the column names and types are the point -- this is
-    what catches a VALUES column typed `text` that validate() cannot see."""
-    from sqlalchemy import text
-
-    plan = _plan(
-        [_binding(company_cik=APPLE), _binding(company_cik=NVIDIA, concepts=[_concept(254)])],
-        [_annual(APPLE, 2024), _annual(NVIDIA, 2024)],
-    )
-    async with test_session_factory() as session:
-        result = await session.execute(text(validate(base_query(plan))))
-        assert tuple(result.keys()) == RESULT_COLUMNS
-
-
-async def test_a_residual_base_query_runs(test_session_factory) -> None:
-    from sqlalchemy import text
-
-    plan = _plan(
-        [
-            _binding(
-                period_rule="residual",
-                coverage=Coverage(
-                    fact_count=2,
-                    components=[
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 9, 28),
-                            fact_count=1,
-                        ),
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 6, 29),
-                            fact_count=1,
-                        ),
-                    ],
-                ),
-            )
-        ],
-        [_q4()],
-    )
-    async with test_session_factory() as session:
-        result = await session.execute(text(validate(base_query(plan))))
-        assert tuple(result.keys()) == RESULT_COLUMNS

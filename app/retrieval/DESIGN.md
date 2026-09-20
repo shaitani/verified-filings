@@ -277,54 +277,71 @@ figure. `Binding._residual_is_provable` has already refused any residual whose
 component windows lack facts, so this join cannot quietly return the whole year
 because a term went missing.
 
-### 4.2 The model is handed the retrieval SQL, not asked for it
+### 4.2 Division of responsibility
 
-`build_prompt` does not describe the schema and hope. It **writes the
-retrieval query itself** — `base_query(plan)` is complete, runnable, and
-satisfies the contract on its own — and asks the model either to return it
-unchanged or to wrap it.
+Each function does one job, and only it does that job:
 
-That is the §2 division of labour made literal. Everything easy to get quietly
-wrong (the `is_latest` filter, instant-versus-duration matching, the residual
-subtraction, keeping `unit` in the join key) is never asked of the model. What
-is asked is arithmetic over rows that are already right.
+| function | does | does not |
+|---|---|---|
+| `build_prompt` | assembles the text | write SQL |
+| `generate` | talks to Qwen | judge or run what comes back |
+| `validate` | judges the statement | run it, or **modify** it |
+| `execute` | runs it against the database | anything else |
 
-`base_query` also collapses the `UNION ALL` §4 expected for mixing direct and
-residual bindings. A `LEFT JOIN` to the subtrahend, keyed on a `subtract_end`
-column that is NULL for direct cells, handles both in one block:
+**Qwen writes the SQL. All of it.** `build_prompt` hands over what the model
+needs — the view's columns and their traps, a table of coordinates (one row
+per value the answer needs), the required projection, the rules — and the
+model composes the statement. The coordinate table is deliberately *not* a
+`VALUES` list: that would be SQL, and a half-written statement blurs the line
+this table exists to keep.
 
-```sql
-       v.value - COALESCE(s.value, 0) AS value
-...
-WHERE p.subtract_end IS NULL OR s.value IS NOT NULL
-```
+`validate` returns its input **byte-identical**. An earlier version appended a
+missing `LIMIT`; it no longer does, because a validator that edits its input
+means what runs is not what was read, and a wrong answer then traces back to a
+statement nobody wrote. A missing `LIMIT` is a refusal instead.
 
-That `WHERE` is the load-bearing half. Without it a *missing* subtrahend makes
-`COALESCE` return the whole year as if it were Q4 — a textbook plausible wrong
-number. Dropping the row instead turns it into a missing cell, which the
-verdict reports.
+It reports two kinds of rejection. `ContractViolation` is an ordinary mistake
+— wrong columns, no `LIMIT`. `OutOfRole` is the model reaching outside what it
+is for — a `SET`, a `set_config`, another relation, a data-modifying CTE — and
+that one is **logged at WARNING** naming what was attempted, so it surfaces
+whether or not anyone inspects a return value.
 
-### 4.3 Two findings from building it
+### 4.3 What the model actually does, measured
 
-**`validate()` parses; it does not type-check.** A `VALUES` column that is
-NULL in every row — which `subtract_end` is for any plan without a Q4 — is
-typed `text` by PostgreSQL, and `date = text` then fails at *execution* time.
-The statement is syntactically perfect and libpg_query has no complaint. The
-fix is `NULL::date`; the lesson is that validation is not a substitute for
-running the thing.
+`qwen2.5-coder:7b`, asked to write the statement from the coordinate table.
+Three distinct failures, in the order they appeared:
 
-**A 7B model handed a finished answer returns the finished answer.** Given
-`base_query` in the prompt *and* permission to reply with it unchanged,
-qwen2.5-coder:7b returned it unchanged for "rank these companies by
-year-over-year revenue growth" — it copied the query and appended an
-`ORDER BY`. Adding a worked example did not move it. What worked was removing
-the option: when `QueryPlan.intent` is `rank` or `derive`, the prompt does not
-offer the "reply unchanged" branch at all. It then produced the correct
-`lag()`-over-partition growth query, marked `derivation='yoy_growth'` and
-`unit='pure'`.
+1. **`is_instant = 'no'`** — boolean compared with text, failing at execution.
+   That one was ours: the table rendered the column as `yes`/`no`. A model
+   copies what it is shown, so the table now renders `true`/`false`.
 
-Worth keeping as a general shape: with a small model, **remove the wrong path
-rather than argue against it**.
+2. **Fabrication.** It returned a `UNION ALL` of invented literals —
+   `285000000000 AS value`, `'Apple Inc.' AS entity_name` — with no `FROM` at
+   all. One statement, a SELECT, the right twelve columns, a LIMIT: **every
+   check passed**. Apple's real FY2025 revenue is 416,161,000,000.
+
+   This is the worst failure the project can have, and it is decidable from
+   the text: a statement that never names the view cannot have got its values
+   from the database. `validate` now refuses that as `OutOfRole`. It is the
+   cheapest guard in the file. It does not catch *partial* fabrication — a
+   statement that reads the view and overrides one column with a literal —
+   and nothing static can; that is what `execute`'s attribution and row-count
+   verdict are for.
+
+3. **Paraphrased coordinates.** It now reads the view, but writes
+   `period_end IN ('2022-09-29', '2023-09-28', '2024-09-27')` where the table
+   says `2022-09-25`, `2023-09-30`, `2024-09-28`. Plausible-looking dates,
+   near-misses, zero rows matched. The verdict says `empty`, which is not
+   answerable, so it refuses.
+
+**Every one of those failed safe.** At no point did a wrong number reach a
+reader: the contract, the validator and the verdict each caught what they were
+built to catch. That is the design working. It is not the same as the layer
+being *useful* yet — a refusal is better than a lie and worse than an answer.
+
+The open question is the model, not the structure. A 7B paraphrasing a table
+of dates is a capability limit, not a prompt bug, and three rounds of prompt
+work moved it from fabricating to refusing rather than to answering.
 
 ---
 

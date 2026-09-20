@@ -18,28 +18,43 @@ instant/duration) and should be deterministic code. Qwen writes the layer
 values. Measured on the eval set, 20 of 45 answerable questions (44%) need
 that layer.
 
-``answer()`` is the three of them in the one order that is load-bearing:
-generate, **validate**, execute. Calling ``execute()`` on a generator's output
-directly is the mistake this package exists to prevent.
+Each function does one job and only it does that job:
+
+* ``build_prompt`` builds the prompt. It writes no SQL.
+* ``generate`` is the only thing that talks to Qwen.
+* ``validate`` is the only thing that judges the statement. It does not run it
+  and does not modify it -- what comes back is byte-identical to what Qwen
+  wrote, so what executes is what was inspected.
+* ``execute`` is the only thing that touches the database.
+
+``answer()`` runs them in that order. Calling ``execute()`` on a generator's
+output directly is the mistake this package exists to prevent.
 
 See ``app/retrieval/DESIGN.md``.
 """
 
 from app.retrieval.executor import execute
 from app.retrieval.generator import GENERATION_MODEL, GenerationError, generate
-from app.retrieval.prompt import UnsupportedPlan, base_query, build_prompt, plan_cells
-from app.retrieval.validator import MAX_ROWS, InvalidSQL, validate
+from app.retrieval.prompt import UnsupportedPlan, build_prompt, plan_cells
+from app.retrieval.validator import (
+    MAX_ROWS,
+    ContractViolation,
+    InvalidSQL,
+    OutOfRole,
+    validate,
+)
 from app.schemas.query import QueryPlan
 from app.schemas.result import ResultSet
 
 __all__ = [
     "GENERATION_MODEL",
     "MAX_ROWS",
+    "ContractViolation",
     "GenerationError",
     "InvalidSQL",
+    "OutOfRole",
     "UnsupportedPlan",
     "answer",
-    "base_query",
     "build_prompt",
     "execute",
     "generate",

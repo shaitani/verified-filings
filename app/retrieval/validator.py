@@ -26,6 +26,35 @@ reimplementation of it. A validator that parses a string differently from the
 server that will execute it has a gap between the two readings, and that gap is
 the whole attack. This has no such gap by construction.
 
+What this function does and does not do
+---------------------------------------
+It **inspects a string and returns a verdict**. That is all.
+
+* It does not run the statement. ``execute()`` is the only thing that does.
+* It does not *modify* the statement. An earlier version appended a missing
+  ``LIMIT``; it no longer does, because a validator that edits its input means
+  what runs is not what was read, and the statement that gets blamed for a
+  wrong answer is then nobody's. A missing ``LIMIT`` is now a refusal, and the
+  prompt tells the model to include one.
+* It returns the statement **byte-identical** to what it was given, so a
+  caller can pass its result straight to ``execute()`` without wondering.
+
+Two kinds of rejection, because they mean different things
+-----------------------------------------------------------
+``ContractViolation``
+    The model wrote a statement that does not fit the contract -- wrong
+    columns, no ``LIMIT``, an unnamed expression. An ordinary mistake. Logged
+    at INFO.
+
+``OutOfRole``
+    The model tried to do something outside what it is for: change a session
+    setting, read a relation it has no business in, modify data. Not a
+    mistake in degree -- a different kind of thing, and the one worth being
+    told about. **Logged at WARNING**, naming what was attempted, so it shows
+    up whether or not anyone is reading return values.
+
+Both are ``InvalidSQL``, so a caller that does not care can catch one type.
+
 What it enforces
 ----------------
 Conservative throughout: anything not positively understood is refused.
@@ -37,21 +66,20 @@ Conservative throughout: anything not positively understood is refused.
    ``SelectStmt``.
 3. No ``SELECT ... INTO`` and no locking clause.
 4. No denied function call anywhere -- ``set_config`` above all.
-5. Every relation named is the view or a CTE defined in the same statement.
-   Redundant with the grant, and kept because an error here names the problem
-   instead of surfacing as ``permission denied`` from a live connection.
+5. Every relation named is the view or a CTE defined in the same statement,
+   **and the view is named at least once** -- a statement that reads nothing
+   invented whatever it returns.
 6. The projection is exactly ``RESULT_COLUMNS``, in any order.
-7. A ``LIMIT`` at or under ``max_rows``, appended when absent and **re-parsed
-   to confirm it took**. ``FETCH ... WITH TIES`` is refused, because it returns
-   more rows than its own count.
-
-Every message is written to be shown to a model. Whether a rejected statement
-is handed back for another attempt is an open decision -- see ``generator.py``.
+7. A ``LIMIT`` present, a plain integer, and at or under ``max_rows``.
+   ``FETCH ... WITH TIES`` is refused, because it returns more rows than its
+   own count.
 
 See ``app/retrieval/DESIGN.md`` §7.
 """
 
 from __future__ import annotations
+
+import logging
 
 from pglast import ast, parse_sql
 from pglast.enums import LimitOption
@@ -59,6 +87,8 @@ from pglast.parser import ParseError
 from pglast.visitors import Visitor
 
 from app.schemas.result import RESULT_COLUMNS
+
+logger = logging.getLogger(__name__)
 
 #: Ceiling on rows returned by one execution. PostgreSQL has no per-role row
 #: limit, so this is the only place it can be set.
@@ -91,6 +121,24 @@ class InvalidSQL(ValueError):
     A ``ValueError`` because it is a bad value, not a failure: refusing is a
     normal, expected outcome of asking a language model for SQL.
     """
+
+
+class ContractViolation(InvalidSQL):
+    """The statement does not fit the result contract. An ordinary mistake."""
+
+
+class OutOfRole(InvalidSQL):
+    """The statement tried to do something the model is not there to do.
+
+    Changing a session setting, reading a relation outside the view, modifying
+    data. Raised *and* logged at WARNING, because the point of this class is
+    that someone finds out.
+    """
+
+
+def _out_of_role(attempted: str, detail: str) -> OutOfRole:
+    logger.warning("generated SQL attempted %s outside its role: %s", attempted, detail)
+    return OutOfRole(detail)
 
 
 class _Inspector(Visitor):
@@ -163,13 +211,13 @@ def _leftmost_select(statement: ast.SelectStmt) -> ast.SelectStmt:
 def _check_projection(statement: ast.SelectStmt) -> None:
     targets = _leftmost_select(statement).targetList
     if not targets:
-        raise InvalidSQL("the statement projects no columns")
+        raise ContractViolation("the statement projects no columns")
 
     names: list[str] = []
     for position, target in enumerate(targets, start=1):
         name = _target_name(target)
         if name is None:
-            raise InvalidSQL(
+            raise ContractViolation(
                 f"column {position} has no name: give every projected column an "
                 f"explicit alias (for example `NULL::text AS derivation`), and do "
                 f"not use `SELECT *`"
@@ -178,7 +226,7 @@ def _check_projection(statement: ast.SelectStmt) -> None:
 
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
-        raise InvalidSQL(f"column name(s) projected more than once: {duplicates}")
+        raise ContractViolation(f"column name(s) projected more than once: {duplicates}")
 
     expected = set(RESULT_COLUMNS)
     found = set(names)
@@ -190,9 +238,40 @@ def _check_projection(statement: ast.SelectStmt) -> None:
             detail.append(f"missing {missing}")
         if unexpected:
             detail.append(f"unexpected {unexpected}")
-        raise InvalidSQL(
+        raise ContractViolation(
             f"the projection must be exactly {list(RESULT_COLUMNS)}, in any order: "
             + "; ".join(detail)
+        )
+
+
+def _check_reads_the_view(inspector: _Inspector) -> None:
+    """The statement must actually read the view.
+
+    Measured, not hypothetical. Asked to write the whole statement from a
+    table of coordinates, qwen2.5-coder:7b returned a ``UNION ALL`` of literal
+    rows -- ``285000000000 AS value``, ``'Apple Inc.' AS entity_name`` -- with
+    no ``FROM`` at all. Every other check passed: one statement, a SELECT, the
+    right twelve columns, a LIMIT. The numbers were invented, and Apple's real
+    FY2025 revenue is 416,161,000,000.
+
+    A statement that never names the view cannot have got its values from the
+    database, so this is decidable from the text alone. It is the cheapest
+    guard in the file and it catches the worst failure the project has: a
+    fluent, plausible, entirely fabricated figure.
+
+    It does not catch *partial* fabrication -- a statement that reads the view
+    and then overrides one column with a literal. Nothing here can; that is
+    what ``execute()``'s attribution and row-count verdict are for.
+    """
+    if not any(
+        relation == VIEW_NAME and schema in (None, VIEW_SCHEMA)
+        for schema, relation in inspector.relations
+    ):
+        raise _out_of_role(
+            "answering without reading the database",
+            f"the statement never reads {VIEW_SCHEMA}.{VIEW_NAME}, so whatever it "
+            f"returns was written into the SQL rather than looked up. Every value "
+            f"must come from the relation",
         )
 
 
@@ -203,20 +282,22 @@ def _check_relations(inspector: _Inspector) -> None:
         if relation == VIEW_NAME and schema in (None, VIEW_SCHEMA):
             continue
         named = f"{schema}.{relation}" if schema else relation
-        raise InvalidSQL(
+        raise _out_of_role(
+            f"a read of {named}",
             f"{named} cannot be read: the only relation available is "
             f"{VIEW_SCHEMA}.{VIEW_NAME}, which already applies the is_latest "
-            f"filter and the company/concept joins"
+            f"filter and the company/concept joins",
         )
 
 
 def _check_no_denied_calls(inspector: _Inspector) -> None:
     for function in inspector.functions:
         if function in DENIED_FUNCTIONS or function.startswith(DENIED_FUNCTION_PREFIXES):
-            raise InvalidSQL(
+            raise _out_of_role(
+                f"a call to {function}()",
                 f"{function}() is not allowed. Session settings such as "
                 f"statement_timeout are USERSET, so a call that changes one is a "
-                f"way around limits this layer is responsible for"
+                f"way around limits this layer is responsible for",
             )
 
 
@@ -232,12 +313,12 @@ def _limit_value(statement: ast.SelectStmt) -> int | None:
     if limit is None:
         return None
     if statement.limitOption == LimitOption.LIMIT_OPTION_WITH_TIES:
-        raise InvalidSQL(
+        raise ContractViolation(
             "FETCH ... WITH TIES is not allowed: it returns however many rows tie "
             "at the cut-off, so its own count is not a cap"
         )
     if not isinstance(limit, ast.A_Const) or not isinstance(limit.val, ast.Integer):
-        raise InvalidSQL("LIMIT must be a plain integer")
+        raise ContractViolation("LIMIT must be a plain integer")
     return limit.val.ival
 
 
@@ -246,67 +327,76 @@ def _parse_one(sql: str) -> ast.SelectStmt:
     try:
         statements = parse_sql(sql)
     except ParseError as error:
-        raise InvalidSQL(f"the statement does not parse: {error}") from error
+        raise ContractViolation(f"the statement does not parse: {error}") from error
 
     if not statements:
-        raise InvalidSQL("no statement was given")
+        raise ContractViolation("no statement was given")
     if len(statements) > 1:
-        raise InvalidSQL(
-            f"{len(statements)} statements were given; exactly one runs per "
-            f"execution"
+        raise _out_of_role(
+            f"{len(statements)} statements in one execution",
+            f"{len(statements)} statements were given; exactly one runs per execution",
         )
 
     statement = statements[0].stmt
     if not isinstance(statement, ast.SelectStmt):
-        raise InvalidSQL(
-            f"only SELECT runs here, and this is {type(statement).__name__}"
+        raise _out_of_role(
+            type(statement).__name__,
+            f"only SELECT runs here, and this is {type(statement).__name__}",
         )
     return statement
 
 
 def validate(sql: str, *, max_rows: int = MAX_ROWS) -> str:
-    """Return the statement to execute, or raise ``InvalidSQL``.
+    """Return the statement **unchanged**, or raise.
 
-    The returned string is not always the one passed in: a statement with no
-    ``LIMIT`` gets one, because the cap cannot live anywhere else. Nothing else
-    is rewritten -- a statement that needs changing to be safe is refused
-    instead, so what runs is what was read.
+    Raises ``OutOfRole`` when the model tried to step outside what it is for
+    (a session setting, another relation, a data-modifying statement). That
+    one is also logged at WARNING, so it surfaces without anyone inspecting a
+    return value. Raises ``ContractViolation`` for an ordinary mistake. Both
+    are ``InvalidSQL``.
+
+    Nothing is rewritten. What comes back is byte-identical to what went in,
+    so ``execute()`` runs exactly the statement that was inspected.
     """
     if not sql or not sql.strip():
-        raise InvalidSQL("no statement was given")
+        raise ContractViolation("no statement was given")
 
     statement = _parse_one(sql)
 
     if statement.intoClause is not None:
-        raise InvalidSQL("SELECT ... INTO creates a table; only reads run here")
+        raise _out_of_role(
+            "SELECT ... INTO",
+            "SELECT ... INTO creates a table; only reads run here",
+        )
     if statement.lockingClause:
-        raise InvalidSQL("a locking clause (FOR UPDATE / FOR SHARE) is not a read")
+        raise _out_of_role(
+            "a locking clause",
+            "a locking clause (FOR UPDATE / FOR SHARE) is not a read",
+        )
 
     inspector = _Inspector()
     inspector(parse_sql(sql)[0])
 
     nested = sorted(set(inspector.statement_nodes) - ALLOWED_STATEMENT_NODES)
     if nested:
-        raise InvalidSQL(
+        raise _out_of_role(
+            ", ".join(nested),
             f"the statement contains {nested}. A data-modifying statement inside a "
-            f"CTE still modifies data, whatever the statement starts with"
+            f"CTE still modifies data, whatever the statement starts with",
         )
 
     _check_no_denied_calls(inspector)
     _check_relations(inspector)
+    _check_reads_the_view(inspector)
     _check_projection(statement)
 
     limit = _limit_value(statement)
-    if limit is not None:
-        if limit > max_rows:
-            raise InvalidSQL(f"LIMIT {limit} exceeds the ceiling of {max_rows}")
-        return sql.strip().rstrip(";").rstrip()
-
-    # Appended on its own line so it cannot land inside a trailing `--` comment.
-    capped = f"{sql.strip().rstrip(';').rstrip()}\nLIMIT {max_rows}"
-    if _limit_value(_parse_one(capped)) != max_rows:
-        raise InvalidSQL(
-            "a LIMIT could not be applied to this statement; it is refused rather "
-            "than run uncapped"
+    if limit is None:
+        raise ContractViolation(
+            f"the statement has no LIMIT. PostgreSQL has no per-role row cap, so one "
+            f"has to be written into the statement; add LIMIT {max_rows} or less"
         )
-    return capped
+    if limit > max_rows:
+        raise ContractViolation(f"LIMIT {limit} exceeds the ceiling of {max_rows}")
+
+    return sql
