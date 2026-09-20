@@ -4,13 +4,12 @@ NOT BUILT. Ollama serves Qwen alongside the embedding model
 (``docker-compose.yml``), and ``app/embedding_client.py`` is the pattern for
 talking to it.
 
-**When the model is chosen, add its tag to the pull line in
-``docker-compose.yml``** -- the ``ollama`` service pulls its models on startup
-because ``docker compose down -v`` wipes the model volume along with the
-database ones. A model that only ever arrives by someone running ``ollama
-pull`` by hand is the step that goes missing after a wipe, and it fails as a
-connection-level error that looks nothing like a missing model. See
-``BOOTSTRAP.md``.
+``GENERATION_MODEL`` below is authoritative. **It is also named in
+``docker-compose.yml``'s pull line and health check, and the two have to be
+kept in step** -- the ``ollama`` service pulls its models on startup because
+``docker compose down -v`` wipes the model volume along with the database
+ones, and a model that only ever arrives by someone running ``ollama pull`` by
+hand is the step that goes missing after a wipe. See ``BOOTSTRAP.md``.
 
 What it owes, when it is written:
 
@@ -33,6 +32,18 @@ deliberately.
 from __future__ import annotations
 
 from app.schemas.query import QueryPlan
+
+#: The model that writes the SQL. Mirrored in ``docker-compose.yml``'s pull
+#: line and health check -- this constant is authoritative, that is the copy.
+#:
+#: qwen2.5-coder:7b rather than something larger, because the task is narrow:
+#: one relation, the plan's coordinates handed over as a literal VALUES list,
+#: and a fixed twelve-column projection that ``validate()`` refuses any
+#: deviation from. A weaker model therefore degrades into refusals with
+#: specific messages, not into plausible wrong numbers -- which is what makes
+#: starting small cheap to be wrong about. Measured on a GTX 1080 Ti: loads
+#: 100% onto the card at 4.7GB and generates ~48 tok/s.
+GENERATION_MODEL = "qwen2.5-coder:7b"
 
 
 def generate(plan: QueryPlan) -> str:

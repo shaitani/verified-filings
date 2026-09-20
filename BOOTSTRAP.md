@@ -21,7 +21,7 @@ order.
 | `vf_query_mapper_role` / `vf_retrieval_role` | ❌ gone | cluster objects, deliberately not migrations |
 | the ~174,000 facts | ❌ gone | table data |
 | concept embeddings | ❌ gone | table data |
-| `nomic-embed-text` | ❌ gone | `ollama-models` is a volume too |
+| `nomic-embed-text`, `qwen2.5-coder:7b` | ❌ gone | `ollama-models` is a volume too |
 | `data/xbrl/*.json` | ✅ untouched | files on disk, not in any volume |
 | `.env` | ✅ untouched | a file on disk (but git-ignored — see §3) |
 
@@ -77,10 +77,10 @@ automatically — see `ALEMBIC.md` step 5. Skipping it means `tests/` fails
 against a schema that does not exist, which reads as a broken test suite
 rather than a missing step.
 
-There is no `ollama pull` step: the `ollama` service pulls the model itself on
-startup, in the background, while the server takes over PID 1. On a cold start
-that means it reports `starting` for as long as the 274MB download takes, and
-only then `healthy`.
+There is no `ollama pull` step: the `ollama` service pulls both models itself
+on startup, in the background, while the server takes over PID 1. On a cold
+start that means it reports `starting` for as long as ~5GB of downloading
+takes, and only then `healthy`.
 
 ---
 
@@ -115,7 +115,19 @@ generated SQL can reach around the view (`app/retrieval/DESIGN.md` §6).
 docker compose exec ollama ollama list
 ```
 
-`nomic-embed-text` must be present.
+`nomic-embed-text` and `qwen2.5-coder:7b` must both be present. The health
+check asserts both, so `healthy` already implies this -- the command is here
+for when it is *not* healthy and you want to see which one is missing.
+
+```bash
+docker compose exec ollama ollama ps
+```
+
+With a model loaded this must say **`100% GPU`**. Anything less means layers
+spilled to the CPU, which costs roughly an order of magnitude in generation
+speed and is otherwise silent. Measured on a GTX 1080 Ti (11GB, 10.0GiB
+usable): `qwen2.5-coder:7b` loads fully onto the card and generates at about
+48 tok/s.
 
 ```bash
 docker compose logs ollama | grep "inference compute"

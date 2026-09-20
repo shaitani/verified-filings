@@ -61,8 +61,11 @@ services:
   # Pulling a model already in the volume verifies its digest and returns in
   # about a second, so this costs nothing on a warm start.
   #
-  # Qwen is not listed yet: `generate()` is a stub and no tag has been chosen
-  # (app/retrieval/generator.py). Add it to the pull line when it is.
+  # Two models, pulled in order of size so the small one is usable first:
+  #   nomic-embed-text   274MB  concept-search embeddings (app/embedding_client.py)
+  #   qwen2.5-coder:7b   4.7GB  writes SQL (app/retrieval/generator.py)
+  # Both tags are also named in code; the code is authoritative and these have
+  # to be kept in step with it.
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
@@ -76,15 +79,19 @@ services:
     # List form: a plain string is parsed as shell words by compose, and the
     # "&" does not survive that.
     command:
-      - "( until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text ) & exec ollama serve"
-    # Healthy means *usable*, not merely listening: the model has to be there.
-    # On a cold start this stays unhealthy until the 274MB pull finishes, which
-    # is the honest answer -- concept search cannot work until then.
+      - "( until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text; ollama pull qwen2.5-coder:7b ) & exec ollama serve"
+    # Healthy means *usable*, not merely listening: both models have to be
+    # there. On a cold start that means staying unhealthy for the length of a
+    # 5GB download, which is the honest answer -- nothing downstream works
+    # until then. The retry budget (60 x 5s) is sized for that, not for a
+    # warm start, where the digest checks return in about a second.
     healthcheck:
-      test: ["CMD-SHELL", "ollama list 2>/dev/null | grep -q nomic-embed-text"]
+      test:
+        - CMD-SHELL
+        - "ollama list 2>/dev/null | grep -q nomic-embed-text && ollama list 2>/dev/null | grep -q qwen2.5-coder"
       interval: 5s
       timeout: 5s
-      retries: 30
+      retries: 60
       start_period: 10s
 
 volumes:
