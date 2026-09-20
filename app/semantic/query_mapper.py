@@ -18,9 +18,9 @@ their evidence in ``PITFALLS.md``.
 
 Dependency direction: ``semantic -> (schemas, db)``, never the reverse.
 
-Connects read-only. Nothing here writes, so it defaults to
-``ReadOnlySessionLocal`` -- see ``app/db/roles.py`` for what that role can
-and cannot do.
+Connects as ``vf_query_mapper_role``: read-only, but with access to
+``concept.embedding``, which the metric fallback searches and which the
+retrieval role deliberately lacks. See ``app/db/roles.py``.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from sqlalchemy import and_, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Company, Concept, Fact, Filing
-from app.db.session import ReadOnlySessionLocal
+from app.db.session import QueryMapperSessionLocal
 from app.embedding_client import embed_query
 from app.schemas.query import (
     Ambiguity,
@@ -84,7 +84,7 @@ _ALIGNMENT_TOLERANCE_DAYS = 30
 
 
 async def map_query(
-    query: QueryIn, *, session_factory: async_sessionmaker = ReadOnlySessionLocal
+    query: QueryIn, *, session_factory: async_sessionmaker = QueryMapperSessionLocal
 ) -> QueryPlan:
     """Resolve one parsed question into a plan the SQL step can execute.
 

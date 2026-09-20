@@ -1,7 +1,7 @@
-"""The read-only role, exercised against the real test database.
+"""The two read-only roles, exercised against the real test database.
 
-Not mocked. The whole value of this role is what PostgreSQL does when a write
-arrives, so these provision it for real and then try to write.
+Not mocked. The whole value of a role is what PostgreSQL does when a query it
+should not serve arrives, so these provision the roles for real and then try.
 
 Two layers, tested separately because they are not equally strong:
 
@@ -24,84 +24,160 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.db import roles
 
-PASSWORD = "test-readonly-password"
+PASSWORDS = {roles.QUERY_MAPPER.name: "mapper-pw", roles.RETRIEVAL.name: "retrieval-pw"}
+
+#: 768 floats, matching the embedding column. A shorter literal fails on
+#: dimension rather than on privilege, which would make the test lie.
+VECTOR = "[" + ",".join(["0.01"] * 768) + "]"
 
 
-def _readonly_url(superuser_url: str) -> str:
-    """The same database, as the read-only role."""
+def _role_url(superuser_url: str, role: str) -> str:
     scheme, rest = superuser_url.split("://", 1)
     _, host_and_path = rest.split("@", 1)
-    return f"{scheme}://{roles.READONLY_ROLE}:{PASSWORD}@{host_and_path}"
+    return f"{scheme}://{role}:{PASSWORDS[role]}@{host_and_path}"
 
 
 @pytest_asyncio.fixture
-async def readonly_url(test_db_url):
-    """Provision the role against the test database and return its URL.
+async def provisioned(test_db_url):
+    """Both roles, created against the test database.
 
     Provisioned here rather than assumed, so these cover ``app/db/roles.py``
     itself and the suite needs no setup step of its own.
     """
-    await roles.provision(test_db_url, PASSWORD)
-    return _readonly_url(test_db_url)
+    await roles.provision(test_db_url, PASSWORDS)
+    return test_db_url
 
 
-@pytest_asyncio.fixture
-async def readonly_engine(readonly_url):
-    engine = create_async_engine(readonly_url)
-    try:
-        yield engine
-    finally:
-        await engine.dispose()
+def _engine(url: str, role: str, *, autocommit: bool = False):
+    kwargs = {"isolation_level": "AUTOCOMMIT"} if autocommit else {}
+    return create_async_engine(_role_url(url, role), **kwargs)
 
 
-@pytest_asyncio.fixture
-async def readonly_autocommit_engine(readonly_url):
-    """AUTOCOMMIT, so a test can turn ``default_transaction_read_only`` off and
-    have it apply.
-
-    That setting takes effect when a transaction *starts*, so inside an
-    already-open transaction the ``SET`` changes nothing -- which is why the
-    grants have to be probed outside one.
-    """
-    engine = create_async_engine(readonly_url, isolation_level="AUTOCOMMIT")
-    try:
-        yield engine
-    finally:
-        await engine.dispose()
+# --------------------------------------------------------------------------- #
+# Provisioning
+# --------------------------------------------------------------------------- #
 
 
 async def test_provisioning_is_idempotent(test_db_url) -> None:
-    """Re-running is how a changed grant or timeout gets applied, so it has to
-    be safe. ``CREATE ROLE`` has no ``IF NOT EXISTS``; the DO block is what
-    makes the second run a no-op rather than an error."""
-    await roles.provision(test_db_url, PASSWORD)
-    await roles.provision(test_db_url, PASSWORD)
+    """Re-running is how a changed grant is applied, so it has to be safe.
+    ``CREATE ROLE`` has no ``IF NOT EXISTS``; the DO block is what makes the
+    second run a no-op rather than an error."""
+    await roles.provision(test_db_url, PASSWORDS)
+    await roles.provision(test_db_url, PASSWORDS)
 
-    state = await roles.describe(test_db_url)
-    assert state["exists"]
-    assert state["superuser"] is False
-    assert state["createdb"] is False
-    assert state["createrole"] is False
-    assert state["granted_tables"] > 0
-
-
-async def test_the_role_can_read(readonly_engine) -> None:
-    async with readonly_engine.connect() as connection:
-        who = (await connection.execute(text("SELECT current_user"))).scalar_one()
-        assert who == roles.READONLY_ROLE
-        # Unqualified, so this also proves search_path points at xbrl.
-        await connection.execute(text("SELECT count(*) FROM company"))
+    report = await roles.describe(test_db_url)
+    for spec in roles.ROLES:
+        state = report[spec.name]
+        assert state["exists"], spec.name
+        assert state["superuser"] is False
+        assert state["createdb"] is False
+        assert state["createrole"] is False
 
 
-async def test_an_ordinary_transaction_is_read_only(readonly_engine) -> None:
+async def test_the_spec_is_authoritative(provisioned) -> None:
+    """Provisioning revokes before it grants, so narrowing a spec narrows the
+    role. Without that, a role could only ever accumulate privileges."""
+    report = await roles.describe(provisioned)
+    granted = set(report[roles.RETRIEVAL.name]["grants"])
+    assert granted == set(roles.RETRIEVAL.tables) | set(roles.RETRIEVAL.columns)
+
+
+async def test_the_superseded_single_role_is_gone(provisioned) -> None:
+    """`verified_filings_ro` did the job of both. Leaving an unused login with
+    SELECT on everything lying around is worse than never having made it."""
+    report = await roles.describe(provisioned)
+    assert report[roles.LEGACY_ROLE]["exists"] is False
+
+
+# --------------------------------------------------------------------------- #
+# What each role can reach
+# --------------------------------------------------------------------------- #
+
+
+async def test_the_mapper_role_can_search_embeddings(provisioned) -> None:
+    """Its reason for existing separately. The metric fallback is a pgvector
+    similarity search, so this role needs the embedding column *and* `public`
+    on its search_path for the `<=>` operator."""
+    engine = _engine(provisioned, roles.QUERY_MAPPER.name)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(
+                text(f"SELECT id FROM concept ORDER BY embedding <=> '{VECTOR}'::vector LIMIT 1")
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        ("embedding column", "SELECT embedding FROM concept LIMIT 1"),
+        ("vector operator", f"SELECT '{VECTOR}'::vector"),
+    ],
+)
+async def test_the_retrieval_role_cannot_reach_embeddings(
+    provisioned, label: str, statement: str
+) -> None:
+    """The narrowing that makes the second role worth having. By the time
+    Qwen's SQL runs, the plan already names concrete concept_ids -- so this
+    role has no reason to read 1,904 x 768 floats, and cannot."""
+    engine = _engine(provisioned, roles.RETRIEVAL.name)
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError):
+                await connection.execute(text(statement))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
+async def test_neither_role_can_read_load_run(provisioned, role: str) -> None:
+    """An append-only log of every load that ever ran. Nothing that answers a
+    question has any business reading it."""
+    engine = _engine(provisioned, role)
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text("SELECT count(*) FROM load_run"))
+            assert "InsufficientPrivilege" in str(caught.value)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
+async def test_both_roles_can_read_the_data(provisioned, role: str) -> None:
+    engine = _engine(provisioned, role)
+    try:
+        async with engine.connect() as connection:
+            who = (await connection.execute(text("SELECT current_user"))).scalar_one()
+            assert who == role
+            # Unqualified, so this also proves search_path reaches xbrl.
+            await connection.execute(text("SELECT count(*) FROM company"))
+            await connection.execute(text("SELECT count(*) FROM fact"))
+    finally:
+        await engine.dispose()
+
+
+# --------------------------------------------------------------------------- #
+# The two layers of protection
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
+async def test_an_ordinary_transaction_is_read_only(provisioned, role: str) -> None:
     """The outer layer: a connection opened normally cannot write, because
-    every transaction this role starts is read-only."""
-    async with readonly_engine.connect() as connection:
-        with pytest.raises(DBAPIError) as caught:
-            await connection.execute(text("INSERT INTO company (cik) VALUES (999999)"))
-        assert "ReadOnlySQLTransaction" in str(caught.value)
+    every transaction these roles start is read-only."""
+    engine = _engine(provisioned, role)
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text("INSERT INTO company (cik) VALUES (999999)"))
+            assert "ReadOnlySQLTransaction" in str(caught.value)
+    finally:
+        await engine.dispose()
 
 
+@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
 @pytest.mark.parametrize(
     ("label", "statement"),
     [
@@ -114,27 +190,44 @@ async def test_an_ordinary_transaction_is_read_only(readonly_engine) -> None:
     ],
 )
 async def test_grants_hold_with_read_only_turned_off(
-    readonly_autocommit_engine, label: str, statement: str
+    provisioned, role: str, label: str, statement: str
 ) -> None:
     """The one that matters. ``default_transaction_read_only`` is switched OFF
     first, because the role can do that and so could a generated statement.
     What is left is the grants, and they have to be enough on their own."""
-    async with readonly_autocommit_engine.connect() as connection:
-        await connection.execute(text("SET default_transaction_read_only = off"))
-        with pytest.raises(DBAPIError) as caught:
-            await connection.execute(text(statement))
-        assert "InsufficientPrivilege" in str(caught.value), label
+    engine = _engine(provisioned, role, autocommit=True)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SET default_transaction_read_only = off"))
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text(statement))
+            assert "InsufficientPrivilege" in str(caught.value), f"{role}/{label}"
+    finally:
+        await engine.dispose()
 
 
-async def test_the_statement_timeout_is_in_force(readonly_autocommit_engine) -> None:
+async def test_the_statement_timeout_is_in_force(provisioned) -> None:
     """A runaway query fails rather than occupying a connection. Also USERSET,
     so this catches the accident, not the hostile case."""
-    async with readonly_autocommit_engine.connect() as connection:
-        assert (await connection.execute(text("SHOW statement_timeout"))).scalar_one() == "10s"
-        await connection.execute(text("SET statement_timeout = '150ms'"))
-        with pytest.raises(DBAPIError) as caught:
-            await connection.execute(text("SELECT pg_sleep(5)"))
-        assert "QueryCanceled" in str(caught.value)
+    engine = _engine(provisioned, roles.RETRIEVAL.name, autocommit=True)
+    try:
+        async with engine.connect() as connection:
+            timeout = (await connection.execute(text("SHOW statement_timeout"))).scalar_one()
+            assert timeout == roles.RETRIEVAL.statement_timeout
+            await connection.execute(text("SET statement_timeout = '150ms'"))
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text("SELECT pg_sleep(5)"))
+            assert "QueryCanceled" in str(caught.value)
+    finally:
+        await engine.dispose()
+
+
+async def test_the_retrieval_role_has_a_connection_cap(provisioned) -> None:
+    """Bounds how much of the pool one runaway execution can occupy. The
+    mapper is our own code and is left uncapped."""
+    report = await roles.describe(provisioned)
+    assert report[roles.RETRIEVAL.name]["connection_limit"] == roles.RETRIEVAL.connection_limit
+    assert report[roles.QUERY_MAPPER.name]["connection_limit"] == -1
 
 
 def test_password_literal_escapes_a_quote() -> None:
@@ -143,23 +236,3 @@ def test_password_literal_escapes_a_quote() -> None:
     assert roles._quote_literal("a'b") == "'a''b'"
     with pytest.raises(ValueError, match="NUL"):
         roles._quote_literal("a\x00b")
-
-
-async def test_the_vector_operator_is_reachable(readonly_engine) -> None:
-    """Regression. The role's search_path originally omitted `public`, on the
-    reasoning that a bare table name should not pick up something an extension
-    installed there. But pgvector lives in `public`, and operators resolve
-    through search_path too -- so `embedding <=> $1` stopped existing and the
-    whole concept search went down with it.
-
-    `public` is back on the path behind `xbrl`, with USAGE granted and CREATE
-    revoked. The harness caught this; nothing else did, which is why it is
-    pinned here.
-    """
-    async with readonly_engine.connect() as connection:
-        distance = (
-            await connection.execute(
-                text("SELECT '[1,0]'::vector <=> '[0,1]'::vector")
-            )
-        ).scalar_one()
-        assert distance == pytest.approx(1.0)

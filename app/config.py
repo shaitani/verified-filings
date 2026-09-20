@@ -12,12 +12,12 @@ class Settings(BaseSettings):
     database_url: str
     embedding_url: str
 
-    #: Read-only login, used by everything that only ever SELECTs -- the query
-    #: mapper today, the SQL emitter's execution step once it exists. Optional
-    #: so a checkout without the role provisioned still runs: `app/db/session.py`
-    #: falls back to `database_url` and says so. Create the role with
+    #: Read-only logins, one per read-only consumer. Optional so a checkout
+    #: without the roles provisioned still runs: `app/db/session.py` falls back
+    #: to `database_url` and warns. Create them with
     #: `uv run python -m app.db.roles`.
-    database_url_readonly: str | None = None
+    database_url_query_mapper: str | None = None
+    database_url_retrieval: str | None = None
 
 
 settings = Settings()

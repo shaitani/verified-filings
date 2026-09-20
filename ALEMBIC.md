@@ -72,17 +72,18 @@ To change any of these: edit `docker-compose.yml`, recreate the container
   `localhost:5432`.
 - It connects as the `postgres` superuser, which is why migrations can
   `CREATE SCHEMA` / `CREATE TYPE` without permission errors.
-- There is a second login role, `verified_filings_ro`, which reads and nothing
-  else. It is **not** created by a migration — a role is a cluster object that
-  outlives any one database, Alembic's autogenerate cannot see it, and its
-  password has no business in version control. Create or refresh it with
-  `uv run python -m app.db.roles`, once per database, and check it with
-  `--check`. Re-running is also how a changed grant or timeout is applied.
-  Rationale for every grant: `app/db/roles.py`.
-- A migration that adds a table in `xbrl` needs no follow-up: the role carries
-  `ALTER DEFAULT PRIVILEGES ... GRANT SELECT`, so new tables are readable
-  automatically. A migration that adds a *schema* does need one — grant it
-  explicitly and add it to `app/db/roles.py`.
+- There are two further login roles, `vf_query_mapper_role` and
+  `vf_retrieval_role`, which read and nothing else. They are **not** created
+  by a migration — a role is a cluster object that outlives any one database,
+  Alembic's autogenerate cannot see it, and its password has no business in
+  version control. Create or refresh them with `uv run python -m app.db.roles`,
+  once per database, and check them with `--check`. Re-running is also how a
+  changed grant is applied — provisioning revokes before it grants, so the
+  specs in `app/db/roles.py` are authoritative.
+- A migration that adds a table in `xbrl` needs a follow-up run of
+  `app.db.roles`. `vf_query_mapper_role` picks it up automatically via
+  `ALTER DEFAULT PRIVILEGES`; `vf_retrieval_role` deliberately does not, so
+  add the table to its `RoleSpec` if Qwen's SQL should be able to read it.
 
 ---
 

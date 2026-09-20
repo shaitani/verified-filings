@@ -8,11 +8,18 @@ engine. For a unit of work that commits on success and rolls back on error::
     async with SessionLocal.begin() as session:
         session.add(obj)
 
-Two factories, because two different things connect. ``SessionLocal`` writes --
-the loader and the embedder use it. ``ReadOnlySessionLocal`` cannot, and is what
-the query mapper uses and what the SQL emitter will execute through. See
-``app/db/roles.py`` for what the role can and cannot do, and why it is one role
-rather than two.
+Three factories, one per role, because three different things connect:
+
+=========================  =========================  ==========================
+factory                    role                       used by
+=========================  =========================  ==========================
+``SessionLocal``           ``postgres`` (superuser)   loader, embedder, Alembic
+``QueryMapperSessionLocal``  ``vf_query_mapper_role``   app/semantic/query_mapper
+``RetrievalSessionLocal``  ``vf_retrieval_role``      app/retrieval (not built)
+=========================  =========================  ==========================
+
+Only the first can write. See ``app/db/roles.py`` for what each read-only role
+can reach and why they differ.
 """
 
 import warnings
@@ -28,26 +35,51 @@ engine = create_async_engine(settings.database_url)
 #: ``expire_on_commit=False`` keeps loaded objects usable after ``commit()``.
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-#: True when the read-only factory is genuinely read-only. False means the role
-#: has not been provisioned and the fallback below is in force -- worth
-#: asserting in any test that claims to exercise the restriction.
-READONLY_AVAILABLE = settings.database_url_readonly is not None
 
-if READONLY_AVAILABLE:
-    readonly_engine = create_async_engine(settings.database_url_readonly)
-else:
-    # A checkout without the role provisioned still has to run. Falling back
-    # keeps the mapper working; the warning keeps the fallback from being
-    # mistaken for the protection, which is the failure that would matter --
-    # believing model-generated SQL is sandboxed when it is running as
-    # superuser is worse than knowing it is not.
+def _readonly_engine(url: str | None, *, missing: list[str], variable: str):
+    """An engine for a read-only role, or the writable one if it is not
+    configured.
+
+    A checkout without the roles provisioned still has to run, so this falls
+    back rather than failing at import. The caller warns once about everything
+    that fell back, because a silent fallback is the dangerous case: believing
+    Qwen's SQL is sandboxed while it runs as superuser is worse than knowing it
+    is not.
+    """
+    if url is None:
+        missing.append(variable)
+        return engine
+    return create_async_engine(url)
+
+
+_missing: list[str] = []
+
+query_mapper_engine = _readonly_engine(
+    settings.database_url_query_mapper,
+    missing=_missing,
+    variable="DATABASE_URL_QUERY_MAPPER",
+)
+retrieval_engine = _readonly_engine(
+    settings.database_url_retrieval,
+    missing=_missing,
+    variable="DATABASE_URL_RETRIEVAL",
+)
+
+#: True when *both* read-only factories are genuinely read-only. Worth
+#: asserting in anything that claims to rely on the restriction.
+READONLY_AVAILABLE = not _missing
+
+if _missing:
     warnings.warn(
-        "DATABASE_URL_READONLY is not set, so read-only sessions fall back to the "
-        "writable connection. Provision the role with "
-        "`uv run python -m app.db.roles` before executing generated SQL.",
+        f"{', '.join(_missing)} not set, so those sessions fall back to the writable "
+        "connection. Provision the roles with `uv run python -m app.db.roles`.",
         RuntimeWarning,
         stacklevel=2,
     )
-    readonly_engine = engine
 
-ReadOnlySessionLocal = async_sessionmaker(readonly_engine, expire_on_commit=False)
+#: Reads our own SQL. Needs ``concept.embedding`` for the metric fallback.
+QueryMapperSessionLocal = async_sessionmaker(query_mapper_engine, expire_on_commit=False)
+
+#: Executes SQL written by a language model. Narrower on purpose: no
+#: ``concept.embedding``, no ``load_run``, capped connections.
+RetrievalSessionLocal = async_sessionmaker(retrieval_engine, expire_on_commit=False)

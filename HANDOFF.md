@@ -174,39 +174,44 @@ right by itself. A view that pre-bakes those collapses most of the surface an
 emitter can hallucinate over. Highest value, and it shrinks everything after
 it.
 
-### 5.2 Execution safety — role DONE, validation still needed
+### 5.2 Execution safety — roles DONE, validation still needed
 
-`postgres` was the only login role, a superuser, and every connection used it.
-There is now a second: **`verified_filings_ro`**, created by
-`uv run python -m app.db.roles` (`--check` reports its state). The query mapper
-connects through it, and the SQL emitter will. `app/db/roles.py` explains every
-grant; the short version is no writes, no DDL, no `pg_authid`, a 10s statement
-timeout and `default_transaction_read_only`.
+`postgres` was the only login role, a superuser, and everything used it. There
+are now two read-only roles, created by `uv run python -m app.db.roles`
+(`--check` reports them):
+
+| role | used by | difference |
+|---|---|---|
+| `vf_query_mapper_role` | `app/semantic/query_mapper.py` | needs `concept.embedding` for the pgvector metric fallback, so it also gets `public` on its `search_path` |
+| `vf_retrieval_role` | `app/retrieval/` (not built) | executes Qwen-written SQL. Column-level grant on `concept` withholds `embedding`; no vector operators; 4 connections |
+
+Neither can reach `load_run`. Both verified live: the retrieval role is denied
+the embedding column and the `vector` type; the mapper role runs a similarity
+search fine.
 
 **Read `app/db/roles.py`'s "which half of this is a real boundary" before
-relying on it.** The grants cannot be changed by the role and are verified to
-hold with `default_transaction_read_only` deliberately switched off. The
-*session settings* are `USERSET` — a generated statement that says
-`SET statement_timeout = 0` first would shrug them off. They stop accidents,
-not attacks.
+relying on it.** The grants cannot be changed by the role, and are verified to
+hold with `default_transaction_read_only` deliberately off. The *session
+settings* are `USERSET` — a statement beginning `SET statement_timeout = 0`
+would shrug them off. They stop accidents, not attacks.
 
-So what is still missing, and what the emitter owes:
+Still owed by the retrieval layer, not by the roles:
 
 - **SELECT-only validation** — one statement per execution, parsed, no leading
   `SET`. This is what makes the timeout a control rather than a safety net.
 - **Row caps** — PostgreSQL has no per-role row limit, so this is a `LIMIT`
-  the emitter appends and verifies.
-- **A second role, when the view lands (§5.1).** Today one role serves both the
-  mapper and the emitter, because there is nothing narrower to grant. Once the
-  view exists the emitter gets its own role with SELECT on the view and nothing
-  else. Creating that role now would grant it exactly what this one has and
-  invite the belief that the emitter is sandboxed when it is not.
+  the layer appends and verifies.
+- **Narrowing to the view (§5.1).** When it lands, `vf_retrieval_role` gets
+  SELECT on the view and `REVOKE SELECT ON ALL TABLES IN SCHEMA xbrl`. That is
+  a grant change on a role that already exists, not a re-wiring.
 
-One trap worth knowing: the role's `search_path` must keep `public` behind
-`xbrl`. pgvector installs into `public` and operators resolve through
-`search_path`, so dropping it makes `embedding <=> $1` fail with "operator does
-not exist" and takes the whole concept search with it. The eval harness caught
-that; no unit test did. There is one now.
+Two traps worth knowing. The roles' `search_path` decides whether pgvector is
+reachable: it installs into `public` and operators resolve through the path, so
+dropping `public` makes `embedding <=> $1` fail with "operator does not exist"
+and takes the concept search with it. That is why the mapper role has it and
+the retrieval role does not. And provisioning *revokes before it grants*, so
+the spec in `app/db/roles.py` is authoritative — remove a table from a
+`RoleSpec` and the next run removes the privilege.
 
 ### 5.3 Result contract — not designed
 
