@@ -174,11 +174,39 @@ right by itself. A view that pre-bakes those collapses most of the surface an
 emitter can hallucinate over. Highest value, and it shrinks everything after
 it.
 
-### 5.2 Execution safety — not started
+### 5.2 Execution safety — role DONE, validation still needed
 
-The only login role is `postgres`, **superuser**. Before anything
-model-generated touches the database: a read-only role, SELECT-only validation,
-row caps, statement timeout.
+`postgres` was the only login role, a superuser, and every connection used it.
+There is now a second: **`verified_filings_ro`**, created by
+`uv run python -m app.db.roles` (`--check` reports its state). The query mapper
+connects through it, and the SQL emitter will. `app/db/roles.py` explains every
+grant; the short version is no writes, no DDL, no `pg_authid`, a 10s statement
+timeout and `default_transaction_read_only`.
+
+**Read `app/db/roles.py`'s "which half of this is a real boundary" before
+relying on it.** The grants cannot be changed by the role and are verified to
+hold with `default_transaction_read_only` deliberately switched off. The
+*session settings* are `USERSET` — a generated statement that says
+`SET statement_timeout = 0` first would shrug them off. They stop accidents,
+not attacks.
+
+So what is still missing, and what the emitter owes:
+
+- **SELECT-only validation** — one statement per execution, parsed, no leading
+  `SET`. This is what makes the timeout a control rather than a safety net.
+- **Row caps** — PostgreSQL has no per-role row limit, so this is a `LIMIT`
+  the emitter appends and verifies.
+- **A second role, when the view lands (§5.1).** Today one role serves both the
+  mapper and the emitter, because there is nothing narrower to grant. Once the
+  view exists the emitter gets its own role with SELECT on the view and nothing
+  else. Creating that role now would grant it exactly what this one has and
+  invite the belief that the emitter is sandboxed when it is not.
+
+One trap worth knowing: the role's `search_path` must keep `public` behind
+`xbrl`. pgvector installs into `public` and operators resolve through
+`search_path`, so dropping it makes `embedding <=> $1` fail with "operator does
+not exist" and takes the whole concept search with it. The eval harness caught
+that; no unit test did. There is one now.
 
 ### 5.3 Result contract — not designed
 

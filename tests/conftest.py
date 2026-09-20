@@ -55,6 +55,13 @@ class _TestDBSettings(BaseSettings):
     database_url_test: str
 
 
+@pytest.fixture
+def test_db_url() -> str:
+    """The test database URL as a superuser. Tests that provision roles or
+    open their own engine need the string, not a session factory."""
+    return _TestDBSettings().database_url_test
+
+
 @pytest_asyncio.fixture
 async def test_session_factory():
     """Session factory bound to the test database.
