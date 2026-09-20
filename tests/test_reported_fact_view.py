@@ -19,6 +19,9 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "xbrl_fake_company.json"
 
 #: Every column the view offers. The result contract is built from these, and
 #: ``vf_retrieval_role`` can see nothing else in the database.
+#: `is_synthesized` is the one column that is not a fact about a filing but a
+#: fact about the row: false for everything actually reported, true for a Q4
+#: the view computed.
 EXPECTED_COLUMNS = {
     "company_cik",
     "ticker",
@@ -32,6 +35,7 @@ EXPECTED_COLUMNS = {
     "period_start",
     "period_end",
     "value",
+    "is_synthesized",
 }
 
 #: Columns whose *absence* is the design. `fiscal_year` / `fiscal_period` sit
@@ -88,6 +92,54 @@ async def test_the_view_runs_with_owner_rights(test_session_factory) -> None:
             )
         ).scalar_one()
         assert not [option for option in (options or []) if "security_invoker" in option]
+
+
+async def test_a_synthesized_q4_is_labelled_as_one(
+    test_session_factory, clean_fake_company
+) -> None:
+    """A value nobody filed must never pass for one that was. No US filer
+    reports a fourth quarter, so every Q4 in the view is the annual figure
+    minus the year-to-date one -- arithmetic, not a filing."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    async with test_session_factory() as session:
+        filed_only = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM xbrl.reported_fact "
+                    "WHERE company_cik = :cik AND NOT is_synthesized"
+                ),
+                {"cik": FAKE_CIK},
+            )
+        ).scalar_one()
+        latest = (
+            await session.execute(
+                text("SELECT count(*) FROM xbrl.fact WHERE company_cik = :cik AND is_latest"),
+                {"cik": FAKE_CIK},
+            )
+        ).scalar_one()
+        assert filed_only == latest, "every non-synthesized row is a filed fact"
+
+
+async def test_a_synthesized_row_never_collides_with_a_filed_one(
+    test_session_factory, clean_fake_company
+) -> None:
+    """J&J does file a fourth-quarter column, so 39 synthesized windows in the
+    real corpus already exist as facts. Emitting both would double a cell and
+    break the grain the retrieval row count depends on, so the filed row
+    wins."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    async with test_session_factory() as session:
+        clashes = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM xbrl.reported_fact a "
+                    "JOIN xbrl.reported_fact b USING (company_cik, concept_id, unit, "
+                    "  period_start, period_end, is_instant) "
+                    "WHERE a.is_synthesized AND NOT b.is_synthesized"
+                )
+            )
+        ).scalar_one()
+        assert clashes == 0
 
 
 async def test_the_view_drops_superseded_facts(
