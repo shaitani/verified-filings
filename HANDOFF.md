@@ -184,11 +184,16 @@ view and nothing else. Verified — it is refused on `fact`, `filing`, `company`
 Both halves, and every measurement behind them, are in
 [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md).
 
-### 4.3 The retrieval layer — `app/retrieval/` — one of four built
+### 4.3 The retrieval layer — `app/retrieval/` — BUILT
 
-`validate()` is done (`validator.py`, 36 tests). `build_prompt`, `generate`
-and `execute` are stubs that raise, with settled signatures and a docstring
-each saying what they owe. `app/retrieval/` is the slot the original brief
+All four functions, plus `answer(plan)` which runs generate → validate →
+execute. Verified end to end against the real database with
+`qwen2.5-coder:7b`: the §6 smoke test returns `complete`, 36 of 36 rows.
+
+The shape that matters: **`build_prompt` writes the retrieval SQL itself** and
+hands it to the model, which either returns it unchanged or wraps it. Nothing
+fragile — `is_latest`, instant-vs-duration, the Q4 subtraction, `unit` in the
+join key — is asked of a 7B model. `app/retrieval/` is the slot the original brief
 reserves ([`sec-retriever.md`](sec-retriever.md) §3); the name is a leftover
 from an earlier design that meant BM25-plus-vectors over document chunks, but
 it is the right home and inventing a new directory should be a deliberate
@@ -307,6 +312,15 @@ separate decision.
 - Alias curation for recall: interest income, treasury stock, deferred revenue,
   operating expenses, depreciation, accounts receivable/payable, retained
   earnings.
+- **`Binding` carries no operand unit**, which is why `app/retrieval/` refuses
+  multi-operand bindings (`gross_margin` and five other ratios). `Binding.unit`
+  is the *result* unit — `pure` for `c0 / c1` — and the fact join needs the
+  operands'. The mapper already knows it at bind time; it just is not stored.
+  Smallest unblocking change in the project right now.
+- **No eval runner still.** 56 questions with expected outcomes and no way to
+  run them. Now that `answer()` exists, the only missing piece is a `QueryIn`
+  per question — which is the producer's job (§4.5). Until then "is this model
+  good enough?" cannot be answered.
 
 ### Explicitly deferred by the user
 
@@ -334,7 +348,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (324 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (346 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself

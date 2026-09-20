@@ -18,10 +18,44 @@ instant/duration) and should be deterministic code. Qwen writes the layer
 values. Measured on the eval set, 20 of 45 answerable questions (44%) need
 that layer.
 
-Built: ``validate`` (``validator.py``). The other three are stubs with settled
-signatures. See ``app/retrieval/DESIGN.md``.
+``answer()`` is the three of them in the one order that is load-bearing:
+generate, **validate**, execute. Calling ``execute()`` on a generator's output
+directly is the mistake this package exists to prevent.
+
+See ``app/retrieval/DESIGN.md``.
 """
 
+from app.retrieval.executor import execute
+from app.retrieval.generator import GENERATION_MODEL, GenerationError, generate
+from app.retrieval.prompt import UnsupportedPlan, base_query, build_prompt, plan_cells
 from app.retrieval.validator import MAX_ROWS, InvalidSQL, validate
+from app.schemas.query import QueryPlan
+from app.schemas.result import ResultSet
 
-__all__ = ["MAX_ROWS", "InvalidSQL", "validate"]
+__all__ = [
+    "GENERATION_MODEL",
+    "MAX_ROWS",
+    "GenerationError",
+    "InvalidSQL",
+    "UnsupportedPlan",
+    "answer",
+    "base_query",
+    "build_prompt",
+    "execute",
+    "generate",
+    "plan_cells",
+    "validate",
+]
+
+
+async def answer(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> ResultSet:
+    """Plan in, rows out: generate, validate, execute.
+
+    Raises rather than returning a half-answer. ``GenerationError`` means the
+    model produced no statement; ``InvalidSQL`` means it produced one this
+    layer will not run; ``UnsupportedPlan`` means the plan itself cannot be
+    rendered yet. A ``ResultSet`` that comes back may still be unanswerable --
+    check ``is_answerable`` -- because that is a judgement about the *data*,
+    not about whether the machinery worked.
+    """
+    return await execute(validate(await generate(plan, model=model)), plan)

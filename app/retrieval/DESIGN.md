@@ -17,12 +17,16 @@ This document covers the **result contract** and the **view**, which were
 designed together: the view's columns and the contract's columns are the same
 list seen from two ends, and neither is coherent alone.
 
-**Built so far:** the view (`xbrl.reported_fact`, migration `3fcc714d6050`,
-applied to both databases), the grant narrowing (§6), the contract itself
-(`app/schemas/result.py`), the binding lookup it needs
-(`QueryPlan.binding_for`), and **`validate()`** (`validator.py`).
-`build_prompt`, `generate` and `execute` are stubs with settled signatures;
-each module's docstring says what it owes.
+**All four are built**, along with the view (`xbrl.reported_fact`, migration
+`3fcc714d6050`), the grant narrowing (§6), the contract
+(`app/schemas/result.py`) and the binding lookup (`QueryPlan.binding_for`).
+`answer(plan)` runs the three steps in the one order that matters:
+generate → **validate** → execute.
+
+Verified end to end against the real database with `qwen2.5-coder:7b`. The
+HANDOFF smoke test — three filers, twelve quarters, Q4 residuals and a
+mid-range tag change — comes back `complete`, 36 of 36 rows, with Apple's
+FY2024 Q4 revenue at 94,930,000,000, the reported figure.
 
 ---
 
@@ -273,6 +277,55 @@ figure. `Binding._residual_is_provable` has already refused any residual whose
 component windows lack facts, so this join cannot quietly return the whole year
 because a term went missing.
 
+### 4.2 The model is handed the retrieval SQL, not asked for it
+
+`build_prompt` does not describe the schema and hope. It **writes the
+retrieval query itself** — `base_query(plan)` is complete, runnable, and
+satisfies the contract on its own — and asks the model either to return it
+unchanged or to wrap it.
+
+That is the §2 division of labour made literal. Everything easy to get quietly
+wrong (the `is_latest` filter, instant-versus-duration matching, the residual
+subtraction, keeping `unit` in the join key) is never asked of the model. What
+is asked is arithmetic over rows that are already right.
+
+`base_query` also collapses the `UNION ALL` §4 expected for mixing direct and
+residual bindings. A `LEFT JOIN` to the subtrahend, keyed on a `subtract_end`
+column that is NULL for direct cells, handles both in one block:
+
+```sql
+       v.value - COALESCE(s.value, 0) AS value
+...
+WHERE p.subtract_end IS NULL OR s.value IS NOT NULL
+```
+
+That `WHERE` is the load-bearing half. Without it a *missing* subtrahend makes
+`COALESCE` return the whole year as if it were Q4 — a textbook plausible wrong
+number. Dropping the row instead turns it into a missing cell, which the
+verdict reports.
+
+### 4.3 Two findings from building it
+
+**`validate()` parses; it does not type-check.** A `VALUES` column that is
+NULL in every row — which `subtract_end` is for any plan without a Q4 — is
+typed `text` by PostgreSQL, and `date = text` then fails at *execution* time.
+The statement is syntactically perfect and libpg_query has no complaint. The
+fix is `NULL::date`; the lesson is that validation is not a substitute for
+running the thing.
+
+**A 7B model handed a finished answer returns the finished answer.** Given
+`base_query` in the prompt *and* permission to reply with it unchanged,
+qwen2.5-coder:7b returned it unchanged for "rank these companies by
+year-over-year revenue growth" — it copied the query and appended an
+`ORDER BY`. Adding a worked example did not move it. What worked was removing
+the option: when `QueryPlan.intent` is `rank` or `derive`, the prompt does not
+offer the "reply unchanged" branch at all. It then produced the correct
+`lag()`-over-partition growth query, marked `derivation='yoy_growth'` and
+`unit='pure'`.
+
+Worth keeping as a general shape: with a small model, **remove the wrong path
+rather than argue against it**.
+
 ---
 
 ## 5. The verdict, and when to refuse
@@ -444,3 +497,18 @@ to surface it.
 - **Cross-unit aggregation** is prevented by `unit` being in the join key, but
   nothing *detects* a result set that mixes units and would be meaningless
   summed. Probably a verdict check.
+- **Multi-operand bindings are not renderable**, and the reason is a gap in
+  `Binding` rather than a shortcut here. `Binding.unit` is the unit of the
+  *result* — `pure` for `c0 / c1` — and the operands' own unit is carried
+  nowhere. The fact join needs the operands' unit (§2.4), so recovering it
+  means a database lookup `build_prompt` deliberately does not do.
+  `plan_cells` raises `UnsupportedPlan` saying exactly that. Six of the 47
+  curated metrics are affected (`gross_margin` and the other ratios). The fix
+  is an operand unit on `Binding`, set by the mapper, which already knows it.
+- **Nothing checks that the answer matches the question.** The ranking case in
+  §4.3 came back `complete` and `is_answerable` while answering a different
+  question, because the verdict checks cardinality and attribution, not
+  meaning. That is HANDOFF §4.6 reappearing one layer down, and it belongs in
+  the same place — with the producer.
+- **No retry.** Whether a rejected statement goes back to the model with the
+  `InvalidSQL` message is still undecided; see `generator.py`.
