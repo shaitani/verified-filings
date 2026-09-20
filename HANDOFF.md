@@ -1,12 +1,9 @@
 # Handoff — read this first
 
-Temporary orientation document for a fresh session. Not part of the permanent
-docs; delete it once its contents have been absorbed or moved.
-
-Everything factual here is cross-referenced to a permanent doc. Where this file
-and a `DESIGN.md` disagree, the `DESIGN.md` is right — it sits next to the
-code. What is *only* here is the forward plan and the reasoning behind the
-Qwen decision, which live nowhere else yet.
+Orientation for a fresh session. Not a permanent doc: everything here is
+either a pointer to a `DESIGN.md` that sits next to the code, or forward plan
+that lives nowhere else yet. Where this file and a `DESIGN.md` disagree, the
+`DESIGN.md` is right.
 
 ---
 
@@ -14,49 +11,69 @@ Qwen decision, which live nowhere else yet.
 
 A system that answers natural-language questions about SEC financial data with
 figures that are actually correct, and that refuses — loudly — when it cannot.
-The corpus is 20 US filers, 5 fiscal years, 174,390 facts from the SEC's XBRL
+The corpus is 20 US filers, 5 fiscal years, ~174,000 facts from the SEC's XBRL
 data endpoint, loaded into PostgreSQL.
 
-The animating concern throughout: **a plausible wrong number is worse than a
-refusal.** Nearly every design decision on this project traces back to that.
-XBRL is far less uniform than it looks, and most of the hard problems are data
-problems, not code problems. They are catalogued with measurements in
-[`PITFALLS.md`](PITFALLS.md) — read that before trusting any figure.
+The animating concern: **a plausible wrong number is worse than a refusal.**
+Nearly every design decision traces back to that. XBRL is far less uniform than
+it looks, and most of the hard problems are data problems, not code problems.
+They are catalogued with measurements in [`PITFALLS.md`](PITFALLS.md) — read it
+before trusting any figure.
 
 ## 2. Data flow, end to end
 
 ```
-SEC XBRL endpoint
-   ↓  app/ingest/          fetch, rate-limit, scope-filter to 10-K/10-Q + 5 FYs
-data/xbrl/<TICKER>.json    curated per-company files (gitignored)
-   ↓  app/schemas/xbrl.py  validate the file shape
-   ↓  app/db/loader.py     upsert Concept, insert Filing/Fact, maintain is_latest
-PostgreSQL (xbrl schema)   company / filing / concept / fact / load_run
-   ↓  app/db/embedder.py   embed every Concept (nomic-embed-text via Ollama)
-   ═══════════════════════ everything above is BUILT and stable
+SEC XBRL data endpoint
+   ↓  app/ingest/           fetch, rate-limit, scope to 10-K/10-Q + 5 FYs
+data/xbrl/<TICKER>.json     curated per-company files (gitignored)
+   ↓  app/schemas/xbrl.py   validate the file shape
+   ↓  app/db/loader.py      upsert Concept, insert Filing/Fact, maintain
+                            is_latest; merge sic_* from sic_numbers.json
+PostgreSQL (xbrl schema)    company / filing / concept / fact / load_run
+   ↓  app/db/embedder.py    embed every Concept (nomic-embed-text via Ollama)
+══════════════════════════ everything above is BUILT and stable ══════════════
    ↓
-[external LLM]             parses a question into a QueryIn        ← NOT BUILT
+[producer LLM]              question → QueryIn                    ← NOT BUILT
    ↓  app/schemas/query.py
-QueryIn                    question + typed elements + optional shape
-   ↓  app/semantic/query_mapper.py
-QueryPlan                  concrete coordinates, caveats, cardinality
+QueryIn                     question + typed elements + optional shape
+   ↓  app/semantic/query_mapper.py    ── reads DB as vf_query_mapper_role
+QueryPlan                   concrete coordinates, caveats, cardinality
+   ↓  app/retrieval/                                              ← NOT BUILT
+       build_prompt(plan) → text to send Qwen              no DB
+       generate(plan)     → calls Qwen, returns SQL        no DB
+       validate(sql)      → raises, or returns             no DB  ← LOAD-BEARING
+       execute(sql)       → rows    ── reads DB as vf_retrieval_role
    ↓
-[SQL emitter]              plan → SQL                              ← NOT BUILT
+rows + the plan's notes
    ↓
-rows + plan notes
-   ↓
-[user-facing LLM]          renders, cites, discloses caveats       ← NOT BUILT
+[presenter LLM]             renders, cites, discloses caveats     ← NOT BUILT
 ```
 
-Two Docker Postgres containers: `db` (real) and `db-test` (tests). Ollama runs
-the embedding model. See `docker-compose.yml`.
+Two Docker Postgres containers: `db` (real) and `db-test` (tests). Ollama
+serves both the embedding model and Qwen. See `docker-compose.yml`.
+
+**Qwen never touches the database.** It is a language model behind an HTTP
+endpoint: it takes text and returns text. It has no driver, no credentials and
+no route to PostgreSQL. `execute()` runs what it wrote. That separation is the
+main protection in the design, and `validate()` is what makes it real — one
+statement per execution, parsed, must be a `SELECT`, no leading `SET`, with a
+`LIMIT` appended and verified.
+
+**Qwen does not write all of the SQL.** Retrieval — getting the values a
+`Binding` names — is bounded: four shapes (`direct`/`residual` ×
+`instant`/`duration`, plus operand arithmetic). That half should be
+deterministic code. Qwen writes the layer *above* it: ranking, growth, ratios
+across companies, filters on computed values. Measured on the eval set, 20 of
+45 answerable questions (44%) need that layer.
 
 ## 3. The core idea: QueryIn → QueryPlan
 
 **`QueryIn`** speaks the *user's* language — `"revenue"`, never
-`us-gaap:Revenues`. Elements are a discriminated union on `kind`
-(`metric` / `company` / `period` / `qualifier`), because each needs a different
-resolver. Embedding search over "Apple" returns noise.
+`us-gaap:Revenues`. Elements are a discriminated union on `kind` — `metric` /
+`company` / `company_group` / `period` — because each needs a different
+resolver. Embedding search over "Apple" returns noise. (A `qualifier` kind
+existed and was removed: nothing resolved it, so a producer emitting one had
+its intent silently dropped. Emitting one now raises.)
 
 **`QueryPlan`** is what the mapper resolves that into, and it is the real
 artifact of this project. It carries concrete `concept_id`s, per-company date
@@ -64,18 +81,18 @@ windows, units, instant-vs-duration, whether a value needs subtracting, proof
 that the facts exist, and caveats that must reach the reader. The design intent
 is that **the SQL step has nothing left to guess**.
 
-Full rationale: [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) §8 (fifteen
-numbered decisions with their reasoning) and
-[`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) for the alias layer.
+Full rationale: [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) §8 and
+[`app/semantic/DESIGN.md`](app/semantic/DESIGN.md).
 
 ### The three resolvers, in order
 
-1. **Companies** — deterministic lookup: the derived lexicon
-   (`company_aliases.json`, §5.6) first, then ticker / entity name. Naming
-   no company at all means every loaded filer.
+1. **Companies** — deterministic. The derived lexicon
+   (`company_aliases.json`, §4.5) first, then ticker / entity name. Naming no
+   company at all means every loaded filer; a company element that *fails* does
+   not widen the scope.
 2. **Periods** — into concrete date windows *per company*. Never fiscal-year
    integers; `Filing.fiscal_year` is provenance, not the period a number
-   describes (PITFALLS §1.1 — this one silently returned FY2022 revenue for a
+   describes (PITFALLS §1.1 — this silently returned FY2022 revenue for an
    FY2024 query before it was fixed). Q4 is synthesized, because no US filer
    files one.
 3. **Metrics** — curated alias → embedding fallback → **coverage check against
@@ -89,293 +106,189 @@ the binding has to be *proven* before it is made.
 ### The alias layer
 
 [`app/semantic/metric_aliases.yaml`](app/semantic/metric_aliases.yaml) is
-curated accounting judgment as **data, not code** — 47 metrics, 182 surface
-forms. Each operand slot lists *alternatives in preference order*, and coverage
-picks per company. That is how filer divergence resolves without per-company
-tables: Apple and Microsoft bind
+curated accounting judgment as **data, not code** — currently 47 metrics and
+182 surface forms. Each operand slot lists *alternatives in preference order*
+and coverage picks per company, which is how filer divergence resolves without
+per-company tables: Apple binds
 `RevenueFromContractWithCustomerExcludingAssessedTax`, NVIDIA binds `Revenues`,
 from one entry.
 
-An entry does one of three things, and the split matters more than the count:
-39 **resolve**, 4 **ask** (`clarify`), 4 **decline** (`unavailable` — share
-price, market cap, segment revenue, gross revenue). An entry may also attach a
+An entry does exactly one of three things, and the split matters more than the
+count: **39 resolve**, **4 ask** (`clarify` — `profit_margin`, `profit`,
+`cash_flow`, `debt`), **4 decline** (`unavailable` — `stock_price`,
+`market_cap`, `segment_revenue`, `gross_revenue`). An entry may also attach a
 per-concept `caveat`, which becomes a `narrower_than_asked` note when a
-fallback alternative answers less than the phrase asked for. See
-`app/semantic/DESIGN.md` §8, §8a, §8b.
+fallback answers less than the phrase asked for; `total_debt` is the one that
+does.
 
-**The user is not an accountant.** Curating this file is a collaborative task
-and the main lever for improving answer quality.
+Two lessons from curating it, both in `app/semantic/DESIGN.md` §8a–§8b:
 
-### Element kinds
+- **"Nothing honest to map it to" argues for `unavailable`, not for silence.**
+  An unlisted term does not fail safely — it falls to the embedding search,
+  which always returns *something*. `gross_revenue` sat uncurated for that
+  reason and came back as `GrossProfit` at 0.812.
+- **Similarity cannot be trusted to separate right from wrong.** Measured over
+  221 labelled cases, the band just above the old binding bar was 5% precise.
+  The bar is now 0.75 and there is a 0.65 floor below which an element is
+  `unresolved` rather than `ambiguous`. That makes the path less bad, not safe.
+  The fix for a term people keep asking is a curated entry.
 
-`metric` / `company` / `company_group` / `period`. A `qualifier` kind existed
-and was **removed** — nothing ever resolved it, so a producer emitting one had
-its intent silently dropped (DESIGN.md §8.19). Emitting one now raises.
+**The user is not an accountant.** Curating this file is collaborative, and it
+is the main lever for answer quality. `alias_gap` is tagged zero times in the
+eval set today; adding a filer will reopen gaps, since the coverage counts
+noted inline are measured against the current 20.
 
 ### Two things the plan tracks that are easy to miss
 
 `ResultSpec` says how much data the answer needs — `shape`, the `axes` it
 varies along, and `row_count`, which retrieval must not come in under. A chart
 of 3 companies over 12 quarters is 36 rows, and nothing else in the plan says
-so (DESIGN.md §8.14).
+so (schemas DESIGN §8.14).
 
 `granularities` tracks annual vs quarterly separately, because a 363-day value
 and a 90-day value are not comparable points — mixing them raises a plan-level
-`mixed_granularity` note (DESIGN.md §8.18).
+`mixed_granularity` note (§8.18).
 
-## 4. Qwen's role — decided, with evidence
+## 4. What is NOT built — the forward plan
 
-Originally the plan was "Qwen2.5-Coder writes the SQL". That is still true, but
-narrowed, and the narrowing was argued out rather than assumed.
+In the order I would do it.
 
-I claimed at one point that the plan was structured enough that a deterministic
-emitter might remove the LLM for most questions. **The user pushed back and was
-right.** `evals/` was built to settle it:
+### 4.1 Result contract — not designed
 
-```
-45 answerable or partial questions
-... of those, retrieval only  25
-... needing more than that    20   →  44%
-```
+Cheapest item, widest unblocking effect. Nothing says what columns come back,
+so neither the retrieval layer nor the presenter can be written against
+anything. Needs: company, period label, period start/end, element id, value,
+unit, the concept actually used (for citation), and the notes. Two fields are
+now meaningful enough to build on — `Binding.unit` is `pure` for a ratio and
+the real unit otherwise, and `Note` carries curated prose a reader must see.
 
-(It read 56% when I had written all the questions; the user's 13 additions are
-more retrieval-heavy and pulled it down, and the two of mine they later deleted
-— an all-twenty ranking and a cross-company share-of-total — took a few
-points with them, and q049 gave one back when loading the sector data turned
-it from a refusal into a ranking. Every reading says the same thing: a large
-minority needs more than retrieval.)
-
-So **Qwen stays.** The split:
-
-- **Retrieval is bounded and should be deterministic.** A `Binding` can only
-  express four shapes (`direct`/`residual` × `instant`/`duration`, plus operand
-  arithmetic). Generating that with a model buys nothing but a chance to forget
-  `is_latest`. This is a fact about the schema, not a prediction about
-  questions.
-- **Everything above it stays with the LLM** — ranking, growth, ratios across
-  companies, filters on computed values. Open-ended, and the eval set says it
-  is the majority.
-
-The difference from the original plan is only *what Qwen writes against*: a
-narrow retrieval surface instead of four raw tables.
-
-**Caveat:** I wrote 42 of the 56 questions, so the distribution still leans on
-my imagination. More of the user's questions is the cheapest way to sharpen it.
-
-## 5. What is NOT built — the forward plan
-
-In the order I would do it. Items 1–2 were agreed early and never started.
-
-### 5.1 A narrow query surface (view) — agreed, not started
+### 4.2 A narrow query surface (view)
 
 There are **no views** in the `xbrl` schema. Without one, every emitted query
-must get `is_latest`, three joins, and instant-vs-duration period matching
-right by itself. A view that pre-bakes those collapses most of the surface an
-emitter can hallucinate over. Highest value, and it shrinks everything after
-it.
+must get `is_latest`, three joins and instant-vs-duration period matching right
+by itself. A view that pre-bakes those collapses most of the surface Qwen can
+hallucinate over.
 
-### 5.2 Execution safety — roles DONE, validation still needed
+It is also half of a security change: once the view exists, `vf_retrieval_role`
+gets `GRANT SELECT` on it and `REVOKE SELECT ON ALL TABLES IN SCHEMA xbrl`, so
+Qwen's SQL *cannot name* `fact` or `filing`. That is a grant change on a role
+that already exists (§4.7), not a re-wiring. Do the view and the narrowing
+together — either alone is a fence with no posts.
 
-`postgres` was the only login role, a superuser, and everything used it. There
-are now two read-only roles, created by `uv run python -m app.db.roles`
-(`--check` reports them):
+### 4.3 The retrieval layer — `app/retrieval/`
 
-| role | used by | difference |
-|---|---|---|
-| `vf_query_mapper_role` | `app/semantic/query_mapper.py` | needs `concept.embedding` for the pgvector metric fallback, so it also gets `public` on its `search_path` |
-| `vf_retrieval_role` | `app/retrieval/` (not built) | executes Qwen-written SQL. Column-level grant on `concept` withholds `embedding`; no vector operators; 4 connections |
+The four functions in §2. `app/retrieval/` is the slot the original brief
+reserves ([`sec-retriever.md`](sec-retriever.md) §3); the name is a leftover
+from an earlier design that meant BM25-plus-vectors over document chunks, but
+it is the right home and inventing a new directory should be a deliberate
+decision, not a drive-by one.
 
-Neither can reach `load_run`. Both verified live: the retrieval role is denied
-the embedding column and the `vector` type; the mapper role runs a similarity
-search fine.
+`validate()` is the part that cannot be skipped. The database role stops writes
+and DDL, but `statement_timeout` and `default_transaction_read_only` are
+`USERSET` — a generated statement beginning `SET statement_timeout = 0` would
+shrug them off. Only `validate()` can refuse that string. PostgreSQL also has
+no per-role row limit, so the `LIMIT` lives here too.
 
-**Read `app/db/roles.py`'s "which half of this is a real boundary" before
-relying on it.** The grants cannot be changed by the role, and are verified to
-hold with `default_transaction_read_only` deliberately off. The *session
-settings* are `USERSET` — a statement beginning `SET statement_timeout = 0`
-would shrug them off. They stop accidents, not attacks.
+### 4.4 Composition convention — undecided
 
-Still owed by the retrieval layer, not by the roles:
+Three bindings across two companies: one query or three? Nothing says, and the
+emitter has to know.
 
-- **SELECT-only validation** — one statement per execution, parsed, no leading
-  `SET`. This is what makes the timeout a control rather than a safety net.
-- **Row caps** — PostgreSQL has no per-role row limit, so this is a `LIMIT`
-  the layer appends and verifies.
-- **Narrowing to the view (§5.1).** When it lands, `vf_retrieval_role` gets
-  SELECT on the view and `REVOKE SELECT ON ALL TABLES IN SCHEMA xbrl`. That is
-  a grant change on a role that already exists, not a re-wiring.
+### 4.5 The query-object producer — not started
 
-Two traps worth knowing. The roles' `search_path` decides whether pgvector is
-reachable: it installs into `public` and operators resolve through the path, so
-dropping `public` makes `embedding <=> $1` fail with "operator does not exist"
-and takes the concept search with it. That is why the mapper role has it and
-the retrieval role does not. And provisioning *revokes before it grants*, so
-the spec in `app/db/roles.py` is authoritative — remove a table from a
-`RoleSpec` and the next run removes the privilege.
+Something has to turn a question into a `QueryIn`. Deliberately outside this
+project so far. What it still owes:
 
-### 5.3 Result contract — not designed
+- **Pinning metric-level ambiguity.** "How much money was made" is revenue or
+  net income — a different ambiguity from the concept-level one the mapper
+  handles.
+- **§4.6 below.**
 
-Nothing says what columns come back, so the presentation layer cannot be
-written against anything. Needs: company, period, metric, value, unit, and the
-concept actually used (for citation). `QueryPlan.result.row_count` already says
-how many rows must come back; nothing says their shape.
+Two burdens it *no longer* carries. Company names resolve through
+`company_aliases.json`, derived from SEC data by `app/ingest/alias_index.py`
+and refreshed on every `get-submission`: Google, Facebook, Bank of America,
+AMD, Johnson and Johnson and United Health all missed before it, and share
+classes work ("GOOG" is Alphabet). And a question naming no company now means
+every loaded filer.
 
-### 5.4 Composition convention — undecided
+**Historical tickers are not obtainable**, and `alias_index.py` says so rather
+than implying otherwise. Both SEC feeds give only the current symbol; the
+in-house source would be `dei:TradingSymbol` from each cover page, but the XBRL
+data endpoint returns only numeric facts and that is a string. A question using
+a retired symbol (FB rather than META) will not resolve. This never threatens
+correctness because **the cik never changes** — a missing alias costs a
+refusal, never a wrong company.
 
-Three bindings across two companies → one query or three? Currently the emitter
-would have to decide.
+### 4.6 Nothing checks that the elements express the question
 
-### 5.5 The emitter itself
-
-Deterministic for retrieval, Qwen above it. Sequencing 5.1–5.4 first makes this
-mostly mechanical.
-
-### 5.6 The query-object producer — not started, but two of its burdens lifted
-
-Something has to turn a question into a `QueryIn`. Deliberately left outside
-this project so far. Note that "how much money was made" is *metric-ambiguous*
-(revenue? net income?) — a different ambiguity from the concept-level one the
-mapper handles, and it belongs to this layer.
-
-Two things the mapper used to demand of it, and no longer does:
-
-**A ticker for every company.** The mapper now reads
-`company_aliases.json`, a lexicon derived from SEC data by
-`app/ingest/alias_index.py` and refreshed on every `get-submission`. All 26
-probe names now resolve; before it, name-only lookup missed Google, Facebook,
-Bank of America, AMD, Johnson and Johnson and United Health. Share classes
-work too — "GOOG" is Alphabet although the stored ticker is GOOGL.
-
-The names come from `corpus_companies.json` (the SEC's `company_tickers.json`:
-`title`, `input_name`, `all_tickers`) and the submissions endpoint (`name`,
-`tickers`, **`formerNames`** with dates — Meta was `Facebook Inc`, Chevron was
-`CHEVRONTEXACO CORP`). Short forms and "and"/"&" spellings are derived.
-
-**Historical tickers are not obtainable and the file says so.** Both SEC feeds
-give only the *current* symbol, so a question using a retired one (FB rather
-than META) will not resolve. The in-house source would be `dei:TradingSymbol`
-from each cover page — but the XBRL data endpoint returns only numeric facts
-and that is a string, so it is absent from the store entirely (three `dei`
-concepts are loaded, all numeric). This never threatens correctness, because
-**the cik never changes**: a missing alias costs a refusal, never a wrong
-company.
-
-**Enumerating "all companies".** A question with no company element now means
-every loaded filer rather than being refused as "no company in scope". The
-distinction that makes it safe: an *absent* element widens, a *failed* one
-does not — "Apple versus Samsung" stays a half-answer and must never quietly
-become the whole corpus. Both are pinned by tests.
-
-### 5.7 Company grouping — DONE for sector, still blocked for office
-
-From q049/q050 ("which companies in a given sector / by SIC office performed
-best"). **q049 now answers**: "which companies in semiconductors" resolves to
-AMD, INTC, MU and NVDA and comes back complete.
-
-`app/db/loader.py` merges `sic_code` and `sic_description` into the `Company`
-upsert from `sic_index.sic_by_cik()`. All 20 filers are populated across 14
-SIC codes. Two decisions worth keeping:
-
-- **Keyed on cik, not ticker**, although `sic_numbers.json` carries both. A
-  cik is permanent and a ticker is not (see §6.1 below) — matching on ticker
-  would silently drop a company the day it re-symboled. The loader does not
-  copy the ticker either; the XBRL data file already fills that column.
-- **Absent data never overwrites present data.** A company with no row in the
-  index keeps its existing sector, so a reload against a missing or half-built
-  index cannot null out what is already there. A test pins it.
-
-`sic_office` still has **no source at all**. `sic_numbers.json` carries code
-and description only; the SEC assigns review offices by SIC *range*, so it is
-derivable given that mapping, which this project does not have. The refusal
-now says exactly that rather than "SIC data has not been loaded", which would
-send someone after data that does not exist — the three sector columns fail
-for two different reasons and the message distinguishes them.
-
-### 5.8 Alias curation — the 13 gaps are closed
-
-`alias_gap` was tagged 13 times and is now **zero**. The file went from 22
-metrics / 87 surface forms to 37 / 142. Added: investing and financing cash
-flow, interest expense (ordered fallback, resolves per filer), effective tax
-rate, share buybacks, dividends per share, dividends paid, PP&E, current
-assets and liabilities, operating margin, net margin, free cash flow margin,
-current ratio. Capex gained `PaymentsToAcquireProductiveAssets`, taking it from
-14 filers to 18 — BAC and JPM report no capex concept at all, which is normal
-for banks.
-
-Four entries deliberately **ask** rather than resolve — `profit_margin`,
-`profit`, `cash_flow`, `debt` — via the `clarify` mechanism
-(app/semantic/DESIGN.md §8). Naming the specific metric resolves straight
-through.
-
-Four **decline**, via `unavailable` (§8a): `stock_price`, `market_cap`,
-`segment_revenue`, `gross_revenue`. These are questions people actually ask
-that this store structurally cannot answer, and the entry exists so the
-refusal is a reason rather than a menu — left unlisted, a term falls to the
-embedding search, which always returns *something*.
-
-`gross_revenue` is the instructive one. It was listed here as **deliberately
-uncurated** on the correct reasoning that US GAAP has no gross-vs-net revenue
-pair. That turned out not to be the same as declining it: unlisted, it fell
-through to `GrossProfit` at 0.812 — a different line, and a smaller one.
-"Nothing honest to map it to" is an argument for `unavailable`, not for
-silence.
-
-Still uncurated on purpose:
-
-- **`gross_profit`** — only 9 of 20 filers tag it, and falling back to
-  revenue-minus-cost would produce a different number from the filer's own
-  subtotal. Unlike gross revenue, the concept genuinely exists; the honest
-  answer for the other 11 is "this filer does not report it", which coverage
-  already gives.
-
-Adding a filer will reopen gaps: coverage counts in the file are measured
-against the current 20 and noted inline.
-
-### 5.9 Nothing checks that the elements express the question — NOT ADDRESSED
-
-The last plausible-wrong-answer in the eval set, and the only one left that
-produces a confident number for a question nobody asked.
+The last plausible-wrong-answer in the eval set, and the only one that produces
+a confident number for a question nobody asked.
 
 **q026**, "Did any of these companies restate its revenue?", comes back
 `is_complete` with a 100-row revenue series and no caveat. Every element
 resolved — "revenue", twenty companies, five years — so by every measure the
-mapper has, the plan is perfect. It answers "what was their revenue", which is
-a different question.
+mapper has, the plan is perfect. It answers a different question.
 
-The mapper cannot catch this on its own and arguably should not: it is handed
-elements, not a question, and the elements are all fine. `QueryIn.question`
-carries the original text, so *something* could compare the two, but the
-natural home is the producer (§5.6) — the layer that decided "restate" needed
-no element and dropped it silently, exactly as the removed `qualifier` kind
-used to (DESIGN.md §8.19).
+The mapper cannot catch this and arguably should not: it is handed elements,
+not a question, and the elements are fine. `QueryIn.question` carries the
+original text so *something* could compare the two, but the natural home is the
+producer — the layer that dropped "restate" silently, exactly as the removed
+`qualifier` kind used to.
 
 Shapes that fail this way: restatement, causality ("why did margins fall"),
 counts of filings, anything about the *filing* rather than the figures.
 
-Worth deciding, when the producer is built: should an unrepresented span of the
-question raise, warn, or be ignored? Silently ignoring it is what happens today
-and is the worst of the three.
+Open decision for when the producer is built: should an unrepresented span of
+the question raise, warn, or be ignored? Ignoring it is today's behaviour and
+the worst of the three.
 
-### 5.10 Known smaller gaps
+### 4.7 Database roles — built, and what is left
+
+`uv run python -m app.db.roles` creates two read-only logins; `--check` reports
+them. `app/db/roles.py` explains every grant.
+
+| role | used by | difference |
+|---|---|---|
+| `vf_query_mapper_role` | `app/semantic/query_mapper.py` | needs `concept.embedding` for the pgvector fallback, so it also gets `public` on its `search_path` |
+| `vf_retrieval_role` | `app/retrieval/` | column-level grant on `concept` withholds `embedding`; no vector operators; 4 connections |
+
+Neither can reach `load_run`. The **grants** are a real boundary — verified
+with `default_transaction_read_only` deliberately off. The **session settings**
+are not; see §4.3.
+
+Two traps. The `search_path` decides whether pgvector is reachable: it installs
+into `public` and operators resolve through the path, so dropping `public` made
+`embedding <=> $1` fail with "operator does not exist" and took the concept
+search down with it. And provisioning **revokes before it grants**, so the
+`RoleSpec`s are authoritative — remove a table from one and the next run
+removes the privilege.
+
+### 4.8 Sector grouping — done, except the office
+
+`sic_code` and `sic_description` are loaded for all 20 filers across 14 codes,
+keyed on cik rather than ticker. "Which companies in semiconductors" resolves
+to AMD, INTC, MU, NVDA.
+
+`sic_office` has **no source at all**: `sic_numbers.json` carries code and
+description only, and the SEC assigns review offices by SIC *range*, a mapping
+this project does not have. Its refusal says exactly that. Populating it is a
+separate decision.
+
+### 4.9 Known smaller gaps
 
 - **Metric groups are NOT a thing.** "cash flow: operating, investing,
-  financing" is just several `MetricElementIn` along a metric axis, which works
-  today. Whether anything knows that "balance sheet totals" means a particular
-  list belongs to the *producer*. Briefly designed as a "bundle" concept before
-  being recognised as nothing new — see DESIGN.md §8.20. Do not re-invent it.
+  financing" is several `MetricElementIn` along a metric axis, which works
+  today. Whether anything knows "balance sheet totals" means a particular list
+  belongs to the *producer*. Briefly designed as a "bundle" before being
+  recognised as nothing new — schemas DESIGN §8.20. Do not re-invent it.
 - Restatements are picked correctly by `is_latest` but never *disclosed*
-  (PITFALLS §2.2). The `Note` channel exists and would carry it.
+  (PITFALLS §2.2). The `Note` channel would carry it, and
+  `narrower_than_asked` proved that channel extends cleanly.
 - A derived *and* residual binding reports only the lead operand's components.
   The coverage check is complete; the reported `components` under-describes it.
-
-Two that were here are now fixed, both of which would have made the emitter
-return confident wrong numbers:
-
-- `Binding.unit` on a derived metric reported the lead operand's unit, so a
-  ratio came back as "USD" (PITFALLS §2.1).
-- `Binding.period_rule` was `residual` whenever *any* period in the group was
-  a Q4, so a twelve-quarter binding claimed all twelve needed the subtraction.
-  Residual periods now get their own binding.
+- Alias curation for recall: interest income, treasury stock, deferred revenue,
+  operating expenses, depreciation, accounts receivable/payable, retained
+  earnings.
 
 ### Explicitly deferred by the user
 
@@ -383,28 +296,30 @@ return confident wrong numbers:
 amended filings — the vehicle for material restatements — are never seen. The
 user has decided not to address this now. Do not reopen it unprompted.
 
-## 6. Working conventions
+## 5. Working conventions
 
 The user's memory file carries these; they are repeated because violating them
 has caused real friction.
 
 - **Never `git commit` unless asked in that turn.** One approval is not
   standing permission.
+- **Keep commit messages to a couple of sentences.** Rationale belongs in the
+  relevant `DESIGN.md`, not in git history where nobody can edit it.
 - **One step per turn.** Do the thing, report, stop. Offer the next step as a
   question rather than proceeding.
-- **Match repo line endings — LF everywhere** (except `LOADER.md`, which was
-  already CRLF). Python text-mode writes on Windows silently convert to CRLF;
-  pass `newline="\n"` and check `git diff --stat` against
-  `--ignore-all-space` after any scripted edit.
+- **Match repo line endings — LF everywhere** (except `LOADER.md`, already
+  CRLF). Python text-mode writes on Windows silently convert to CRLF; pass
+  `newline="\n"` and check `git diff --stat` against `--ignore-all-space`
+  after any scripted edit.
 - **Verify empirically before asserting.** Every number in `PITFALLS.md` came
   from a probe against the real database. The user notices unfounded
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (224 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (251 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
-## 7. Verifying things yourself
+## 6. Verifying things yourself
 
 Ad-hoc SQL against `xbrl.fact` joined to `concept` / `filing`. Patterns worth
 reusing, from PITFALLS §5:
@@ -415,8 +330,7 @@ reusing, from PITFALLS §5:
   year-to-date.
 - **Restatements:** group by `(company, concept, unit, period_start,
   period_end)` and count distinct values. Omitting `period_start` is a trap —
-  it compares 3-month against 9-month windows sharing an end date. I made that
-  mistake.
+  it compares 3-month against 9-month windows sharing an end date.
 - **Concept drift:** per company per alias slot, the fiscal years each
   alternative covers. Any slot where no single alternative covers the union is
   a drift case.
@@ -427,32 +341,28 @@ and calendar misalignment at once:
 > "Show me visually how much money was made from 2023 to 2025 by quarter, for
 > Google, Apple and Nvidia"
 
-Expected: `shape=series`, `axes=['company','period']`, `row_count=36`, four
-bindings (Alphabet splits mid-range), nine Q4 residuals, and a
-`period_misalignment` note.
+Expected: `shape=series`, `axes=['company','period']`, `row_count=36`, **eight
+bindings** (three filers, each split direct/residual, and Alphabet changes
+revenue tags mid-range), nine periods carried by residual bindings, four
+`concept_switch` notes and a plan-level `period_misalignment`.
 
-## 8. Doc map
+For a broader check, `evals/questions.yaml` holds 56 questions with their
+expected outcome, and `uv run python evals/summarize.py` prints the
+distribution. There is no *runner* — executing the set means writing a
+`QueryIn` per question by hand, which is the producer's job (§4.5). Doing
+that in a scratch file is how several of the bugs fixed this session were
+found, including two the unit tests did not catch.
+
+## 7. Doc map
 
 | file | what |
 |---|---|
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
-| [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, fifteen decisions with reasoning |
+| [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
 | [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) | the curated alias layer |
 | [`app/db/DESIGN.md`](app/db/DESIGN.md) | ORM models, layout |
+| [`app/db/roles.py`](app/db/roles.py) | the two read-only roles, and which half of them is a real boundary |
 | [`LOADER.md`](LOADER.md) | the load step |
 | [`ALEMBIC.md`](ALEMBIC.md) | migrations — note step 5, the test database is NOT migrated automatically |
 | [`evals/README.md`](evals/README.md) | eval tag vocabulary, how to add questions |
 | [`sec-retriever.md`](sec-retriever.md) | the original project brief; §3 is the reserved layout |
-
-Recent commits, newest first:
-
-```
-<this session>  Company groups, granularity, qualifier removal
-b89b9f2  Describe result shape in the plan, and refuse weak metric matches
-2585907  Check declared operand signs before binding an expression
-d4d03d1  Resolve metric bindings per period, with a notes channel
-cdb1cce  Merge the alias modules into app/semantic/metric_aliases.py
-f19e462  Implement metric resolver with curated YAML alias layer
-068f200  Add query mapper with period-window and Q4 resolution
-8b93ca9  Adding prefixes to embeddings
-```
