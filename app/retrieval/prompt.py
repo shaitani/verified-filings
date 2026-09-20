@@ -86,23 +86,21 @@ def _periods_for(binding: Binding, plan: QueryPlan) -> list[ResolvedPeriod]:
 def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     """Flatten the plan into the cells retrieval must return, one row each.
 
-    Raises ``UnsupportedPlan`` for a multi-operand binding. The reason is a
-    real gap in ``Binding``, not a shortcut: ``Binding.unit`` is the unit of
-    the *result* -- ``pure`` for ``c0 / c1`` -- and the operands' own unit is
-    not carried anywhere. The join needs the operand's unit (dropping it from
-    the key makes AMD's FY2024 tax rate two rows, DESIGN §2.4), and recovering
-    it means a database lookup, which this step deliberately does not do.
-    Carrying an operand unit on ``Binding`` is the fix.
+    Raises ``UnsupportedPlan`` for a multi-operand binding. The *unit* half of
+    that is now solved -- ``Binding.operand_unit`` carries what the facts are
+    filed in, and ``fact_unit`` is what the join keys on -- but rendering the
+    arithmetic is not built: one cell becomes one row per operand, and the
+    expression has to be evaluated over them. See DESIGN §9.
     """
     cells: list[PlanCell] = []
     for index, binding in enumerate(plan.bindings):
         if len(binding.concepts) > 1:
             raise UnsupportedPlan(
                 f"binding {index} ({binding.element_id!r}) computes "
-                f"{binding.expression!r} over {len(binding.concepts)} concepts, and "
-                f"Binding carries only the result unit ({binding.unit!r}), not the "
-                f"operands'. The fact join needs the operands' unit, so this cannot "
-                f"be rendered without a lookup. Give Binding an operand unit first"
+                f"{binding.expression!r} over {len(binding.concepts)} concepts. Its "
+                f"operands are filed in {binding.fact_unit!r} and the result is "
+                f"{binding.unit!r}, so the coordinates are all here -- what is missing "
+                f"is rendering the arithmetic over one row per operand"
             )
         concept_id = binding.concepts[0].concept_id
         for period in _periods_for(binding, plan):
@@ -127,7 +125,10 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
                     ),
                     subtract_end=period.residual_of.subtract_end if residual else None,
                     concept_id=concept_id,
-                    unit=binding.unit,
+                    # The *facts'* unit, not the result's. For a single-operand
+                    # binding they are the same; for a ratio the result is
+                    # `pure` and no `pure` fact exists behind it.
+                    unit=binding.fact_unit,
                     is_instant=binding.is_instant,
                     binding_index=index,
                 )

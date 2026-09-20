@@ -997,7 +997,9 @@ def _bind_per_company(
             if violation is not None:
                 problems.append(Unresolved(element_id=element.id, reason=violation))
                 continue
-            unit, mismatch = _binding_unit(chosen, expression, cik=cik, evidence=evidence)
+            unit, operand_unit, mismatch = _binding_unit(
+                chosen, expression, cik=cik, evidence=evidence
+            )
             if unit is None:
                 problems.append(Unresolved(element_id=element.id, reason=mismatch))
                 continue
@@ -1025,6 +1027,7 @@ def _bind_per_company(
                     concepts=[c.as_ref() for c in chosen],
                     expression=expression,
                     unit=unit,
+                    operand_unit=operand_unit,
                     is_instant=lead.is_instant,
                     period_rule="residual" if residual else "direct",
                     coverage=_coverage_for(lead, covered, residual=residual),
@@ -1075,8 +1078,16 @@ def _binding_unit(
     *,
     cik: int,
     evidence: dict[tuple[int, int], _Evidence],
-) -> tuple[str | None, str]:
-    """The unit of the binding's *result*, or ``(None, reason)`` to refuse.
+) -> tuple[str | None, str | None, str]:
+    """``(result_unit, operand_unit, reason)`` -- or ``(None, None, reason)``.
+
+    Two units, because they are used for different things. The *result* unit
+    describes the number a reader sees. The *operand* unit is what the facts
+    are filed in, and it is what the retrieval join keys on -- for a ratio
+    those differ, and only this function ever sees both. It used to return
+    the first and drop the second, which left ``app/retrieval/`` unable to
+    render any ratio at all.
+
 
     A single-operand binding reports its fact's unit, which is what every
     stored value already is. Arithmetic is where this used to go wrong:
@@ -1098,16 +1109,18 @@ def _binding_unit(
     """
     units = [evidence[(cik, candidate.concept_id)].unit for candidate in chosen]
     if len(units) == 1:
-        return units[0], ""
+        # One operand: the result *is* the fact, so there is nothing to carry.
+        return units[0], None, ""
 
     distinct = set(units)
     if len(distinct) > 1:
-        return None, (
+        return None, None, (
             f"{expression!r} combines operands filed in different units "
             f"({', '.join(sorted(distinct))}) for cik {cik}; the result's unit is not "
             "one of them, so no binding was made"
         )
-    return ("pure" if "/" in expression else units[0]), ""
+    operand_unit = units[0]
+    return ("pure" if "/" in expression else operand_unit), operand_unit, ""
 
 
 def _named_ciks(ciks: list[int], limit: int = 4) -> str:

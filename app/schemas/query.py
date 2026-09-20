@@ -368,7 +368,26 @@ class Binding(_Base):
     #: needs to evaluate it.
     expression: str = Field(default="c0", min_length=1, max_length=256)
 
+    #: The unit of the binding's **result**. For a single-operand binding that
+    #: is the facts' own unit; for a ratio it is ``pure``, because dividing
+    #: like by like is dimensionless (PITFALLS §2.1 -- copying the lead
+    #: operand's unit through made a 0.46 gross margin report as "USD", which
+    #: any formatter renders as 46 cents).
     unit: str = Field(min_length=1, max_length=32)  # mirrors Fact.unit
+
+    #: The unit the **operands are filed in**, when that differs from the
+    #: result's. ``None`` means they are the same, which is true of every
+    #: single-operand binding.
+    #:
+    #: Separate from ``unit`` because the two are used for different things
+    #: and only coincide by accident. ``unit`` describes the number a reader
+    #: sees; this one goes in the *fact join*, and dropping it from that key
+    #: is what turns AMD's FY2024 tax rate into two rows that sum to 0.38
+    #: (app/retrieval/DESIGN.md §2.4). A ratio binding whose result is
+    #: ``pure`` therefore cannot be retrieved from ``unit`` alone -- there are
+    #: no ``pure`` facts behind it, only the USD ones it divides.
+    operand_unit: str | None = Field(default=None, min_length=1, max_length=32)
+
     is_instant: bool
 
     #: Whether the value is read straight off a window or computed by
@@ -387,6 +406,30 @@ class Binding(_Base):
 
     #: Caveats that must reach the reader. See ``NoteKind``.
     notes: list[Note] = Field(default_factory=list)
+
+    @property
+    def fact_unit(self) -> str:
+        """The unit to join facts on -- what retrieval needs, as opposed to
+        what a reader is shown."""
+        return self.operand_unit or self.unit
+
+    @model_validator(mode="after")
+    def _multi_operand_names_its_operand_unit(self) -> Binding:
+        """A multi-operand binding must say what its operands are filed in.
+
+        Without it the result unit is the only one available, and for a ratio
+        that is ``pure`` -- a unit no fact behind the binding actually has. A
+        join on it returns nothing, and "nothing" is indistinguishable from
+        "the company reported nothing", which is the failure this schema
+        exists to prevent.
+        """
+        if len(self.concepts) > 1 and self.operand_unit is None:
+            raise ValueError(
+                f"{self.expression!r} is computed over {len(self.concepts)} concepts, "
+                f"so operand_unit must say what they are filed in; the result unit "
+                f"({self.unit!r}) describes the answer, not the facts"
+            )
+        return self
 
     @model_validator(mode="after")
     def _expression_refs_exist(self) -> Binding:

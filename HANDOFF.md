@@ -312,11 +312,12 @@ separate decision.
 - Alias curation for recall: interest income, treasury stock, deferred revenue,
   operating expenses, depreciation, accounts receivable/payable, retained
   earnings.
-- **`Binding` carries no operand unit**, which is why `app/retrieval/` refuses
-  multi-operand bindings (`gross_margin` and five other ratios). `Binding.unit`
-  is the *result* unit — `pure` for `c0 / c1` — and the fact join needs the
-  operands'. The mapper already knows it at bind time; it just is not stored.
-  Smallest unblocking change in the project right now.
+- **Multi-operand bindings still cannot be rendered**, though no longer for
+  the unit reason: `Binding.operand_unit` now carries what the facts are filed
+  in (`USD` behind a `pure` gross margin) and `fact_unit` is what the join
+  keys on. What is left is rendering the *arithmetic* — one cell becomes one
+  row per operand and the expression has to be evaluated over them. Six of 47
+  curated metrics.
 - **No eval runner still.** 56 questions with expected outcomes and no way to
   run them. Now that `answer()` exists, the only missing piece is a `QueryIn`
   per question — which is the producer's job (§4.5). Until then "is this model
@@ -348,7 +349,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (346 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (349 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself

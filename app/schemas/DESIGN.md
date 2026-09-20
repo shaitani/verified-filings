@@ -490,6 +490,29 @@ for the same reason: *what to compute* and *what to return* are different
 questions, and folding them together is how the dimension got missed in the
 first place.
 
+### 8.14a `unit` and `operand_unit` are different questions
+
+`Binding.unit` is the unit of the **result** — what a reader is shown. For
+`gross_margin`, which is `c0 / c1` over two USD concepts, that is `pure`,
+because dividing like by like is dimensionless (PITFALLS §2.1: copying the
+lead operand's unit through once made a 0.46 gross margin report as "USD",
+which any formatter renders as 46 cents).
+
+`operand_unit` is what the **facts are filed in** — what the retrieval join
+keys on. They coincide for every single-operand binding, which is why one
+field looked sufficient for a long time, and they diverge for exactly the
+bindings that need the join most.
+
+Splitting them was forced by `app/retrieval/`: there are no `pure` facts
+behind a gross margin, only the USD ones it divides, so a join keyed on the
+result unit returns nothing — and nothing is indistinguishable from "the
+company reported nothing", the failure this schema exists to prevent. Dropping
+unit from the key instead is not an option either: it makes AMD's FY2024
+effective tax rate two rows that sum to 0.38 (retrieval DESIGN §2.4).
+
+`operand_unit` is `None` when it would only repeat `unit`, and `fact_unit`
+resolves the two. A multi-operand binding that omits it raises.
+
 ### 8.15 Two kinds of notes
 
 `Binding.notes` covers a caveat about one binding's numbers; `QueryPlan.notes`

@@ -155,8 +155,30 @@ def test_binding_allows_an_expression_over_several_concepts() -> None:
     binding = _binding(
         concepts=[_concept(1, "GrossProfit"), _concept(2, "Revenues")],
         expression="c0 / c1",
+        unit="pure",
+        operand_unit="USD",
     )
     assert len(binding.concepts) == 2
+    assert binding.fact_unit == "USD"
+
+
+def test_a_ratio_must_say_what_its_operands_are_filed_in() -> None:
+    """The result of `c0 / c1` is `pure`, and no `pure` fact exists behind it.
+    Joining on the result unit returns nothing -- and nothing is
+    indistinguishable from "the company reported nothing"."""
+    with pytest.raises(ValidationError, match="operand_unit must say"):
+        _binding(
+            concepts=[_concept(1, "GrossProfit"), _concept(2, "Revenues")],
+            expression="c0 / c1",
+            unit="pure",
+        )
+
+
+def test_a_single_operand_binding_joins_on_its_own_unit() -> None:
+    """Nothing to carry: the result *is* the fact."""
+    binding = _binding(unit="USD")
+    assert binding.operand_unit is None
+    assert binding.fact_unit == "USD"
 
 
 def test_binding_rejects_an_operand_it_did_not_bind() -> None:

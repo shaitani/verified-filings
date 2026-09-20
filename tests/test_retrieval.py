@@ -162,16 +162,30 @@ def test_a_residual_cell_carries_the_windows_to_subtract() -> None:
     assert cell.subtract_end == date(2024, 6, 29)
 
 
-def test_a_multi_operand_binding_is_refused_with_the_reason() -> None:
-    """Binding carries the *result* unit ('pure' for a ratio), not the
-    operands'. The fact join needs the operands', so this cannot be rendered
-    without a lookup this step does not do."""
+def test_a_multi_operand_binding_is_refused_for_the_arithmetic_not_the_unit() -> None:
+    """`operand_unit` closed the unit half of this. What is still missing is
+    rendering the expression over one row per operand."""
     plan = _plan(
-        [_binding(concepts=[_concept(1), _concept(2)], expression="c0 / c1", unit="pure")],
+        [
+            _binding(
+                concepts=[_concept(1), _concept(2)],
+                expression="c0 / c1",
+                unit="pure",
+                operand_unit="USD",
+            )
+        ],
         [_annual()],
     )
-    with pytest.raises(UnsupportedPlan, match="not the operands"):
+    with pytest.raises(UnsupportedPlan, match="rendering the arithmetic"):
         plan_cells(plan)
+
+
+def test_a_cell_joins_on_the_operand_unit_not_the_result_unit() -> None:
+    """A ratio's result is `pure`; its facts are USD. Keying the join on
+    `pure` would find nothing at all."""
+    plan = _plan([_binding(unit="USD")], [_annual()])
+    (cell,) = plan_cells(plan)
+    assert cell.unit == "USD"
 
 
 def test_a_plan_binding_nothing_is_refused() -> None:
