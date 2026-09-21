@@ -540,3 +540,35 @@ metrics:
           description: Cash from borrowing, repayment, buybacks and dividends.
         - metric: free_cash_flow
           description: Operating cash flow minus capital expenditure.
+
+  # --- terms that name no figure at all --------------------------------------
+  performance:
+    label: Performance
+    # Not an accounting term in any sense: "strongest quarter", "performed
+    # best", "how did they do" name no line of any statement. Left uncurated
+    # they fall to the embedding search, and measured 2026-09-21 that search
+    # returned nothing usable -- "strongest" and "best" both came back
+    # `unresolved` against Costco, which is a dead end with nothing to offer
+    # the person who asked.
+    #
+    # It asks rather than declines because the question is a perfectly
+    # reasonable one: whoever typed it has a figure in mind and simply has not
+    # said which. A default would be quietly wrong in the way `clarify` exists
+    # for -- Costco's strongest quarter by revenue and by margin are not
+    # obliged to be the same quarter.
+    synonyms:
+      [
+        strongest, weakest, strength, best, worst, performed, performed best,
+        did well, doing, how did they do, do, did, perform,
+      ]
+    clarify:
+      question: Measured by what? "Strongest" and "best" can mean quite different things on the same company.
+      options:
+        - metric: revenue
+          description: Total sales. The usual reading of a "big" or "strong" quarter.
+        - metric: net_income
+          description: Profit after everything, including interest and tax. The usual reading of "did well".
+        - metric: operating_income
+          description: Profit from the core business, before interest and tax.
+        - metric: gross_margin
+          description: Share of revenue left after the direct cost of production. Strength in the sense of pricing power.

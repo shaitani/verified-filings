@@ -42,6 +42,13 @@ extend-exclude = ["app/db/migrations"]
 #   B     - flake8-bugbear: likely-bug patterns
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# The producer's prompt is text a language model reads, and its line breaks
+# are part of it: reflowing one worked example to satisfy E501 changed what
+# the model emitted for an unrelated question. Formatting rules do not get a
+# vote on prompt content.
+"app/producer/prompt.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 # Fold "import x as y" into the same "from x import ..." block instead of
 # emitting a second statement for the renamed import.
