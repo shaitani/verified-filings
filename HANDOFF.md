@@ -324,12 +324,11 @@ separate decision.
   `xbrl.reported_fact` synthesizes the fourth quarter and the mapper proves
   coverage against that same view. Cross-checked before removal: 275 of 275
   residuals agreed across 20 companies, 4 metrics, 5 years.
-- **Multi-operand bindings still cannot be rendered**, though no longer for
-  the unit reason: `Binding.operand_unit` now carries what the facts are filed
-  in (`USD` behind a `pure` gross margin) and `fact_unit` is what the join
-  keys on. What is left is rendering the *arithmetic* — one cell becomes one
-  row per operand and the expression has to be evaluated over them. Six of 47
-  curated metrics.
+- **Same-unit arithmetic rests on the prompt alone.** A ratio in the wrong
+  unit is caught (`execute()` refuses a row whose unit is not the binding's),
+  but `free_cash_flow` is `c0 - c1` over two USD concepts, so a wrong
+  operator is a wrong number in the right unit. It happened once, live, and
+  nothing downstream noticed.
 - **No eval runner still.** 56 questions with expected outcomes and no way to
   run them. Now that `answer()` exists, the only missing piece is a `QueryIn`
   per question — which is the producer's job (§4.5). Until then "is this model
@@ -361,7 +360,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (338 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (341 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself

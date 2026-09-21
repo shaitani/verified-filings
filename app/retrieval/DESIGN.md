@@ -364,6 +364,47 @@ Worth generalising: **a question is context for what to compute, not a source
 of literals.** `company_cik` in the filter table already identifies a filer
 exactly, and any second way of naming one is a second way to get it wrong.
 
+### 4.3b Metrics that combine several facts
+
+`gross_margin` is `c0 / c1` over two USD concepts. Six of the 47 curated
+metrics are arithmetic like this, in three shapes: `c0 / c1`, `c0 - c1` and
+`(c0 - c1) / c2`.
+
+Unlike the Q4 subtraction this **cannot** move into the view: which concepts
+to divide is decided per question, not by the data. So the model does it, and
+the work is in leaving nothing to invent.
+
+- **A cell stays one row of the answer.** `PlanCell` holds `concept_ids` and
+  the `expression`, so `len(plan_cells(plan))` is still the number the verdict
+  checks. The filter table renders a line per operand; the promise does not.
+- **`unit` and `result_unit` are separate on the cell.** The join keys on what
+  the facts are filed in (`USD`); the row is projected with what the answer is
+  (`pure`). There are no `pure` facts behind a gross margin.
+- **The operand column and its instructions appear only when needed.** 41 of
+  47 metrics are a single concept, and the single-operand prompt is the one
+  that took five measured failures to get right.
+- **Two worked examples, not one adaptive one**, because the difference is
+  structural: the CTE gains a column and the select gains a pivot and a
+  `GROUP BY`. A test asserts each example declares as many CTE columns as the
+  table it is shown beside — the plain example against an operand table
+  produced ten values per row against nine names, so `is_instant` received
+  `'USD'` and it failed as `boolean = text`.
+- **The expression is substituted, not pattern-matched.** Replace each `cN`
+  with `max(v.value) FILTER (WHERE w.operand = N)` and keep the operators as
+  written. Saying that, and showing the subtraction beside the division, is
+  what fixed the free-cash-flow case in §9.
+
+Verified end to end against figures computed independently from the database:
+
+| metric | expression | result |
+|---|---|---|
+| gross margin | `c0 / c1` | 0.462063 |
+| operating margin | `c0 / c1` | 0.315102 |
+| net margin | `c0 / c1` | 0.239713 |
+| free cash flow | `c0 - c1` | 108,807,000,000 |
+| free cash flow margin | `(c0 - c1) / c2` | 0.278254 |
+| current ratio | `c0 / c1` | 0.867313 |
+
 ### 4.4 The Q4 subtraction -- fixed, by moving it
 
 The fourth quarter is the annual figure minus the year-to-date one. Told in
@@ -582,14 +623,15 @@ to surface it.
 - **Cross-unit aggregation** is prevented by `unit` being in the join key, but
   nothing *detects* a result set that mixes units and would be meaningless
   summed. Probably a verdict check.
-- **Multi-operand bindings are not renderable**, and the reason is a gap in
-  `Binding` rather than a shortcut here. `Binding.unit` is the unit of the
-  *result* — `pure` for `c0 / c1` — and the operands' own unit is carried
-  nowhere. The fact join needs the operands' unit (§2.4), so recovering it
-  means a database lookup `build_prompt` deliberately does not do.
-  `plan_cells` raises `UnsupportedPlan` saying exactly that. Six of the 47
-  curated metrics are affected (`gross_margin` and the other ratios). The fix
-  is an operand unit on `Binding`, set by the mapper, which already knows it.
+- **Same-unit arithmetic has no structural check.** A ratio that comes back
+  `USD` is caught, because the plan says the answer is `pure` and
+  `execute()` marks a row in the wrong unit unattributable. `free_cash_flow`
+  is `c0 - c1` over two USD concepts, so a wrong operator gives a wrong
+  number in the *right* unit and nothing downstream can tell. Measured: shown
+  only a division in the worked example, the model divided, returning Apple's
+  FY2024 free cash flow as 12.5 rather than 108.8 billion — attributable,
+  verdict `complete`. The example now shows both operators and says to read
+  the expression rather than copy it, and that prompt is the whole defence.
 - **Nothing checks that the answer matches the question.** The ranking case in
   §4.3 came back `complete` and `is_answerable` while answering a different
   question, because the verdict checks cardinality and attribution, not

@@ -104,7 +104,10 @@ def test_cells_are_the_cross_product_of_bindings_and_their_periods() -> None:
     )
     cells = plan_cells(plan)
     assert len(cells) == 4
-    assert {(c.company_cik, c.concept_id) for c in cells} == {(APPLE, 252), (NVIDIA, 254)}
+    assert {(c.company_cik, c.concept_ids) for c in cells} == {
+        (APPLE, (252,)),
+        (NVIDIA, (254,)),
+    }
 
 
 def test_a_binding_narrowed_to_periods_only_claims_those() -> None:
@@ -122,7 +125,10 @@ def test_a_binding_narrowed_to_periods_only_claims_those() -> None:
     )
     cells = plan_cells(plan)
     assert len(cells) == 2
-    assert {(c.fiscal_year, c.concept_id) for c in cells} == {(2023, 252), (2024, 254)}
+    assert {(c.fiscal_year, c.concept_ids) for c in cells} == {
+        (2023, (252,)),
+        (2024, (254,)),
+    }
 
 
 def test_a_q4_cell_is_an_ordinary_cell() -> None:
@@ -136,9 +142,10 @@ def test_a_q4_cell_is_an_ordinary_cell() -> None:
     assert cell.period_end == date(2024, 9, 28)
 
 
-def test_a_multi_operand_binding_is_refused_for_the_arithmetic_not_the_unit() -> None:
-    """`operand_unit` closed the unit half of this. What is still missing is
-    rendering the expression over one row per operand."""
+def test_a_ratio_is_one_cell_with_two_operands() -> None:
+    """One row of the answer, not two. `gross_margin` reads two facts and
+    reports one number, so the row count the verdict checks stays at the
+    answer's grain while the filter table renders a line per operand."""
     plan = _plan(
         [
             _binding(
@@ -150,8 +157,33 @@ def test_a_multi_operand_binding_is_refused_for_the_arithmetic_not_the_unit() ->
         ],
         [_annual()],
     )
-    with pytest.raises(UnsupportedPlan, match="rendering the arithmetic"):
-        plan_cells(plan)
+    (cell,) = plan_cells(plan)
+    assert cell.operands == 2
+    assert cell.concept_ids == (1, 2)
+    assert cell.expression == "c0 / c1"
+    assert cell.unit == "USD", "the join keys on the operands' unit"
+    assert cell.result_unit == "pure", "the answer is dimensionless"
+
+
+def test_the_filter_table_gains_an_operand_column_only_when_needed() -> None:
+    """41 of 47 curated metrics are a single concept, and every sentence in
+    the prompt is one the model can act on when it should not."""
+    ratio = _plan(
+        [
+            _binding(
+                concepts=[_concept(1), _concept(2)],
+                expression="c0 / c1",
+                unit="pure",
+                operand_unit="USD",
+            )
+        ],
+        [_annual()],
+    )
+    plain = _plan([_binding()], [_annual()])
+    assert "operand" in build_prompt(ratio)
+    assert "SOME ROWS COMBINE" in build_prompt(ratio)
+    assert "operand" not in build_prompt(plain)
+    assert "SOME ROWS COMBINE" not in build_prompt(plain)
 
 
 def test_a_cell_joins_on_the_operand_unit_not_the_result_unit() -> None:
@@ -197,6 +229,40 @@ def test_plan_notes_reach_the_prompt() -> None:
     note = Note(kind="concept_switch", message="tag changed")
     plan = _plan([_binding(notes=[note])], [_annual()])
     assert "tag changed" in build_prompt(plan)
+
+
+def test_each_worked_example_declares_as_many_columns_as_its_table() -> None:
+    """The bug this catches cost a live failure. The plain example's CTE names
+    nine columns; handed to a model alongside an operand filter table of ten,
+    it produced ten values per row against those nine names -- so `unit`
+    received a concept id and `is_instant` received 'USD', failing as
+    `boolean = text`. Each example now matches the table it is shown with.
+    """
+    from app.retrieval.prompt import (
+        _EXAMPLE_COMBINING,
+        _EXAMPLE_PLAIN,
+        _TABLE_HEADER,
+        _TABLE_HEADER_OPERANDS,
+    )
+
+    for example, header in (
+        (_EXAMPLE_PLAIN, _TABLE_HEADER),
+        (_EXAMPLE_COMBINING, _TABLE_HEADER_OPERANDS),
+    ):
+        table_columns = len(header.split("|"))
+        cte = example[example.index("WITH wanted(") : example.index(") AS (")]
+        assert len(cte.split(",")) == table_columns, cte
+
+
+def test_the_combining_example_shows_both_operators() -> None:
+    """It used to show only a division, and a `c0 - c1` metric came back
+    divided: Apple's FY2024 free cash flow as 12.5 rather than 108.8 billion,
+    in the right unit, attributable, verdict `complete`. Same-unit arithmetic
+    has no structural check behind it, so the prompt is the whole defence."""
+    from app.retrieval.prompt import _EXAMPLE_COMBINING
+
+    assert "Had the expression been `c0 - c1`" in _EXAMPLE_COMBINING
+    assert "do not copy the operator from this example" in _EXAMPLE_COMBINING
 
 
 # --------------------------------------------------------------------------- #

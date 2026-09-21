@@ -42,9 +42,15 @@ class UnsupportedPlan(ValueError):
 
 @dataclass(frozen=True)
 class PlanCell:
-    """One ``(binding, period)`` pair, flattened to the coordinates the SQL
-    joins on. The unit of the row-count promise: ``len(plan_cells(plan))`` is
-    how many rows a plain retrieval should return."""
+    """One ``(binding, period)`` pair: **one row of the answer**.
+
+    The unit of the row-count promise -- ``len(plan_cells(plan))`` is how many
+    rows a plain retrieval should return -- which is why a cell stays whole
+    when its metric is arithmetic. ``gross_margin`` reads two facts and
+    answers with one number, so it is one cell holding two ``concept_ids``,
+    not two cells. The filter table renders a line per operand; the count the
+    verdict checks does not.
+    """
 
     element_id: str
     company_cik: int
@@ -52,10 +58,29 @@ class PlanCell:
     fiscal_period: str
     period_start: date
     period_end: date
-    concept_id: int
+
+    #: Positional: ``concept_ids[0]`` is ``c0`` in ``expression``.
+    concept_ids: tuple[int, ...]
+
+    #: Arithmetic over the operands -- "c0" for the ordinary case, "c0 / c1"
+    #: for a ratio. Straight from ``Binding.expression``.
+    expression: str
+
+    #: The unit the **facts** are filed in, which is what the join keys on.
+    #: For a ratio this is not ``result_unit``: there are no ``pure`` facts
+    #: behind a gross margin, only the USD ones it divides.
     unit: str
+
+    #: The unit of the **answer** -- ``pure`` for a ratio. What the row must
+    #: be projected with, and what ``execute()`` checks it came back as.
+    result_unit: str
+
     is_instant: bool
     binding_index: int
+
+    @property
+    def operands(self) -> int:
+        return len(self.concept_ids)
 
 
 def _periods_for(binding: Binding, plan: QueryPlan) -> list[ResolvedPeriod]:
@@ -79,21 +104,13 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
 
     Raises ``UnsupportedPlan`` for a multi-operand binding. The *unit* half of
     that is now solved -- ``Binding.operand_unit`` carries what the facts are
-    filed in, and ``fact_unit`` is what the join keys on -- but rendering the
-    arithmetic is not built: one cell becomes one row per operand, and the
-    expression has to be evaluated over them. See DESIGN §9.
+    A multi-operand binding -- ``gross_margin`` is ``c0 / c1`` over two USD
+    concepts -- produces one cell carrying both ``concept_ids`` and the
+    expression. It is still one row of the answer.
     """
     cells: list[PlanCell] = []
     for index, binding in enumerate(plan.bindings):
-        if len(binding.concepts) > 1:
-            raise UnsupportedPlan(
-                f"binding {index} ({binding.element_id!r}) computes "
-                f"{binding.expression!r} over {len(binding.concepts)} concepts. Its "
-                f"operands are filed in {binding.fact_unit!r} and the result is "
-                f"{binding.unit!r}, so the coordinates are all here -- what is missing "
-                f"is rendering the arithmetic over one row per operand"
-            )
-        concept_id = binding.concepts[0].concept_id
+        concept_ids = tuple(concept.concept_id for concept in binding.concepts)
         for period in _periods_for(binding, plan):
             cells.append(
                 PlanCell(
@@ -103,11 +120,10 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
                     fiscal_period=period.fiscal_period,
                     period_start=period.period_start,
                     period_end=period.period_end,
-                    concept_id=concept_id,
-                    # The *facts'* unit, not the result's. For a single-operand
-                    # binding they are the same; for a ratio the result is
-                    # `pure` and no `pure` fact exists behind it.
+                    concept_ids=concept_ids,
+                    expression=binding.expression,
                     unit=binding.fact_unit,
+                    result_unit=binding.unit,
                     is_instant=binding.is_instant,
                     binding_index=index,
                 )
@@ -134,6 +150,16 @@ _TABLE_HEADER = (
     "unit  | is_instant | window_start | window_end"
 )
 
+#: The same, plus `operand`, used only when some metric is arithmetic over
+#: more than one concept. Two shapes rather than one column that is always 0,
+#: because the single-operand prompt is the one that took five measured
+#: failures to get right and it is not worth disturbing for the 13% of
+#: curated metrics that are ratios.
+_TABLE_HEADER_OPERANDS = (
+    "  element_id | company_cik | fiscal_year | fiscal_period | operand | "
+    "concept_id | unit  | is_instant | window_start | window_end"
+)
+
 
 def _table_row(
     element_id: str,
@@ -145,6 +171,7 @@ def _table_row(
     is_instant: bool,
     window_start: str,
     window_end: str,
+    operand: int | None = None,
 ) -> str:
     """One line of the filter table, for the real one and the worked example
     alike. Shared so the two cannot drift: a model shown two different shapes
@@ -154,13 +181,15 @@ def _table_row(
     it "yes"/"no" once produced ``is_instant = 'no'`` -- boolean compared with
     text, failing at execution.
     """
+    operand_cell = "" if operand is None else f"{operand:<7} | "
     return (
-        "  {:<10} | {:<11} | {:<11} | {:<13} | {:<10} | {:<5} | {:<10} | "
+        "  {:<10} | {:<11} | {:<11} | {:<13} | {}{:<10} | {:<5} | {:<10} | "
         "{:<12} | {}".format(
             element_id,
             company_cik,
             fiscal_year,
             fiscal_period,
+            operand_cell,
             concept_id,
             unit,
             "true" if is_instant else "false",
@@ -177,22 +206,26 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
     the model's job, not this one's -- handing it a half-written statement is
     how the line between the two blurs.
     """
-    rule = "  " + "-" * (len(_TABLE_HEADER) - 2)
+    combining = any(cell.operands > 1 for cell in cells)
+    header = _TABLE_HEADER_OPERANDS if combining else _TABLE_HEADER
+    rule = "  " + "-" * (len(header) - 2)
     rows = [
         _table_row(
             cell.element_id,
             cell.company_cik,
             cell.fiscal_year,
             cell.fiscal_period,
-            cell.concept_id,
+            concept_id,
             cell.unit,
             cell.is_instant,
             cell.period_start.isoformat(),
             cell.period_end.isoformat(),
+            operand=operand if combining else None,
         )
         for cell in cells
+        for operand, concept_id in enumerate(cell.concept_ids)
     ]
-    return chr(10).join([_TABLE_HEADER, rule, *rows])
+    return chr(10).join([header, rule, *rows])
 
 
 #: ``QueryIn.intent`` is the producer saying what kind of answer is wanted, and
@@ -248,7 +281,7 @@ computed number actually is ('pure' for a ratio or a growth rate). Leave
 #:
 #: The closing sentence does most of the work: it names the three columns the
 #: model was inventing and says where they come from.
-_WORKED_EXAMPLE = f"""WORKED EXAMPLE (different company and dates -- copy the FORM, not the values)
+_EXAMPLE_PLAIN = f"""WORKED EXAMPLE (different company and dates -- copy the FORM, not the values)
 
 If the filter table were:
 
@@ -318,6 +351,132 @@ answer must be left out entirely, never returned unsubtracted.
 """
 
 
+#: The same example for a plan whose metrics combine operands.
+#:
+#: Two of them, not one adaptive one, because the difference is not cosmetic:
+#: the column list gains `operand` and the select gains a pivot and a GROUP
+#: BY. Handing over the plain example beside an operand filter table produced
+#: exactly the failure that would predict -- ten values per row against nine
+#: declared column names, so `unit` received a concept id and `is_instant`
+#: received 'USD', failing as `boolean = text`.
+_EXAMPLE_COMBINING = f"""WORKED EXAMPLE (different company and dates -- copy the
+FORM, not the values)
+
+If the filter table were:
+
+{_TABLE_HEADER_OPERANDS}
+{_table_row("e9", 11111, 2019, "FY", 77, "USD", False, "2018-01-01", "2018-12-31", operand=0)}
+{_table_row("e9", 11111, 2019, "FY", 88, "USD", False, "2018-01-01", "2018-12-31", operand=1)}
+
+and the expressions were:
+
+  e9: value = c0 / c1, and its unit is 'pure'
+
+then -- note `c0` became operand 0 and `c1` became operand 1:
+
+  WITH wanted(element_id, company_cik, fiscal_year, fiscal_period, operand,
+              concept_id, unit, is_instant, window_start, window_end) AS (
+    VALUES ('e9', 11111, 2019, 'FY', 0, 77, 'USD', false, DATE '2018-01-01', DATE '2018-12-31'),
+           ('e9', 11111, 2019, 'FY', 1, 88, 'USD', false, DATE '2018-01-01', DATE '2018-12-31')
+  )
+  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
+         w.fiscal_year, w.fiscal_period,
+         v.period_start, v.period_end, v.is_instant,
+         max(v.value) FILTER (WHERE w.operand = 0)
+           / NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0) AS value,
+         'pure' AS unit,
+         NULL::text AS derivation
+  FROM wanted w
+  JOIN xbrl.reported_fact v
+    ON  v.company_cik = w.company_cik
+    AND v.concept_id  = w.concept_id
+    AND v.unit        = w.unit
+    AND v.is_instant  = w.is_instant
+    AND v.period_end  = w.window_end
+    AND (w.is_instant OR v.period_start = w.window_start)
+  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,
+           w.fiscal_year, w.fiscal_period,
+           v.period_start, v.period_end, v.is_instant
+  LIMIT 500
+
+Had the expression been `c0 - c1` instead, the ONLY change would be the
+operator:
+
+         max(v.value) FILTER (WHERE w.operand = 0)
+           - max(v.value) FILTER (WHERE w.operand = 1) AS value,
+
+with no NULLIF (nothing is divided) and the unit as given for that element.
+Read the expression; do not copy the operator from this example.
+
+The CTE declares TEN column names because the filter table has ten columns.
+`is_instant` is written `false`, not `'false'` -- the column is a boolean.
+`value`, `ticker` and `entity_name` appear ONLY as v.<column>; they are never
+written as literals, because they are what you are querying FOR.
+"""
+
+
+#: Shown only when some metric is arithmetic over more than one concept.
+#:
+#: The lesson from the Q4 subtraction applies here and cannot be applied the
+#: same way: that one moved into the view, because "the fourth quarter" is a
+#: property of the data. A ratio is not -- which concepts to divide is decided
+#: per question -- so no view can precompute it and the model has to do it.
+#:
+#: What can be done is to leave nothing to invent: the expression is given,
+#: the pivot is shown, and ``execute()`` refuses a row whose unit says the
+#: arithmetic did not happen (a gross margin that comes back "USD" is a gross
+#: profit wearing a margin's label).
+_COMBINE_HELP = """
+SOME ROWS COMBINE SEVERAL FACTS
+The filter table has an `operand` column. Rows sharing an element_id,
+company_cik, fiscal_year and fiscal_period are operands of ONE answer row --
+operand 0 is `c0`, operand 1 is `c1`, and so on -- combined like this:
+
+{expressions}
+
+Build `value` by taking the expression above and replacing each `cN` with
+
+  max(v.value) FILTER (WHERE w.operand = N)
+
+keeping the operators and brackets exactly as written. `c0 - c1` subtracts;
+`(c0 - c1) / c2` subtracts and then divides. The worked example above happens
+to show a division -- that is the example's expression, not yours.
+
+Three things it is easy to get wrong:
+
+  - Use the operators in YOUR expression, not the example's.
+  - Put `NULLIF(..., 0)` around any divisor. A division by zero ends the
+    whole statement.
+  - `unit` is the unit of the ANSWER, given per element above, not the
+    operands' unit. Dividing USD by USD gives `pure`, and a row that comes
+    back `USD` says the division did not happen -- it is rejected.
+
+`derivation` stays NULL: this is the metric as the plan defines it, not
+something computed on top of it.
+"""
+
+
+def _combine_help(cells: list[PlanCell]) -> str:
+    """The combining section, or nothing at all when no metric is arithmetic.
+
+    Silence in the ordinary case is deliberate: 41 of the 47 curated metrics
+    are a single concept, and every sentence in this prompt is a sentence the
+    model can act on when it should not.
+    """
+    combining = {
+        (cell.element_id, cell.expression, cell.result_unit)
+        for cell in cells
+        if cell.operands > 1
+    }
+    if not combining:
+        return ""
+    lines = [
+        f"  {element_id}: value = {expression}, and its unit is '{unit}'"
+        for element_id, expression, unit in sorted(combining)
+    ]
+    return _COMBINE_HELP.format(expressions=chr(10).join(lines))
+
+
 def _plan_notes(plan: QueryPlan) -> list[str]:
     notes = [f"- {note.kind}: {note.message}" for note in plan.notes]
     for index, binding in enumerate(plan.bindings):
@@ -333,6 +492,9 @@ def build_prompt(plan: QueryPlan) -> str:
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
     job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
+    combining = any(cell.operands > 1 for cell in cells)
+    worked_example = _EXAMPLE_COMBINING if combining else _EXAMPLE_PLAIN
+    combine_help = _combine_help(cells)
 
     return f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
 
@@ -389,7 +551,8 @@ year, and a range returns both.
 The straightforward way is a VALUES list of the table above joined to the
 relation, which also keeps `element_id` and the period labels attached to the
 right rows.
-{_WORKED_EXAMPLE}
+{worked_example}
+{combine_help}
 YOUR JOB
 {job}
 

@@ -126,6 +126,28 @@ def _anticipated(plan: QueryPlan, element_id: str, cik: int) -> bool:
     return False
 
 
+def _wrong_unit(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int]:
+    """Rows whose unit is not the unit the plan says the metric has.
+
+    The check exists for arithmetic the model might skip. ``gross_margin`` is
+    ``c0 / c1`` over two USD concepts and its answer is ``pure``; a row that
+    comes back ``USD`` is a gross *profit* wearing a margin's label, and no
+    count or attribution would notice -- both operands exist, one row came
+    back, the binding is right.
+
+    Only as-reported rows are checked. A derived row's unit is whatever the
+    model computed and the plan has no opinion on it.
+    """
+    wrong = []
+    for index, annotated in enumerate(rows):
+        if annotated.row.derivation is not None or not annotated.binding_keys:
+            continue
+        binding = plan.bindings[int(annotated.binding_keys[0][1:])]
+        if annotated.row.unit != binding.unit:
+            wrong.append(index)
+    return wrong
+
+
 def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     expected = plan_cells(plan)
     expected_keys = {
@@ -151,6 +173,10 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     ]
 
     unattributable = [index for index, r in enumerate(rows) if not r.binding_keys]
+    # A row in the wrong unit is not attributable to its binding in any useful
+    # sense: the binding says `pure` and the row says `USD`, so whatever it
+    # holds is not what the binding promised.
+    unattributable = sorted(set(unattributable) | set(_wrong_unit(rows, plan)))
 
     if not rows:
         status = "empty"
