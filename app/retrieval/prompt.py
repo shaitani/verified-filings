@@ -371,6 +371,12 @@ Every value in that table is a literal you write into the SQL. `element_id`,
 `fiscal_year` and `fiscal_period` exist ONLY there -- the relation has no such
 columns, so they have to be selected as constants per row.
 
+The table is the COMPLETE row selection. Add no other filter. In particular,
+do not filter on `ticker` or `entity_name` using names from the question: the
+question says "Apple", the database says "Apple Inc.", and a filter on the
+one finds none of the other. `company_cik` in the table already identifies
+the company exactly; `ticker` and `entity_name` are for display only.
+
 A Q4 row is no different from any other: no filer reports a fourth quarter,
 but the relation supplies one anyway, already computed. Fetch it like the rest.
 

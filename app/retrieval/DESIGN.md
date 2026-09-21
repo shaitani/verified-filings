@@ -337,7 +337,54 @@ Isolation tests ruled out the obvious suspects first: the model copies six
 dates verbatim at `repeat_penalty` 1.1 and 1.0 alike, and no prompt came near
 the context limit (1,176–2,086 tokens against 8,192).
 
-### 4.4 The one that is not fixed: the Q4 subtraction
+### 4.3a The question is context, not a filter
+
+Found with the same ladder. At 36 cells the smoke test returned `empty` while
+a 1-cell version of the same query was correct, which looked like a scale
+problem. It was not: every rung from 1 to 36 cells passed, coordinates
+reproduced exactly, `complete` each time.
+
+What differed was the **question text**. Same plan, same 36 filter rows, same
+correct join — and the failing statement added one clause:
+
+```sql
+WHERE v.entity_name IN ('Google', 'Apple', 'Nvidia')
+```
+
+The stored names are `Alphabet Inc.`, `Apple Inc.` and `NVIDIA CORP`, so that
+matches nothing. The model had lifted company names out of the question and
+added a belt-and-braces filter with them; the terse phrasing names no
+companies, so it added none.
+
+The prompt now says the filter table is the complete row selection, that no
+other filter belongs, and that `ticker` and `entity_name` are display-only
+because the question says "Apple" where the database says "Apple Inc.".
+
+Worth generalising: **a question is context for what to compute, not a source
+of literals.** `company_cik` in the filter table already identifies a filer
+exactly, and any second way of naming one is a second way to get it wrong.
+
+### 4.4 The Q4 subtraction -- fixed, by moving it
+
+The fourth quarter is the annual figure minus the year-to-date one. Told in
+prose and then shown a worked self-join, the model **returned Apple's FY2024
+annual revenue, 391,035,000,000, as its Q4** -- against a real Q4 of
+94,930,000,000. Thirty-six of thirty-six rows, every one attributed, verdict
+`complete`. Nothing downstream could tell a quarter was really a year.
+
+It is not asked of the model any more. `xbrl.reported_fact` synthesizes the
+fourth quarter (migration `a8b5b820cf1a`), so a Q4 is an ordinary row to fetch
+and Apple's Q4 FY2024 now comes back as 94,930,000,000 through the same
+pipeline that returned the year.
+
+That removed a great deal besides: `PeriodResidual`,
+`ResolvedPeriod.residual_of`, `Binding.period_rule`, `Coverage.components`,
+this prompt's residual section, and a `min_view_reads` check in `validate()`
+that existed only to catch the subtraction being skipped. The two derivations
+were cross-checked before either was deleted -- 275 of 275 residuals agreed
+across 20 companies, 4 metrics and 5 years.
+
+### 4.5 Superseded: what the subtraction used to cost
 
 A residual value is the whole window minus the shorter one. Told in prose and
 then shown a worked self-join, the model **returned Apple's FY2024 annual
