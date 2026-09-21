@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Company, Concept, Fact, Filing
 from app.db.session import QueryMapperSessionLocal
+from app.db.views import reported_fact
 from app.embedding_client import embed_query
 from app.schemas.query import (
     Ambiguity,
@@ -1425,22 +1426,30 @@ async def _gather_evidence(
 
     rows = await session.execute(
         select(
-            Fact.company_cik,
-            Fact.concept_id,
-            Fact.unit,
-            Fact.is_instant,
-            Fact.period_start,
-            Fact.period_end,
-            Fact.value,
+            reported_fact.c.company_cik,
+            reported_fact.c.concept_id,
+            reported_fact.c.unit,
+            reported_fact.c.is_instant,
+            reported_fact.c.period_start,
+            reported_fact.c.period_end,
+            reported_fact.c.value,
         ).where(
-            Fact.company_cik.in_(ciks),
-            Fact.concept_id.in_(concept_ids),
-            Fact.is_latest.is_(True),
+            # The VIEW, not `fact`. Coverage has to be proved against the
+            # relation `app/retrieval/` will read, or the mapper can bind a
+            # value retrieval cannot fetch. The view also already applies
+            # `is_latest`, so that predicate is gone rather than missing.
+            reported_fact.c.company_cik.in_(ciks),
+            reported_fact.c.concept_id.in_(concept_ids),
             or_(
-                and_(Fact.is_instant.is_(True), Fact.period_end.in_(instant_dates)),
                 and_(
-                    Fact.is_instant.is_(False),
-                    tuple_(Fact.period_start, Fact.period_end).in_(duration_windows),
+                    reported_fact.c.is_instant.is_(True),
+                    reported_fact.c.period_end.in_(instant_dates),
+                ),
+                and_(
+                    reported_fact.c.is_instant.is_(False),
+                    tuple_(
+                        reported_fact.c.period_start, reported_fact.c.period_end
+                    ).in_(duration_windows),
                 ),
             ),
         )

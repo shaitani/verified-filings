@@ -107,8 +107,26 @@ class RoleSpec:
 QUERY_MAPPER = RoleSpec(
     name="vf_query_mapper_role",
     used_by="app/semantic/query_mapper.py",
-    tables=("company", "filing", "fact", "concept"),
-    inherit_future_tables=True,
+    # Five named relations, split by what they are for.
+    #
+    # `reported_fact` is where the mapper proves **coverage**, because it is
+    # the relation `app/retrieval/` reads. Proving a value exists against
+    # `fact` while retrieval reads the view would be proving something about a
+    # different set of rows -- the view holds 9,425 synthesized fourth quarters
+    # that `fact` does not -- and a plan the retrieval step cannot fulfil comes
+    # back as a data problem when it is really a disagreement between roles.
+    #
+    # The base tables stay for what the view deliberately withholds, all of it
+    # lexicon rather than values: `company.sic_*` for group selection,
+    # `concept.embedding` for the pgvector fallback, and `filing`'s fiscal
+    # labels for discovering each filer's calendar. Those are how the mapper
+    # decides *what to ask for*; the view is how it checks the answer is there.
+    tables=("company", "filing", "fact", "concept", "reported_fact"),
+    # False, not a convenience. `ALTER DEFAULT PRIVILEGES ... ON TABLES` covers
+    # views too, so with this on, every view added later was silently granted
+    # to this role and not to the retrieval one -- verified. Which relations a
+    # role can read should be a decision, not a side effect of creation order.
+    inherit_future_tables=False,
     needs_vector_operators=True,
 )
 
