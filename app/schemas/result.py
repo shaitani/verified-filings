@@ -40,7 +40,6 @@ from pydantic import Field, model_validator
 from app.schemas.query import (
     ConceptRef,
     Note,
-    PeriodRule,
     QueryFiscalPeriod,
     ResolvedBy,
     _Base,
@@ -150,7 +149,6 @@ class Citation(_Base):
     #: What to cite, and the arithmetic over it.
     concepts: list[ConceptRef] = Field(min_length=1)
     expression: str = Field(min_length=1, max_length=256)
-    period_rule: PeriodRule
     unit: str = Field(min_length=1, max_length=32)
 
     resolved_by: ResolvedBy

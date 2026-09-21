@@ -26,12 +26,10 @@ from app.retrieval import (
 from app.retrieval.generator import extract_sql
 from app.schemas.query import (
     Binding,
-    ComponentCoverage,
     ConceptRef,
     Coverage,
     Note,
     PeriodRef,
-    PeriodResidual,
     PlanFilters,
     QueryPlan,
     ResolvedPeriod,
@@ -72,17 +70,14 @@ def _annual(cik: int = APPLE, year: int = 2024) -> ResolvedPeriod:
 
 
 def _q4(cik: int = APPLE, year: int = 2024) -> ResolvedPeriod:
+    """An ordinary quarter. No filer reports a Q4, but the view synthesizes
+    one, so nothing here treats it specially any more."""
     return ResolvedPeriod(
         company_cik=cik,
         fiscal_year=year,
         fiscal_period="Q4",
         period_start=date(year, 6, 30),
         period_end=date(year, 9, 28),
-        residual_of=PeriodResidual(
-            shared_start=date(year - 1, 10, 1),
-            whole_end=date(year, 9, 28),
-            subtract_end=date(year, 6, 29),
-        ),
     )
 
 
@@ -130,34 +125,15 @@ def test_a_binding_narrowed_to_periods_only_claims_those() -> None:
     assert {(c.fiscal_year, c.concept_id) for c in cells} == {(2023, 252), (2024, 254)}
 
 
-def test_a_residual_cell_carries_the_windows_to_subtract() -> None:
-    plan = _plan(
-        [
-            _binding(
-                period_rule="residual",
-                coverage=Coverage(
-                    fact_count=2,
-                    components=[
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 9, 28),
-                            fact_count=1,
-                        ),
-                        ComponentCoverage(
-                            period_start=date(2023, 10, 1),
-                            period_end=date(2024, 6, 29),
-                            fact_count=1,
-                        ),
-                    ],
-                ),
-            )
-        ],
-        [_q4()],
-    )
+def test_a_q4_cell_is_an_ordinary_cell() -> None:
+    """The view computes the fourth quarter (migration a8b5b820cf1a), so the
+    plan names one window like any other. It used to carry the two windows to
+    subtract, and the SQL-writing model would not subtract them."""
+    plan = _plan([_binding()], [_q4()])
     (cell,) = plan_cells(plan)
-    assert cell.period_start == date(2023, 10, 1)  # the shared start, not the Q4 start
+    assert cell.fiscal_period == "Q4"
+    assert cell.period_start == date(2024, 6, 30)
     assert cell.period_end == date(2024, 9, 28)
-    assert cell.subtract_end == date(2024, 6, 29)
 
 
 def test_a_multi_operand_binding_is_refused_for_the_arithmetic_not_the_unit() -> None:

@@ -19,12 +19,10 @@ from app.schemas.query import (
     Candidate,
     CompanyElementIn,
     CompanyGroupElementIn,
-    ComponentCoverage,
     ConceptRef,
     Coverage,
     MetricElementIn,
     PeriodElementIn,
-    PeriodResidual,
     PlanFilters,
     QueryIn,
     QueryPlan,
@@ -266,16 +264,6 @@ def test_resolved_period_allows_a_window_ending_outside_its_fiscal_year() -> Non
 # --------------------------------------------------------------------------- #
 
 
-def _residual() -> PeriodResidual:
-    """Apple's FY2024: annual 2023-10-01 -> 2024-09-28, nine-month term ending
-    2024-06-29. Real windows, so the shape is checked against real data."""
-    return PeriodResidual(
-        shared_start=date(2023, 10, 1),
-        whole_end=date(2024, 9, 28),
-        subtract_end=date(2024, 6, 29),
-    )
-
-
 def test_query_period_accepts_q4_even_though_no_filing_has_one() -> None:
     """The query vocabulary is wider than the storage vocabulary on purpose --
     "compare their Q4s" is askable, and translating it is the mapper's job."""
@@ -285,101 +273,21 @@ def test_query_period_accepts_q4_even_though_no_filing_has_one() -> None:
     assert query.elements[0].fiscal_period == "Q4"
 
 
-def test_residual_requires_the_subtrahend_inside_the_whole() -> None:
-    with pytest.raises(ValidationError, match="shared_start < subtract_end < whole_end"):
-        PeriodResidual(
-            shared_start=date(2023, 10, 1),
-            whole_end=date(2024, 9, 28),
-            subtract_end=date(2024, 10, 5),  # past the end of the whole window
-        )
-
-
-def test_q4_period_must_carry_its_components() -> None:
-    with pytest.raises(ValidationError, match="only period the store cannot supply"):
-        ResolvedPeriod(
-            company_cik=320193,
-            fiscal_year=2024,
-            fiscal_period="Q4",
-            period_start=date(2024, 6, 30),
-            period_end=date(2024, 9, 28),
-        )
-
-
-def test_non_q4_period_must_not_carry_components() -> None:
-    with pytest.raises(ValidationError, match="only period the store cannot supply"):
-        ResolvedPeriod(
-            company_cik=320193,
-            fiscal_year=2024,
-            fiscal_period="FY",
-            period_start=date(2023, 10, 1),
-            period_end=date(2024, 9, 28),
-            residual_of=_residual(),
-        )
-
-
-def test_residual_binding_rejects_a_missing_component() -> None:
-    """The NVIDIA case: the concept has annual facts but no nine-month ones, so
-    a concept-level count passes while the subtraction cannot be computed.
-    Dropping the missing term would silently return the whole year as "Q4"."""
-    with pytest.raises(ValidationError, match="plausible wrong number"):
-        _binding(
-            period_rule="residual",
-            coverage=Coverage(
-                fact_count=4,  # nonzero at concept level -- the trap
-                components=[
-                    ComponentCoverage(
-                        period_start=date(2023, 10, 1),
-                        period_end=date(2024, 9, 28),
-                        fact_count=4,
-                    ),
-                    ComponentCoverage(
-                        period_start=date(2023, 10, 1),
-                        period_end=date(2024, 6, 29),
-                        fact_count=0,  # nothing to subtract
-                    ),
-                ],
-            ),
-        )
-
-
-def test_residual_binding_rejects_an_instant_concept() -> None:
-    """Total assets at Q4 is just the fiscal-year-end instant -- subtracting
-    anything from it would be wrong, not merely unnecessary."""
-    with pytest.raises(ValidationError, match="instant fact needs no residual"):
-        _binding(
-            is_instant=True,
-            period_rule="residual",
-            coverage=Coverage(
-                fact_count=5,
-                components=[
-                    ComponentCoverage(
-                        period_start=date(2023, 10, 1),
-                        period_end=date(2024, 9, 28),
-                        fact_count=5,
-                    )
-                ],
-            ),
-        )
-
-
-def test_residual_binding_accepts_provable_components() -> None:
-    binding = _binding(
-        period_rule="residual",
-        coverage=Coverage(
-            fact_count=9,
-            components=[
-                ComponentCoverage(
-                    period_start=date(2023, 10, 1), period_end=date(2024, 9, 28), fact_count=5
-                ),
-                ComponentCoverage(
-                    period_start=date(2023, 10, 1), period_end=date(2024, 6, 29), fact_count=4
-                ),
-            ],
-        ),
+def test_a_q4_resolved_period_is_an_ordinary_period() -> None:
+    """It used to carry `residual_of` -- the two windows the SQL step had to
+    subtract -- with a validator insisting Q4 was the only period allowed one,
+    and `Binding` carried a `period_rule` saying which arithmetic applied.
+    `xbrl.reported_fact` computes the fourth quarter now (migration
+    a8b5b820cf1a), so a Q4 is a window like any other and the schema has
+    nothing left to special-case."""
+    period = ResolvedPeriod(
+        company_cik=320193,
+        fiscal_year=2024,
+        fiscal_period="Q4",
+        period_start=date(2024, 6, 30),
+        period_end=date(2024, 9, 28),
     )
-    assert binding.period_rule == "residual"
-
-
-def test_direct_binding_needs_no_components() -> None:
-    assert _binding().period_rule == "direct"
-    assert _binding().coverage.components == []
+    assert period.granularity == "quarterly"
+    assert "residual_of" not in ResolvedPeriod.model_fields
+    assert "period_rule" not in Binding.model_fields
+    assert "components" not in Coverage.model_fields

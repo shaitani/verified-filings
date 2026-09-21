@@ -73,10 +73,4 @@ async def answer(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> ResultSet
     check ``is_answerable`` -- because that is a judgement about the *data*,
     not about whether the machinery worked.
     """
-    # A plan with a residual cell needs the relation read twice -- once for the
-    # whole window, once for the window subtracted from it. Derived here rather
-    # than inside validate(), which knows nothing about plans: it is told the
-    # property the statement must have.
-    needs = 2 if any(cell.subtract_end for cell in plan_cells(plan)) else 1
-    sql = validate(await generate(plan, model=model), min_view_reads=needs)
-    return await execute(sql, plan)
+    return await execute(validate(await generate(plan, model=model)), plan)

@@ -32,7 +32,6 @@ from app.schemas.query import (
     MetricElementIn,
     Note,
     PeriodRef,
-    PeriodResidual,
     PlanFilters,
     QueryIn,
     QueryPlan,
@@ -295,7 +294,6 @@ async def test_alias_falls_through_to_a_loaded_alternative(
     (binding,) = plan.bindings
     assert [c.name for c in binding.concepts] == ["ZzzTestRevenues"]
     assert binding.resolved_by == "alias"
-    assert binding.period_rule == "direct"
     assert binding.is_instant is False
 
 
@@ -570,13 +568,6 @@ def _period(cik: int, end: date, *, year: int = 2025, fp: str = "Q4") -> Resolve
         fiscal_period=fp,
         period_start=end - timedelta(days=90),
         period_end=end,
-        residual_of=PeriodResidual(
-            shared_start=end - timedelta(days=364),
-            whole_end=end,
-            subtract_end=end - timedelta(days=91),
-        )
-        if fp == "Q4"
-        else None,
     )
 
 
@@ -895,7 +886,8 @@ async def test_a_distant_match_is_refused_rather_than_offered(
 
 
 def _fy2024(cik: int, fiscal_period: str) -> ResolvedPeriod:
-    """One period of a calendar-year filer, Q4 carrying its residual windows."""
+    """One period of a calendar-year filer. Q4 is ordinary now: the view
+    computes it, so the mapper carries no windows to subtract."""
     if fiscal_period == "Q4":
         return ResolvedPeriod(
             company_cik=cik,
@@ -903,11 +895,6 @@ def _fy2024(cik: int, fiscal_period: str) -> ResolvedPeriod:
             fiscal_period="Q4",
             period_start=date(2024, 10, 1),
             period_end=date(2024, 12, 31),
-            residual_of=PeriodResidual(
-                shared_start=date(2024, 1, 1),
-                whole_end=date(2024, 12, 31),
-                subtract_end=date(2024, 9, 30),
-            ),
         )
     return ResolvedPeriod(
         company_cik=cik,
@@ -918,14 +905,12 @@ def _fy2024(cik: int, fiscal_period: str) -> ResolvedPeriod:
     )
 
 
-def test_residual_periods_split_into_their_own_binding() -> None:
-    """`period_rule` has to describe every period the binding carries.
-
-    It used to be set whenever *any* period in the group was a Q4, so "revenue
-    by quarter" came back as one binding over twelve quarters flagged
-    `residual` -- and an emitter that believed it would have subtracted the
-    nine-month year-to-date from all twelve. Splitting the group is what makes
-    the flag true rather than merely recoverable from `filters.periods`.
+def test_a_q4_is_bound_in_the_same_binding_as_its_neighbours() -> None:
+    """Q4 used to force its own binding, because it was computed by
+    subtraction and the quarters beside it were not -- one `period_rule` had
+    to be true of every period in the group. `xbrl.reported_fact` supplies the
+    fourth quarter as an ordinary row, so a series no longer splits on it and
+    only a genuine tag change does.
     """
     concept = query_mapper._Candidate(
         concept_id=1, taxonomy="us-gaap", name="Revenues", score=1.0
@@ -936,21 +921,20 @@ def test_residual_periods_split_into_their_own_binding() -> None:
             is_instant=False,
             unit="USD",
             values={
-                (date(2024, 7, 1), date(2024, 9, 30)): Decimal("25"),
-                (date(2024, 1, 1), date(2024, 9, 30)): Decimal("75"),
-                (date(2024, 1, 1), date(2024, 12, 31)): Decimal("100"),
+                (period.period_start, period.period_end): Decimal("25")
+                for period in periods
             },
         )
     }
-
-    bindings: list[Binding] = []
+    bindings: list = []
     query_mapper._bind_per_company(
-        MetricElementIn(id="m", text="revenue"),
+        MetricElementIn(id="e1", text="revenue"),
         slots=[[concept]],
         signs=["signed"],
+        caveats={},
         expression="c0",
         resolved_by="alias",
-        source="curated alias 'revenue'",
+        source="curated alias",
         ciks=[11],
         periods=periods,
         evidence=evidence,
@@ -958,17 +942,11 @@ def test_residual_periods_split_into_their_own_binding() -> None:
         ambiguous=[],
         problems=[],
     )
-
-    by_rule = {b.period_rule: b for b in bindings}
-    assert set(by_rule) == {"direct", "residual"}, "one flag cannot describe both"
-    assert [(p.fiscal_year, p.fiscal_period) for p in by_rule["direct"].periods] == [(2024, "Q3")]
-    assert [(p.fiscal_year, p.fiscal_period) for p in by_rule["residual"].periods] == [
-        (2024, "Q4")
-    ]
-    # The residual binding proves both of its component windows; the direct
-    # one has no components because it subtracts nothing.
-    assert len(by_rule["residual"].coverage.components) == 2
-    assert by_rule["direct"].coverage.components == []
+    assert len(bindings) == 1
+    assert {(p.fiscal_year, p.fiscal_period) for p in bindings[0].periods} == {
+        (2024, "Q3"),
+        (2024, "Q4"),
+    }
 
 
 def test_a_ratio_is_dimensionless_not_the_numerator_s_unit() -> None:

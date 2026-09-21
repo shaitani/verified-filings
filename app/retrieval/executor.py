@@ -71,7 +71,6 @@ def _citations(plan: QueryPlan) -> dict[str, Citation]:
             company_cik=binding.company_cik,
             concepts=list(binding.concepts),
             expression=binding.expression,
-            period_rule=binding.period_rule,
             unit=binding.unit,
             resolved_by=binding.resolved_by,
             confidence=binding.confidence,

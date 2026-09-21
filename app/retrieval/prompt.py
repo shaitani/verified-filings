@@ -50,13 +50,8 @@ class PlanCell:
     company_cik: int
     fiscal_year: int
     fiscal_period: str
-    #: For a direct cell, the fact's own window. For a residual, the *whole*
-    #: window -- the minuend -- whose start both terms share.
     period_start: date
     period_end: date
-    #: Set only for a residual: the end of the window to subtract. ``None``
-    #: means read the value straight off ``period_end``.
-    subtract_end: date | None
     concept_id: int
     unit: str
     is_instant: bool
@@ -100,26 +95,14 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
             )
         concept_id = binding.concepts[0].concept_id
         for period in _periods_for(binding, plan):
-            residual = binding.period_rule == "residual"
-            if residual and period.residual_of is None:
-                raise UnsupportedPlan(
-                    f"binding {index} is a residual over "
-                    f"{period.fiscal_period}{period.fiscal_year}, which carries no "
-                    f"residual windows"
-                )
             cells.append(
                 PlanCell(
                     element_id=binding.element_id,
                     company_cik=period.company_cik,
                     fiscal_year=period.fiscal_year,
                     fiscal_period=period.fiscal_period,
-                    period_start=(
-                        period.residual_of.shared_start if residual else period.period_start
-                    ),
-                    period_end=(
-                        period.residual_of.whole_end if residual else period.period_end
-                    ),
-                    subtract_end=period.residual_of.subtract_end if residual else None,
+                    period_start=period.period_start,
+                    period_end=period.period_end,
                     concept_id=concept_id,
                     # The *facts'* unit, not the result's. For a single-operand
                     # binding they are the same; for a ratio the result is
@@ -137,15 +120,54 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
 #: Column names for the filter table. One constant so the worked example below
 #: and the real table can never drift apart -- a model shown two different
 #: headers has been given a reason to invent a third.
-#: `fy` and `fp` are separate columns rather than one "Q12023" label, because
-#: a combined label has to be split before it can be projected -- and a model
-#: asked to split it emitted `fiscal_period = 'Q12023'`, which the contract
-#: then rejected. Handing over values already in the shape the answer needs
-#: removes the step rather than explaining it.
+#: Every column here is named either exactly as the contract wants it
+#: projected, or after the view column it joins to. Nothing needs renaming on
+#: the way through, which is the point: a model copies what it is shown.
+#:
+#: Two measured failures produced this. Short names `fy`/`fp` came back
+#: projected as `fy` and `fp`, and the contract refused them. Before that, a
+#: single combined "Q12023" label -- which had to be split -- came back as
+#: `fiscal_period = 'Q12023'`. Handing over values already in the shape the
+#: answer needs removes the step instead of explaining it.
 _TABLE_HEADER = (
-    "  element | cik      | fy   | fp | concept_id | unit  | instant | "
-    "window_start | window_end | minus_window_ending"
+    "  element_id | company_cik | fiscal_year | fiscal_period | concept_id | "
+    "unit  | is_instant | window_start | window_end"
 )
+
+
+def _table_row(
+    element_id: str,
+    company_cik: int,
+    fiscal_year: int,
+    fiscal_period: str,
+    concept_id: int,
+    unit: str,
+    is_instant: bool,
+    window_start: str,
+    window_end: str,
+) -> str:
+    """One line of the filter table, for the real one and the worked example
+    alike. Shared so the two cannot drift: a model shown two different shapes
+    has been given a reason to invent a third.
+
+    ``is_instant`` renders as the literal the column actually holds. Rendering
+    it "yes"/"no" once produced ``is_instant = 'no'`` -- boolean compared with
+    text, failing at execution.
+    """
+    return (
+        "  {:<10} | {:<11} | {:<11} | {:<13} | {:<10} | {:<5} | {:<10} | "
+        "{:<12} | {}".format(
+            element_id,
+            company_cik,
+            fiscal_year,
+            fiscal_period,
+            concept_id,
+            unit,
+            "true" if is_instant else "false",
+            window_start,
+            window_end,
+        )
+    )
 
 
 def _coordinate_table(cells: list[PlanCell]) -> str:
@@ -157,21 +179,16 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
     """
     rule = "  " + "-" * (len(_TABLE_HEADER) - 2)
     rows = [
-        "  {:<7} | {:<8} | {:<4} | {:<2} | {:<10} | {:<5} | {:<7} | {:<12} | "
-        "{:<10} | {}".format(
+        _table_row(
             cell.element_id,
             cell.company_cik,
             cell.fiscal_year,
             cell.fiscal_period,
             cell.concept_id,
             cell.unit,
-            # the literal the column actually holds: a model copies what it
-            # is shown, and "yes" produced `is_instant = 'no'` -> boolean =
-            # text at execution time.
-            "true" if cell.is_instant else "false",
+            cell.is_instant,
             cell.period_start.isoformat(),
             cell.period_end.isoformat(),
-            cell.subtract_end.isoformat() if cell.subtract_end else "-",
         )
         for cell in cells
     ]
@@ -236,8 +253,8 @@ _WORKED_EXAMPLE = f"""WORKED EXAMPLE (different company and dates -- copy the FO
 If the filter table were:
 
 {_TABLE_HEADER}
-  e9      | 11111    | 2019 | FY | 77         | USD   | false   | 2018-01-01   | 2018-12-31 | -
-  e9      | 22222    | 2019 | FY | 88         | USD   | false   | 2018-07-01   | 2019-06-30 | -
+{_table_row("e9", 11111, 2019, "FY", 77, "USD", False, "2018-01-01", "2018-12-31")}
+{_table_row("e9", 22222, 2019, "FY", 88, "USD", False, "2018-07-01", "2019-06-30")}
 
 the statement would be:
 
@@ -316,9 +333,6 @@ def build_prompt(plan: QueryPlan) -> str:
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
     job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
-    residual = [cell for cell in cells if cell.subtract_end]
-
-    residual_help = _RESIDUAL_HELP.format(count=len(residual)) if residual else ""
 
     return f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
 
@@ -357,6 +371,9 @@ Every value in that table is a literal you write into the SQL. `element_id`,
 `fiscal_year` and `fiscal_period` exist ONLY there -- the relation has no such
 columns, so they have to be selected as constants per row.
 
+A Q4 row is no different from any other: no filer reports a fourth quarter,
+but the relation supplies one anyway, already computed. Fetch it like the rest.
+
 Match each row with an EXACT equality on all of:
   company_cik, concept_id, unit, is_instant, period_end = window_end
 and, only when is_instant is false, period_start = window_start.
@@ -366,7 +383,6 @@ year, and a range returns both.
 The straightforward way is a VALUES list of the table above joined to the
 relation, which also keeps `element_id` and the period labels attached to the
 right rows.
-{residual_help}
 {_WORKED_EXAMPLE}
 YOUR JOB
 {job}
@@ -375,12 +391,12 @@ OUTPUT
 Project exactly these column names, in any order:
   {columns}
 
-  - `fiscal_year` and `fiscal_period` are the `fy` and `fp` columns of the
-    filter table, used exactly as given (the relation has no such columns).
-    `fp` is one of 'FY', 'Q1', 'Q2', 'Q3', 'Q4' and nothing else.
+  - `element_id`, `fiscal_year` and `fiscal_period` come from the filter
+    table and are projected under exactly those names -- the relation has no
+    such columns, so they are constants per row. `fiscal_period` is one of
+    'FY', 'Q1', 'Q2', 'Q3', 'Q4' and nothing else.
   - `period_start`, `period_end`, `is_instant`, `value`, `unit`, `ticker`,
     `entity_name`, `company_cik` come from the relation.
-  - `element_id` comes from the table above.
 
 RULES (the statement is rejected if it breaks one)
 0. EVERY value must be read from the relation. Never write a number, a ticker

@@ -318,6 +318,12 @@ separate decision.
 - Alias curation for recall: interest income, treasury stock, deferred revenue,
   operating expenses, depreciation, accounts receivable/payable, retained
   earnings.
+- **Q4 is no longer special anywhere but the view.** `PeriodResidual`,
+  `ResolvedPeriod.residual_of`, `Binding.period_rule`, `Coverage.components`
+  and the prompt's residual instructions are all gone;
+  `xbrl.reported_fact` synthesizes the fourth quarter and the mapper proves
+  coverage against that same view. Cross-checked before removal: 275 of 275
+  residuals agreed across 20 companies, 4 metrics, 5 years.
 - **Multi-operand bindings still cannot be rendered**, though no longer for
   the unit reason: `Binding.operand_unit` now carries what the facts are filed
   in (`USD` behind a `pure` gross margin) and `fact_unit` is what the join
@@ -355,7 +361,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (342 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (338 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 6. Verifying things yourself
@@ -380,10 +386,14 @@ and calendar misalignment at once:
 > "Show me visually how much money was made from 2023 to 2025 by quarter, for
 > Google, Apple and Nvidia"
 
-Expected: `shape=series`, `axes=['company','period']`, `row_count=36`, **eight
-bindings** (three filers, each split direct/residual, and Alphabet changes
-revenue tags mid-range), nine periods carried by residual bindings, four
-`concept_switch` notes and a plan-level `period_misalignment`.
+Expected: `shape=series`, `axes=['company','period']`, `row_count=36`, **four
+bindings** (three filers, and Alphabet changes revenue tags mid-range) and a
+plan-level `period_misalignment`.
+
+It was eight bindings until the view took over the Q4 subtraction: a series
+used to split into direct and residual halves, because one `period_rule` had
+to be true of every period in a binding. Only a genuine tag change splits one
+now.
 
 For a broader check, `evals/questions.yaml` holds 56 questions with their
 expected outcome, and `uv run python evals/summarize.py` prints the

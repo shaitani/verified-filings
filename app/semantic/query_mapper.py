@@ -45,14 +45,12 @@ from app.schemas.query import (
     ClarifyOption,
     CompanyElementIn,
     CompanyGroupElementIn,
-    ComponentCoverage,
     ConceptRef,
     Coverage,
     MetricElementIn,
     Note,
     PeriodElementIn,
     PeriodRef,
-    PeriodResidual,
     PlanFilters,
     QueryIn,
     QueryPlan,
@@ -525,14 +523,19 @@ async def _resolve_periods(
 def _with_derived_q4(
     windows: dict[tuple[int, int, str], tuple[date, date]],
 ) -> dict[tuple[int, int, str], ResolvedPeriod]:
-    """Every stored window, plus a synthesized Q4 wherever a company has both
-    an annual and a Q3 window for the same fiscal year.
+    """Every stored window, plus a Q4 *label* wherever a company has both an
+    annual and a Q3 window for the same fiscal year.
 
     No US filer files a fourth quarter -- the 10-K absorbs it -- so Q4 is the
-    only period that has to be constructed. It needs no extra query: it runs
-    from the day after Q3 closes to the fiscal year end, and the nine-month
-    term the SQL step subtracts is the annual window truncated at Q3's close.
-    Q3's discrete window already ends on exactly that day.
+    only period whose window has to be constructed: the day after Q3 closes to
+    the fiscal year end. It needs no extra query.
+
+    What this no longer constructs is the *arithmetic*. It used to attach the
+    two windows the SQL step had to subtract, because the store held no Q4
+    value; ``xbrl.reported_fact`` now synthesizes one at exactly this window
+    (migration ``a8b5b820cf1a``), so a Q4 is an ordinary row to bind and read.
+    The two derivations were cross-checked over 20 companies, 4 metrics and 5
+    years before this one was removed: 275 of 275 agreed.
 
     A company missing either component simply gets no Q4 key, so asking for one
     reports "no Q4 reporting window" instead of quietly producing a year.
@@ -563,11 +566,6 @@ def _with_derived_q4(
             fiscal_period="Q4",
             period_start=nine_month_end + timedelta(days=1),
             period_end=annual_end,
-            residual_of=PeriodResidual(
-                shared_start=annual_start,
-                whole_end=annual_end,
-                subtract_end=nine_month_end,
-            ),
         )
 
     return resolved
@@ -874,15 +872,6 @@ def _bind_per_company(
     covering alternative wins, so two periods agree iff the same alternative
     covers both.
 
-    Periods are **also** grouped by whether they need the Q4 subtraction, so
-    ``Binding.period_rule`` describes every period the binding carries rather
-    than only some of them. It used to be set whenever *any* period in the
-    group was a Q4: "revenue by quarter for three years" produced one binding
-    over twelve quarters flagged ``residual``, and an emitter that believed it
-    would have subtracted the nine-month year-to-date from all twelve. The
-    per-period truth was recoverable from ``filters.periods[].residual_of``,
-    but a field that is wrong for three quarters in four is a trap, not a hint.
-
     Ambiguity is reported **once per element**, not once per company. The
     candidates differ per filer -- each keeps whichever concepts its own facts
     cover -- but the question they raise is the same one question, and asking
@@ -901,10 +890,11 @@ def _bind_per_company(
         if not in_scope:
             continue
 
-        # Keyed on (concepts, needs the Q4 subtraction). The concept-only view
-        # beside it is what the switch notes read, so splitting a series into
-        # its direct and residual halves is not mistaken for a tag change.
-        groups: dict[tuple[tuple[int, ...], bool], list[ResolvedPeriod]] = {}
+        # Keyed on concepts alone. It used to be keyed on (concepts, needs the
+        # Q4 subtraction) as well, because a Q4 was computed differently from
+        # the quarters beside it; the view supplies Q4 as an ordinary row now,
+        # so there is nothing to split a series on but a genuine tag change.
+        groups: dict[tuple[int, ...], list[ResolvedPeriod]] = {}
         concept_groups: dict[tuple[int, ...], list[ResolvedPeriod]] = {}
         chosen_by_key: dict[tuple[int, ...], list[_Candidate]] = {}
         uncovered: list[ResolvedPeriod] = []
@@ -944,14 +934,7 @@ def _bind_per_company(
                 continue
 
             concepts_key = tuple(c.concept_id for c in chosen)
-            # An instant needs no subtraction even at Q4 -- the fiscal-year-end
-            # balance already is the Q4-end balance -- so the lead operand's
-            # kind decides, not the period alone.
-            is_residual = (
-                period.residual_of is not None
-                and not evidence[(cik, chosen[0].concept_id)].is_instant
-            )
-            groups.setdefault((concepts_key, is_residual), []).append(period)
+            groups.setdefault(concepts_key, []).append(period)
             concept_groups.setdefault(concepts_key, []).append(period)
             chosen_by_key[concepts_key] = chosen
 
@@ -992,7 +975,7 @@ def _bind_per_company(
                 )
             )
 
-        for (concepts_key, residual), covered in groups.items():
+        for concepts_key, covered in groups.items():
             chosen = chosen_by_key[concepts_key]
             violation = _sign_violation(chosen, signs, cik=cik, periods=covered, evidence=evidence)
             if violation is not None:
@@ -1030,15 +1013,13 @@ def _bind_per_company(
                     unit=unit,
                     operand_unit=operand_unit,
                     is_instant=lead.is_instant,
-                    period_rule="residual" if residual else "direct",
-                    coverage=_coverage_for(lead, covered, residual=residual),
+                    coverage=_coverage_for(lead, covered),
                     confidence=1.0 if resolved_by == "alias" else chosen[0].score,
                     resolved_by=resolved_by,
                     rationale=(
                         f"{element.text!r} -> "
                         + ", ".join(f"{c.taxonomy}:{c.name}" for c in chosen)
                         + f" via {source}; verified over {len(covered)} period(s) ({span})"
-                        + (" as a Q4 residual" if residual else "")
                     ),
                     notes=shared_notes + narrower,
                 )
@@ -1237,7 +1218,7 @@ def _sign_violation(
     capex is tagged positive and subtracted. A filer tagging it negative turns
     ``c0 - c1`` into an addition and inflates the answer, and nothing
     downstream can tell. That is a wrong number rather than a caveated one, so
-    it is refused here for the same reason a missing residual component is --
+    it is refused here for the same reason a missing window is --
     see PITFALLS.md section 1.15.
 
     Operands declared ``signed`` are left alone: operating cash flow really
@@ -1268,21 +1249,16 @@ def _sign_violation(
 def _required_windows(
     period: ResolvedPeriod, *, is_instant: bool
 ) -> list[tuple[date | None, date]]:
-    """The fact windows a period needs before it can be answered.
+    """The window a period needs before it can be answered.
 
-    An instant only ever needs its closing date -- including at Q4, where the
-    fiscal-year-end balance already *is* the Q4-end balance. A duration at Q4
-    needs both residual components, because subtracting a window that is not
-    there does not fail; it quietly returns the whole year.
+    One window, always. An instant needs only its closing date; a duration
+    needs its own span. A Q4 used to need two -- the annual and the nine-month
+    it was subtracted from -- but ``xbrl.reported_fact`` supplies the fourth
+    quarter as an ordinary row, so there is nothing left here that a Q4 does
+    differently from a Q2.
     """
     if is_instant:
         return [(None, period.period_end)]
-    if period.residual_of is not None:
-        residual = period.residual_of
-        return [
-            (residual.shared_start, residual.whole_end),
-            (residual.shared_start, residual.subtract_end),
-        ]
     return [(period.period_start, period.period_end)]
 
 
@@ -1297,9 +1273,7 @@ def _covers(evidence: _Evidence | None, periods: list[ResolvedPeriod]) -> bool:
     return required <= evidence.windows
 
 
-def _coverage_for(
-    evidence: _Evidence, periods: list[ResolvedPeriod], *, residual: bool = False
-) -> Coverage:
+def _coverage_for(evidence: _Evidence, periods: list[ResolvedPeriod]) -> Coverage:
     required = [
         window
         for period in periods
@@ -1308,29 +1282,10 @@ def _coverage_for(
     present = [window for window in required if window in evidence.windows]
     ends = [end for _, end in present]
 
-    components: list[ComponentCoverage] = []
-    if residual:
-        seen: set[tuple[date, date]] = set()
-        for period in periods:
-            if period.residual_of is None:
-                continue
-            for start, end in _required_windows(period, is_instant=False):
-                if (start, end) in seen:
-                    continue
-                seen.add((start, end))
-                components.append(
-                    ComponentCoverage(
-                        period_start=start,
-                        period_end=end,
-                        fact_count=int((start, end) in evidence.windows),
-                    )
-                )
-
     return Coverage(
         fact_count=len(present),
         period_min=min(ends) if ends else None,
         period_max=max(ends) if ends else None,
-        components=components,
     )
 
 
@@ -1411,18 +1366,11 @@ async def _gather_evidence(
     """What facts exist for each ``(company, candidate concept)`` pair.
 
     Fetches every window any interpretation might need -- instant closing
-    dates and duration spans, residual components included -- in one query,
+    dates and duration spans -- in one query,
     and leaves it to the caller to decide which were actually required.
     """
     instant_dates = {period.period_end for period in periods}
-    duration_windows: set[tuple[date, date]] = set()
-    for period in periods:
-        if period.residual_of is not None:
-            residual = period.residual_of
-            duration_windows.add((residual.shared_start, residual.whole_end))
-            duration_windows.add((residual.shared_start, residual.subtract_end))
-        else:
-            duration_windows.add((period.period_start, period.period_end))
+    duration_windows = {(period.period_start, period.period_end) for period in periods}
 
     rows = await session.execute(
         select(

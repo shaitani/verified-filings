@@ -59,12 +59,6 @@ ResolvedBy = Literal["alias", "embedding"]
 #: job -- rejecting Q4 at the boundary would just make it unanswerable.
 QueryFiscalPeriod = Literal["FY", "Q1", "Q2", "Q3", "Q4"]
 
-#: How a binding gets its value out of the facts.
-#:   "direct"   -- read the fact at the window; what every stored period uses.
-#:   "residual" -- subtract one window from another (Q4 = annual - 9-month YTD).
-#: Only ever describes the arithmetic; the SQL step performs it.
-PeriodRule = Literal["direct", "residual"]
-
 #: What the answer has to *be*, which decides how much data has to come back.
 #: A chart needs a point per period per company; a single figure needs one row.
 #: Nothing here describes drawing -- only cardinality.
@@ -284,14 +278,6 @@ class ConceptRef(_Base):
     label: str | None = Field(default=None, max_length=512)
 
 
-class ComponentCoverage(_Base):
-    """Coverage for one window a *derived* value is computed from."""
-
-    period_start: date
-    period_end: date
-    fact_count: int = Field(ge=0)
-
-
 class Coverage(_Base):
     """Proof that a binding points at facts that exist.
 
@@ -299,19 +285,15 @@ class Coverage(_Base):
     a well-formed query reads identically to "the company reported nothing",
     which is the failure mode this field exists to make impossible.
 
-    ``components`` exists because that whole-concept count is *not enough for a
-    derived value*. Measured: NVIDIA carries four annual facts under the
-    revenue concept Apple and Microsoft use quarterly, and zero nine-month
-    ones. A Q4 binding to it passes a concept-level count and then cannot be
-    computed -- so a residual binding has to prove each window separately.
+    Coverage is proved against ``xbrl.reported_fact``, the same relation
+    ``app/retrieval/`` reads -- including its synthesized fourth quarters. A
+    Q4 therefore proves like any other period, because by the time the mapper
+    looks, one exists.
     """
 
     fact_count: int = Field(ge=0)
     period_min: date | None = None
     period_max: date | None = None
-
-    #: One entry per window a residual depends on. Empty for a direct binding.
-    components: list[ComponentCoverage] = Field(default_factory=list)
 
 
 class Note(_Base):
@@ -390,12 +372,6 @@ class Binding(_Base):
 
     is_instant: bool
 
-    #: Whether the value is read straight off a window or computed by
-    #: subtracting one from another. Sits here rather than on
-    #: ``ResolvedPeriod`` because the answer depends on the *concept*: at Q4,
-    #: revenue is a residual but total assets is a plain instant read.
-    period_rule: PeriodRule = "direct"
-
     coverage: Coverage
     confidence: float = Field(ge=0.0, le=1.0)
     resolved_by: ResolvedBy
@@ -439,32 +415,6 @@ class Binding(_Base):
                     f"expression {self.expression!r} references c{index}, "
                     f"but only {len(self.concepts)} concept(s) were bound"
                 )
-        return self
-
-    @model_validator(mode="after")
-    def _residual_is_provable(self) -> Binding:
-        """A residual binding must be one that can actually be computed.
-
-        Subtracting a window whose facts are missing does not fail -- it
-        quietly yields a different number (drop the 9-month term and "Q4"
-        becomes the whole year). Committing to a binding is the moment to
-        refuse that, so the checks are here rather than left to the SQL step.
-        """
-        if self.period_rule != "residual":
-            return self
-        if self.is_instant:
-            raise ValueError(
-                "an instant fact needs no residual -- the fiscal-year-end instant "
-                "is already the Q4-end instant"
-            )
-        if not self.coverage.components:
-            raise ValueError("a residual binding must carry per-component coverage")
-        empty = [c for c in self.coverage.components if c.fact_count == 0]
-        if empty:
-            raise ValueError(
-                f"{len(empty)} of {len(self.coverage.components)} component windows "
-                "have no facts; the subtraction would return a plausible wrong number"
-            )
         return self
 
 
@@ -532,34 +482,6 @@ class Unresolved(_Base):
     reason: str = Field(min_length=1, max_length=512)
 
 
-class PeriodResidual(_Base):
-    """The two windows a period with no filing of its own is computed from.
-
-    Only Q4 needs this today: no 10-Q covers it, so it is the annual duration
-    minus the nine-month year-to-date duration. Both components open on the
-    same day -- the fiscal year start -- which is exactly what lets the SQL
-    step join them without guessing, so the shared start is one field rather
-    than two that happen to agree.
-
-    Verified against the store: Apple's FY2024 is 2023-10-01 → 2024-09-28 with
-    a nine-month term ending 2024-06-29, giving Q4 revenue of 94.9B, the
-    reported figure.
-    """
-
-    shared_start: date
-    whole_end: date
-    subtract_end: date
-
-    @model_validator(mode="after")
-    def _subtrahend_is_shorter(self) -> PeriodResidual:
-        if not self.shared_start < self.subtract_end < self.whole_end:
-            raise ValueError(
-                f"expected shared_start < subtract_end < whole_end, got "
-                f"{self.shared_start} / {self.subtract_end} / {self.whole_end}"
-            )
-        return self
-
-
 class ResolvedPeriod(_Base):
     """One company's concrete date window for one ``(fiscal_year,
     fiscal_period)``.
@@ -574,6 +496,13 @@ class ResolvedPeriod(_Base):
     is Jul 2023 to Jun 2024, Apple's is Oct 2023 to Sep 2024. One "FY2024"
     element therefore resolves to a *different window per cik*, which is why
     this is a list of rows rather than a list of years.
+
+    A Q4 window is no different from any other here, though no filer files
+    one. ``xbrl.reported_fact`` synthesizes the fourth quarter (migration
+    ``a8b5b820cf1a``), so by the time a plan is built there is an ordinary row
+    at that window to bind and to read. This model used to carry the two
+    component windows and a ``residual_of`` so the SQL step could subtract
+    them; it does not, because nothing downstream subtracts any more.
     """
 
     company_cik: int
@@ -585,22 +514,6 @@ class ResolvedPeriod(_Base):
     @property
     def granularity(self) -> PeriodGranularity:
         return "annual" if self.fiscal_period == "FY" else "quarterly"
-
-    #: Set exactly when this period has no filing of its own (Q4). The windows
-    #: are supplied whatever the metric turns out to be; whether they get used
-    #: is ``Binding.period_rule``'s call, because an instant concept reads the
-    #: year-end value directly and needs no subtraction.
-    residual_of: PeriodResidual | None = None
-
-    @model_validator(mode="after")
-    def _only_q4_is_derived(self) -> ResolvedPeriod:
-        if (self.fiscal_period == "Q4") != (self.residual_of is not None):
-            raise ValueError(
-                f"{self.fiscal_period} period and residual_of="
-                f"{'set' if self.residual_of else 'None'} disagree: Q4 is the only "
-                "period the store cannot supply directly"
-            )
-        return self
 
 
 class PlanFilters(_Base):

@@ -89,7 +89,6 @@ def _citation(binding_key: str = "b0", **overrides) -> Citation:
         "company_cik": APPLE,
         "concepts": [_concept()],
         "expression": "c0",
-        "period_rule": "direct",
         "unit": "USD",
         "resolved_by": "alias",
         "confidence": 0.9,
