@@ -239,7 +239,8 @@ loader wants it elsewhere, moving it is trivial.
 ## 8. `query.py` — the query mapper's two ends
 
 Added 2026-09-18 alongside `app/semantic/query_mapper.py`. `QueryIn` is what a user's
-question looks like once some producer (an external LLM today) has parsed it;
+question looks like once the Query Parser (`app/producer/`, block [C]) has
+parsed it;
 `QueryPlan` is what the mapper resolves that into, and what the SQL-generating
 model reads. Both live in one module because they are two ends of one contract
 — changing one almost always means changing the other.

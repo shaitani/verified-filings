@@ -331,6 +331,7 @@ questions:
 
   - id: q046
     question: What is <Company>'s profit margin
+    template: true
     expect: partial
     needs: [retrieval, ratio]
     exercises: [derived_metric, clarification]
@@ -432,6 +433,7 @@ questions:
 
   - id: q054
     question: What is <Company>'s capital expenditure
+    template: true
     expect: partial
     needs: [retrieval]
     notes: >-
@@ -440,6 +442,7 @@ questions:
 
   - id: q055
     question: What is <Company>'s interest expense
+    template: true
     expect: answerable
     needs: [retrieval]
     notes: >-
@@ -450,6 +453,7 @@ questions:
 
   - id: q056
     question: What is <Company>'s effective tax rate
+    template: true
     expect: answerable
     needs: [retrieval]
     notes: >-

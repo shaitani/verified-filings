@@ -30,12 +30,14 @@ data/xbrl/<TICKER>.json  curated per-company files (gitignored)
 PostgreSQL (xbrl schema) company / filing / concept / fact / load_run
    ↓  app/db/embedder.py embed every Concept (nomic-embed-text via Ollama)
 
-[producer LLM]           question → QueryIn              ← NOT THIS PROJECT
+question (a string)
+   ↓  app/producer/       [C] Query Parser
+       build_question_prompt / propose(Qwen) / accept  → QueryIn
    ↓  app/schemas/query.py
 QueryIn                  question + typed elements + optional shape
-   ↓  app/semantic/query_mapper.py       reads as vf_query_mapper_role
+   ↓  app/semantic/query_mapper.py  [D]  reads as vf_query_mapper_role
 QueryPlan                concrete coordinates, caveats, cardinality
-   ↓  app/retrieval/
+   ↓  app/retrieval/     [E] Executor
        build_prompt(plan) → text for Qwen                no DB, writes no SQL
        generate(plan)     → Qwen writes the SQL          no DB
        validate(sql)      → verdict only                 no DB, no edits
@@ -44,33 +46,66 @@ QueryPlan                concrete coordinates, caveats, cardinality
    ↓  app/schemas/result.py
 ResultSet                rows + citations + verdict + notes
    ↓
-[presenter LLM]          renders, cites, discloses caveats ← NOT THIS PROJECT
+[F] Presenter            renders, cites, discloses caveats   NOT BUILT
 ```
 
-Everything between `QueryIn` and `ResultSet` is built and works end to end.
-`answer(plan)` runs the three steps in order. 341 tests pass.
+Everything from a question string to a `ResultSet` is built and works end to
+end: `parse_question(text)` → `map_query(query_in)` → `answer(plan)`. Nothing
+yet calls the three in sequence — see §6. 410 tests pass.
+
+### Block names
+
+The user named the components of the browser-to-answer chain so they can be
+referred to unambiguously. Package names and block names differ in two places
+and that is known, not an oversight.
+
+| # | Name | Status | Where |
+|---|---|---|---|
+| [A] | Ask UI | not built | browser; no logic, no credentials |
+| [B] | Web Display | not built | `app/web/` — the only thing that replies to [A] |
+| [C] | Query Parser | **built** | `app/producer/` |
+| [D] | Query Mapper | built | `app/semantic/query_mapper.py` |
+| [E] | Executor | built | `app/retrieval/` |
+| [F] | Presenter | not built | `app/presenter/` |
+| [G] | Store | built | `app/db/` |
+| [H] | Ingest | built | `app/ingest/` |
+
+[B] owns the three-way branch on the plan — answer / clarify / refuse — and is
+the only block that talks to the user. Clarifications and refusals skip [E]
+and [F] entirely: a curated clarification is already plain business language,
+and an LLM asked to soften a refusal writes something that reads like an
+answer.
 
 Two Docker Postgres containers, `db` and `db-test`; Ollama serves the
 embedding model and Qwen. See [`BOOTSTRAP.md`](BOOTSTRAP.md) to bring it all
 up — the roles and the models do **not** come back with the schema.
 
-## 3. What is deliberately not this project's job
+## 3. The two ends of the chain
 
-**The producer** (question → `QueryIn`) and **the presenter**
-(`ResultSet` → prose) are both the user-facing LLM's. Do not build either,
-and do not build a stand-in for one — a surrogate gets measured and tuned and
-then the real thing behaves differently, which is worse than no measurement.
-When an end-to-end check needs a `QueryIn`, hand-write one in a scratch file.
+Both ends used to be out of scope, on the grounds that they belonged to a
+user-facing LLM this project did not own. That changed when the decision was
+made to put a web front end on it (§2's block table). One end is now built.
 
-What the producer still owes, for whoever builds it:
+**[C] Query Parser is built** — `app/producer/`, 2026-09-20. Read
+[`app/producer/DESIGN.md`](app/producer/DESIGN.md) before touching it. The
+load-bearing idea is the **faithfulness gate**: every metric, company and
+company_group element's `text` must appear verbatim in the question, enforced
+in `accept()` rather than asked for in the prompt. Of the ways a parser can be
+wrong, bad structure fails loudly and an unknown company costs a refusal; the
+one that costs a *wrong answer* is a paraphrase, because the mapper then
+resolves the replacement phrase perfectly and everything downstream agrees.
+Periods are exempt — a period's meaning lives in its typed fields, and holding
+"Q4 last year" to a contiguous-span rule refused 8 of 56 correct parses.
 
-- **Pinning metric-level ambiguity.** "How much money was made" is revenue or
-  net income — a different ambiguity from the concept-level one the mapper
-  resolves.
-- **Noticing an unrepresented span of the question.** See §6, the last
-  plausible-wrong-answer in the eval set.
+The rule that still stands: **do not build a stand-in for either end.** A
+surrogate gets measured and tuned, and then the real thing behaves
+differently, which is worse than no measurement.
 
-Two burdens it does *not* carry: company names resolve through
+**[F] Presenter is not built.** `ResultSet` → prose, and nothing else: it
+never sees a plan, and it must carry `Note`s through rather than summarizing
+them away.
+
+Two burdens the parser does *not* carry: company names resolve through
 `company_aliases.json` (derived from SEC data, refreshed on every
 `get-submission`; share classes work, "GOOG" is Alphabet), and a question
 naming no company means every loaded filer.
@@ -196,7 +231,9 @@ In rough order of how much they matter.
   the mapper has, the plan is perfect. It answers a different question. Seen
   again live — a ranking question returned the underlying figures, verdict
   `complete`, `is_answerable` true. The verdict checks cardinality and
-  attribution, not meaning. Natural home is the producer (§3). Shapes that
+  attribution, not meaning. Natural home is [C], which deliberately does not
+  do it yet: it needs the eval runner first, so the gate can be measured
+  rather than guessed at (`app/producer/DESIGN.md` §7). Shapes that
   fail this way: restatement, causality, counts of filings, anything about the
   *filing* rather than the figures.
 - **Same-unit arithmetic rests on the prompt alone.** A ratio in the wrong
@@ -205,10 +242,19 @@ In rough order of how much they matter.
   is a wrong number in the right unit. It happened once, live: free cash flow
   as 12.5 rather than 108.8 billion, attributable, verdict `complete`. Fixed
   in the prompt; there is no structural check behind it.
-- **The eval set cannot be run.** 56 questions, 45 answerable-or-partial, and
-  every one needs a `QueryIn` (§3). Until there is a source of those, "how
-  often is this right?" rests on a handful of hand-written cases. A file of
-  hand-written `QueryIn`s for the eval set would unblock a real runner.
+- **The eval set has a runner but no full-run number yet.**
+  `evals/run.py` is [B] with the browser, the state and [F] taken out: it
+  calls `parse_question` → `map_query` → `answer` over the 56 questions and
+  scores the *decision* — did it answer, and was answering the right call. It
+  does not check the figure. Smoke-tested on two questions; a full
+  `--stage answer` run takes around fifteen minutes and has not been taken.
+  Until it is, "how often is this right?" still rests on a handful of
+  hand-written cases.
+
+  The grade to watch is **`unsafe`** — an answerable result for a question
+  tagged `refuse`. Every other failure costs a refusal, which is the outcome
+  this project prefers; that one is the failure it exists to prevent, so it is
+  counted apart from `fail` and printed last.
 - **Restatements** are picked correctly by `is_latest` but never *disclosed*
   (PITFALLS §2.2). The `Note` channel would carry it.
 - **`sic_office` has no source.** `sic_numbers.json` carries code and
@@ -221,7 +267,7 @@ In rough order of how much they matter.
 - **Metric groups are NOT a thing.** "cash flow: operating, investing,
   financing" is several `MetricElementIn` along a metric axis, which works.
   Whether anything knows "balance sheet totals" means a particular list
-  belongs to the producer. Briefly designed as a "bundle" before being
+  belongs to [C], the Query Parser. Briefly designed as a "bundle" before being
   recognised as nothing new — schemas DESIGN §8.20. Do not re-invent it.
 
 ### Explicitly deferred by the user
@@ -249,7 +295,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (341 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (417 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 8. Verifying things yourself
@@ -291,11 +337,12 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 | [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
 | [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, the validator, and §4.3's catalogue of prompt failures |
+| [`app/producer/DESIGN.md`](app/producer/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
 | [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) | the curated alias layer |
 | [`app/db/DESIGN.md`](app/db/DESIGN.md) | ORM models, layout |
 | [`app/db/roles.py`](app/db/roles.py) | the two read-only roles, and which half of them is a real boundary |
 | [`LOADER.md`](LOADER.md) | the load step |
 | [`ALEMBIC.md`](ALEMBIC.md) | migrations — note step 5, the test database is NOT migrated automatically |
-| [`evals/README.md`](evals/README.md) | eval tag vocabulary, how to add questions |
+| [`evals/README.md`](evals/README.md) | eval tag vocabulary, how to add questions, how to run the set |
 | [`sec-retriever.md`](sec-retriever.md) | the original project brief |

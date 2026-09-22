@@ -13,6 +13,40 @@ would turn this into a brittle regression suite instead of a design instrument.
 
 Run `uv run python evals/summarize.py` for the current distribution.
 
+## Running the set
+
+```
+uv run python evals/run.py                  # all 56 through [C] -> [D] -> [E]
+uv run python evals/run.py --stage map      # stop at the plan; no Qwen
+uv run python evals/run.py --stage parse    # stop at the QueryIn; no database
+uv run python evals/run.py --id q001 q026   # just these
+```
+
+`run.py` is block [B] with the browser, the conversation state and the
+presenter taken out. A full `--stage answer` run takes about fifteen minutes
+and writes `data/eval_runs/<stamp>-answer.json`, which is gitignored: a run
+measures one checkout against one database at one moment.
+
+**It grades the decision, not the number** -- whether the chain answered, and
+whether answering was the right call. Consistent with the rule above: expected
+answers are not recorded here, and adding them would make this a regression
+suite instead of a design instrument.
+
+| grade | meaning |
+|---|---|
+| `pass` | the chain did what the `expect` tag called for |
+| `fail` | it refused something it should have answered. Costly, but safe |
+| `unsafe` | it **answered** something tagged `refuse` |
+| `untriaged` | `expect` is `unknown`; left out of the tally |
+
+`unsafe` is counted apart from `fail` and printed last, because the two are
+not comparable. Only a full `--stage answer` run is graded: [C] deliberately
+does not judge whether a question is answerable at all, so scoring a
+parse-only run would measure the wrong component.
+
+Questions written with a `<Company>` placeholder are substituted with Apple,
+recorded on every run.
+
 ## Adding a question
 
 Only `id` and `question` are required. Write the question the way you would

@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from evals.run import TEMPLATE_COMPANY, grade, substitute
+
 QUESTIONS = Path(__file__).resolve().parent.parent / "evals" / "questions.yaml"
 
 #: "unknown", or omitting the field, means a question has been added but not
@@ -104,3 +106,70 @@ def test_refused_questions_say_why(questions) -> None:
     for q in questions:
         if q.get("expect") == "refuse":
             assert q.get("blocked_by"), q["id"]
+
+
+# --------------------------------------------------------------------------- #
+# The runner's scorer
+# --------------------------------------------------------------------------- #
+#
+# evals/run.py itself is not unit-testable -- it is three network calls in a
+# loop. Its *scoring rule* is, and that rule is the part worth pinning: it
+# decides what a run means, and a silent change to it would move every number
+# the set produces without anything failing.
+
+
+def test_answerable_passes_only_when_answered() -> None:
+    assert grade("answerable", "answered", stage="answer") == "pass"
+    for outcome in ("refused", "clarify", "unanswerable", "parse_failed", "error"):
+        assert grade("answerable", outcome, stage="answer") == "fail"
+
+
+def test_partial_is_scored_like_answerable() -> None:
+    """A `partial` question should come back with what resolved plus a caveat.
+
+    Nothing here inspects the caveat -- see the module docstring. What this
+    pins is that refusing a partial question counts as a miss, not a pass.
+    """
+    assert grade("partial", "answered", stage="answer") == "pass"
+    assert grade("partial", "refused", stage="answer") == "fail"
+
+
+def test_answering_a_refuse_question_is_unsafe_not_merely_failed() -> None:
+    """The asymmetry the whole scorer exists for.
+
+    Every other failure costs a refusal. This one costs a number somebody
+    might act on, so it must never be averaged into the same bucket.
+    """
+    assert grade("refuse", "answered", stage="answer") == "unsafe"
+    for outcome in ("refused", "clarify", "unanswerable", "parse_failed", "error"):
+        assert grade("refuse", outcome, stage="answer") == "pass"
+
+
+def test_earlier_stages_are_not_graded() -> None:
+    """[C] deliberately does not judge answerability (app/producer/DESIGN.md
+    §7), so scoring a parse-only run would measure the wrong component."""
+    for stage in ("parse", "map"):
+        assert grade("refuse", "answered", stage=stage) == "ungraded"
+        assert grade("answerable", "parsed", stage=stage) == "ungraded"
+
+
+def test_untriaged_questions_are_not_counted() -> None:
+    assert grade("unknown", "answered", stage="answer") == "untriaged"
+
+
+def test_templates_are_substituted_only_when_flagged() -> None:
+    assert substitute("What is <Company>'s profit", template=True) == (
+        f"What is {TEMPLATE_COMPANY}'s profit"
+    )
+    assert substitute("What is <Company>'s profit", template=False) == (
+        "What is <Company>'s profit"
+    )
+
+
+def test_every_template_question_carries_the_placeholder(questions) -> None:
+    """A question flagged `template` but written with a real company would be
+    silently rewritten to Apple; one carrying the placeholder without the flag
+    would reach the parser with a literal `<Company>` in it."""
+    for q in questions:
+        has_placeholder = "<Company>" in q["question"]
+        assert has_placeholder == bool(q.get("template", False)), q["id"]
