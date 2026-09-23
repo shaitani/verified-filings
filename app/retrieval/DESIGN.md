@@ -636,6 +636,6 @@ to surface it.
   §4.3 came back `complete` and `is_answerable` while answering a different
   question, because the verdict checks cardinality and attribution, not
   meaning. That is HANDOFF §4.6 reappearing one layer down, and it belongs in
-  the same place — with the producer.
+  the same place — with the parser.
 - **No retry.** Whether a rejected statement goes back to the model with the
   `InvalidSQL` message is still undecided; see `generator.py`.

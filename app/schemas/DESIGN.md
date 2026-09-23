@@ -49,7 +49,7 @@ throughout the docs. A schemas package is conventionally split by domain
 Rejected: `companyfacts.py` (the terminology memory says never call it that),
 `schemas.py` (that was the name when it was going to be a single flat module
 under `app/db/` — it's a package now and needs a domain name), `xbrl_store.py`
-(mirrors the producer module but reads oddly as a "store" inside `schemas/`).
+(mirrors the parser module but reads oddly as a "store" inside `schemas/`).
 
 ---
 
@@ -239,7 +239,7 @@ loader wants it elsewhere, moving it is trivial.
 ## 8. `query.py` — the query mapper's two ends
 
 Added 2026-09-18 alongside `app/semantic/query_mapper.py`. `QueryIn` is what a user's
-question looks like once the Query Parser (`app/producer/`, block [C]) has
+question looks like once the Query Parser (`app/parser/`, block [C]) has
 parsed it;
 `QueryPlan` is what the mapper resolves that into, and what the SQL-generating
 model reads. Both live in one module because they are two ends of one contract
@@ -249,7 +249,7 @@ model reads. Both live in one module because they are two ends of one contract
 
 `text` is `"revenue"`, never `us-gaap:Revenues`. Translating between the two is
 the mapper's entire job, so an XBRL identifier appearing on the inbound side
-means the boundary has leaked and the producer has taken on work it has no
+means the boundary has leaked and the parser has taken on work it has no
 business doing (it cannot see the database, and filer-specific tagging is not
 knowable from the question text).
 
@@ -342,7 +342,7 @@ borrow `xbrl.py`'s four-value Literal.
 
 ### 8.10 `extra="forbid"` matters more here than in `xbrl.py`
 
-§4.1's reasoning was "we generate these files". Here the producer is a language
+§4.1's reasoning was "we generate these files". Here the parser is a language
 model, which is *less* controlled — but the conclusion is the same and
 stronger: a silently-dropped key the model believed it was sending is far
 harder to debug than a loud `ValidationError` it can be shown and asked to
@@ -584,7 +584,7 @@ showing separately.
 
 ### 8.19 `QualifierElementIn` removed
 
-It was inert: `map_query` never looked at it, so a producer emitting
+It was inert: `map_query` never looked at it, so a parser emitting
 `kind: "qualifier"` had its intent silently dropped. The things it was meant to
 carry are better served elsewhere — "diluted" and "basic" are already separate
 alias entries, and every fact in this store is consolidated because
@@ -599,7 +599,7 @@ Questions like "cash flow: operating, investing, financing" name a category and
 enumerate it. That needs no schema support — it is several `MetricElementIn`
 resolving to several bindings along a metric axis, which already works. The
 only open question is whether anything knows that "balance sheet totals" means
-a particular list, and that belongs to the *producer*, not to the query model.
+a particular list, and that belongs to the *parser*, not to the query model.
 Recorded here because it was briefly designed as a "bundle" concept before
 being recognised as nothing new.
 

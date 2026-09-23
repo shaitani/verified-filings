@@ -31,7 +31,7 @@ PostgreSQL (xbrl schema) company / filing / concept / fact / load_run
    ↓  app/db/embedder.py embed every Concept (nomic-embed-text via Ollama)
 
 question (a string)
-   ↓  app/producer/       [C] Query Parser
+   ↓  app/parser/       [C] Query Parser
        build_question_prompt / propose(Qwen) / accept  → QueryIn
    ↓  app/schemas/query.py
 QueryIn                  question + typed elements + optional shape
@@ -63,7 +63,7 @@ and that is known, not an oversight.
 |---|---|---|---|
 | [A] | Ask UI | not built | browser; no logic, no credentials |
 | [B] | Web Display | not built | `app/web/` — the only thing that replies to [A] |
-| [C] | Query Parser | **built** | `app/producer/` |
+| [C] | Query Parser | **built** | `app/parser/` |
 | [D] | Query Mapper | built | `app/semantic/query_mapper.py` |
 | [E] | Executor | built | `app/retrieval/` |
 | [F] | Presenter | not built | `app/presenter/` |
@@ -86,8 +86,8 @@ Both ends used to be out of scope, on the grounds that they belonged to a
 user-facing LLM this project did not own. That changed when the decision was
 made to put a web front end on it (§2's block table). One end is now built.
 
-**[C] Query Parser is built** — `app/producer/`, 2026-09-20. Read
-[`app/producer/DESIGN.md`](app/producer/DESIGN.md) before touching it. The
+**[C] Query Parser is built** — `app/parser/`, 2026-09-20. Read
+[`app/parser/DESIGN.md`](app/parser/DESIGN.md) before touching it. The
 load-bearing idea is the **faithfulness gate**: every metric, company and
 company_group element's `text` must appear verbatim in the question, enforced
 in `accept()` rather than asked for in the prompt. Of the ways a parser can be
@@ -143,6 +143,15 @@ Full rationale: [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) §8 and
    FY2024 query before it was fixed).
 3. **Metrics** — curated alias → embedding fallback → **coverage check against
    the view**, which is the arbiter of both.
+
+A filer that covers nothing does not refuse the question. It is dropped, and a
+plan-level `partial_coverage` note names it — JPMorgan tags no
+`OperatingIncomeLoss`, correctly for a bank, and refusing "highest operating
+margin" because one filer of twenty cannot take part is worse than answering
+over nineteen and saying so. A *ranking* gets an extra sentence, because
+dropping a company can change the answer rather than just shorten it. Full
+rules, including what this deliberately does not fix:
+[`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) §8c.
 
 Coverage is the load-bearing idea: a candidate with no facts for the requested
 windows is never bound, whatever its similarity score. Zero rows from a
@@ -233,7 +242,7 @@ In rough order of how much they matter.
   `complete`, `is_answerable` true. The verdict checks cardinality and
   attribution, not meaning. Natural home is [C], which deliberately does not
   do it yet: it needs the eval runner first, so the gate can be measured
-  rather than guessed at (`app/producer/DESIGN.md` §7). Shapes that
+  rather than guessed at (`app/parser/DESIGN.md` §7). Shapes that
   fail this way: restatement, causality, counts of filings, anything about the
   *filing* rather than the figures.
 - **Same-unit arithmetic rests on the prompt alone.** A ratio in the wrong
@@ -246,10 +255,16 @@ In rough order of how much they matter.
   `evals/run.py` is [B] with the browser, the state and [F] taken out: it
   calls `parse_question` → `map_query` → `answer` over the 56 questions and
   scores the *decision* — did it answer, and was answering the right call. It
-  does not check the figure. Smoke-tested on two questions; a full
-  `--stage answer` run takes around fifteen minutes and has not been taken.
-  Until it is, "how often is this right?" still rests on a handful of
-  hand-written cases.
+  does not check the figure.
+
+  **First full run, 2026-09-22: 31/56 pass (55%), 0 unsafe.** By expectation:
+  `refuse` 11/11, `answerable` 20/37, `partial` **0/8**. Every one of the 25
+  misses was a refusal or a request for clarification — the safe direction.
+  Wall clock 91 minutes, not the 15 estimated: one question (q050) spent
+  4,810s of it, because [C] capped neither output nor time. Fixed the same day
+  — `MAX_OUTPUT_TOKENS = 1536` and a 180s request timeout in
+  `app/parser/proposer.py`, which brings q050 to 41.9s. The next full run
+  should land near 15 minutes.
 
   The grade to watch is **`unsafe`** — an answerable result for a question
   tagged `refuse`. Every other failure costs a refusal, which is the outcome
@@ -295,7 +310,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (417 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (427 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 8. Verifying things yourself
@@ -337,7 +352,7 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 | [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
 | [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, the validator, and §4.3's catalogue of prompt failures |
-| [`app/producer/DESIGN.md`](app/producer/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
+| [`app/parser/DESIGN.md`](app/parser/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
 | [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) | the curated alias layer |
 | [`app/db/DESIGN.md`](app/db/DESIGN.md) | ORM models, layout |

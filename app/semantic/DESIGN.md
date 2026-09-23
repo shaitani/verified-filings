@@ -233,6 +233,61 @@ license a wrong one.
 and that itself resolves — offering a choice which leads to another question,
 to a decline, or to nothing, wastes the one round trip you get.
 
+## 8c. Answering over the companies that can answer
+
+Added 2026-09-22, from the first full eval run: five of the sixteen remaining
+failures were one filer refusing a question about twenty.
+
+A company that reports nothing for a metric is **ordinary, not an error**.
+JPMorgan tags no `OperatingIncomeLoss` and no `GrossProfit`, correctly — a
+bank has no gross profit to present. Before this, `_bind_per_company` raised an
+`Unresolved` for each such company, which made the plan incomplete, which
+refused the whole question. "Which of these companies has the highest operating
+margin?" came back as nothing at all, because one filer of twenty could not
+take part.
+
+The rule now:
+
+* **some companies cover** → bind them, drop the rest, and attach a plan-level
+  `partial_coverage` note naming the dropped filers by name and ticker.
+* **no company covers** → one `Unresolved` naming them all. Still a refusal,
+  and still the right one: `interest expense` for Apple alone has nowhere to
+  go, since Apple stopped tagging it after FY2023.
+
+Three things make this safe rather than a quiet narrowing.
+
+**The note is plan-level, not binding-level.** "JPM is absent" is a statement
+about the comparison, and attaching it to one of the surviving sides would be
+arbitrary — the same reasoning `period_misalignment` already follows.
+
+**A ranking says so explicitly.** Dropping a company from a lookup costs a row.
+Dropping one from a *ranking* can change the answer outright, and no row count
+downstream would reveal it, so `_subset_warning` adds a sentence for
+`intent="rank"`: the ordering is over the remaining N and is not necessarily
+the ordering over all of them.
+
+**`ResultSpec` counts only the companies that bound.** `PlanFilters.ciks`
+stays the full resolved scope, because narrowing it would erase the evidence
+that a dropped filer was ever asked about. `ResultSpec` has to be honest the
+other way: `row_count` is what the reader is promised, and promising a row for
+a company with no binding makes the verdict report a shortfall the plan had
+already disclosed.
+
+The same split applies to **companies that do not resolve at all**. A name
+matching *nothing* is droppable — "how does Apple compare to Samsung" is a real
+question about Apple — and produces the same note. A name matching *several*
+loaded companies is not: picking one would be a guess between real
+alternatives, so that stays a refusal. And when no named company resolves, the
+scope must **not** widen to every loaded filer; `map_query` widens only when
+the question names no company element at all.
+
+### What this does not fix
+
+A period that resolves to nothing. "What was Apple's revenue in 2019?" names
+one year, no window exists for it, and there is no surviving fraction to
+answer — so it stays a refusal. Whether to answer such a question from the
+comparative columns a later 10-K carries is a separate decision, still open.
+
 ## 8a. Declining, for terms the dataset simply does not hold
 
 `unavailable` carries a sentence of curated reasoning that becomes

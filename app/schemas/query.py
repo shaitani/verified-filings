@@ -2,7 +2,7 @@
 (``app/semantic/query_mapper.py``).
 
 ``QueryIn``   -- a user's question, already parsed into elements by whatever
-                produced it (an external LLM today; the producer is
+                produced it (an external LLM today; the parser is
                 deliberately not this project's concern). Inbound, validated.
 
 ``QueryPlan`` -- what the mapper resolves that question into: concrete
@@ -41,7 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.xbrl import FilingForm, Taxonomy
 
-#: How the question wants its data shaped. A *hint* from the producer, not a
+#: How the question wants its data shaped. A *hint* from the parser, not a
 #: contract: ``question`` stays the authority and the SQL step may ignore this.
 #: Kept as a Literal anyway so a typo fails loudly instead of silently meaning
 #: nothing downstream.
@@ -84,8 +84,18 @@ ResultAxis = Literal["company", "period", "metric"]
 #:                           where they overlap, so the series was stitched.
 #:   "unverified_switch"  -- same, but there is no overlapping period to check
 #:                           the seam against, or the overlap disagrees.
-#:   "partial_coverage"   -- some requested periods have no facts and are absent
-#:                           from this binding.
+#:   "partial_coverage"   -- something the question asked for is absent from the
+#:                           result. Either some requested periods have no
+#:                           facts (binding-level), or a company in scope
+#:                           reports nothing for the metric at all and was
+#:                           dropped (plan-level). One kind rather than two,
+#:                           because the presenter's obligation is identical --
+#:                           say what is missing -- and ``message`` carries
+#:                           which. A ranking is the case that matters: JPMorgan
+#:                           reports no OperatingIncomeLoss, correctly for a
+#:                           bank, and "highest operating margin" over the other
+#:                           nineteen is a different question unless the reader
+#:                           is told.
 #:   "period_misalignment" -- companies being compared put very different dates
 #:                           under the same fiscal label. Plan-level.
 #:   "mixed_granularity"  -- annual and quarterly figures in one result.
@@ -123,7 +133,7 @@ class _Base(BaseModel):
     """Shared config, same rules as ``xbrl.py``'s ``_Base``.
 
     ``extra="forbid"`` matters more here than it does there: the inbound
-    producer is a language model, and a silently-dropped key it believed it was
+    parser is a language model, and a silently-dropped key it believed it was
     sending is far worse to debug than a loud ``ValidationError`` it can be
     shown and asked to correct.
     """
@@ -160,7 +170,7 @@ class MetricElementIn(_ElementBase):
 class CompanyElementIn(_ElementBase):
     """A filer. Resolved by deterministic lookup, never by embedding.
 
-    Both hints are optional because the producer may only have the surface form
+    Both hints are optional because the parser may only have the surface form
     ("the iPhone maker"); the mapper falls back to ``text`` when neither is set.
     """
 

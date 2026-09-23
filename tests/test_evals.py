@@ -11,14 +11,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-from evals.run import TEMPLATE_COMPANY, grade, substitute
+from evals.run import (
+    EXPECTABLE,
+    NOT_EXPECTED,
+    TEMPLATE_COMPANY,
+    Item,
+    grade,
+    pair,
+    substitute,
+)
 
 QUESTIONS = Path(__file__).resolve().parent.parent / "evals" / "questions.yaml"
 
-#: "unknown", or omitting the field, means a question has been added but not
-#: triaged. Allowed on purpose -- making people classify before they can write
-#: down a question is how a set like this stops growing.
-EXPECT = {"answerable", "partial", "refuse", "unknown"}
+#: What a person may write for one item. "confused" and "error" are
+#: observation-only -- nobody writes down that they want the system
+#: confused -- so they are absent here on purpose.
+EXPECT = {"answered", "asked", "refused"}
 NEEDS = {
     "retrieval",
     "aggregation",
@@ -89,22 +97,43 @@ def test_shape_values_are_known(questions) -> None:
             assert q["shape"] in SHAPES, q["id"]
 
 
-def test_expect_values_are_known(questions) -> None:
+def test_expect_is_a_list_of_known_values(questions) -> None:
+    """One entry per thing the question asks for.
+
+    A scalar here is the old single-verdict shape, which could not say that
+    five of six figures came back.
+    """
     for q in questions:
-        assert q.get("expect", "unknown") in EXPECT, q["id"]
+        expect = q.get("expect")
+        assert isinstance(expect, list), f"{q['id']}: expect must be a list"
+        assert expect, f"{q['id']}: expect is empty"
+        unknown = set(expect) - EXPECT
+        assert not unknown, f"{q['id']} expects unwritable value(s): {sorted(unknown)}"
 
 
-def test_answerable_questions_declare_what_they_need(questions) -> None:
-    """Once a question is classified as answerable, it has to say what that
-    takes -- the tally is the whole point. Untriaged entries are exempt."""
+def test_nobody_expects_the_system_to_be_confused(questions) -> None:
+    """`confused` and `error` are observation-only.
+
+    Both mean the machinery failed to understand or fell over. Writing one
+    down as the desired outcome would make a defect scoreable as a pass.
+    """
+    assert "confused" not in EXPECT and "error" not in EXPECT
+    assert set(EXPECTABLE) == EXPECT
+
+
+def test_questions_that_should_answer_declare_what_they_need(questions) -> None:
+    """A question expecting any answer at all has to say what answering takes
+    -- the tally in summarize.py is the whole point of the tag."""
     for q in questions:
-        if q.get("expect") in {"answerable", "partial"} and not q.get("blocked_by"):
+        if "answered" in q.get("expect", []) and not q.get("blocked_by"):
             assert "retrieval" in q.get("needs", []), q["id"]
 
 
-def test_refused_questions_say_why(questions) -> None:
+def test_questions_that_should_refuse_say_why(questions) -> None:
+    """A refusal has to name the hazard behind it, so a refusal that starts
+    happening for a *new* reason is visible rather than silently still green."""
     for q in questions:
-        if q.get("expect") == "refuse":
+        if set(q.get("expect", [])) == {"refused"}:
             assert q.get("blocked_by"), q["id"]
 
 
@@ -118,43 +147,77 @@ def test_refused_questions_say_why(questions) -> None:
 # the set produces without anything failing.
 
 
-def test_answerable_passes_only_when_answered() -> None:
-    assert grade("answerable", "answered", stage="answer") == "pass"
-    for outcome in ("refused", "clarify", "unanswerable", "parse_failed", "error"):
-        assert grade("answerable", outcome, stage="answer") == "fail"
+def _items(*triples) -> list[Item]:
+    """``("goodwill", "answered", "refused")`` -> one Item."""
+    return [Item(asked=a, expected=e, got=g) for a, e, g in triples]
 
 
-def test_partial_is_scored_like_answerable() -> None:
-    """A `partial` question should come back with what resolved plus a caveat.
-
-    Nothing here inspects the caveat -- see the module docstring. What this
-    pins is that refusing a partial question counts as a miss, not a pass.
-    """
-    assert grade("partial", "answered", stage="answer") == "pass"
-    assert grade("partial", "refused", stage="answer") == "fail"
+def _grade(*triples, stage="answer"):
+    items = _items(*triples)
+    return grade(items, expected_count=len(items), stage=stage)
 
 
-def test_answering_a_refuse_question_is_unsafe_not_merely_failed() -> None:
+def test_every_item_must_match_for_a_pass() -> None:
+    assert _grade(("revenue", "answered", "answered")) == "pass"
+    assert _grade(("revenue", "answered", "refused")) == "fail"
+
+
+def test_one_bad_item_among_many_fails_the_question() -> None:
+    """q052 is why. Five of six figures came back; the sixth did not, and a
+    green line there would hide it."""
+    assert _grade(
+        ("assets", "answered", "answered"),
+        ("cash", "answered", "answered"),
+        ("goodwill", "answered", "refused"),
+    ) == "fail"
+
+
+def test_answering_something_marked_refused_is_unsafe_not_merely_failed() -> None:
     """The asymmetry the whole scorer exists for.
 
-    Every other failure costs a refusal. This one costs a number somebody
-    might act on, so it must never be averaged into the same bucket.
+    Every other failure costs a refusal, which this project prefers. This one
+    puts a figure in front of someone where the honest reply was a decline.
     """
-    assert grade("refuse", "answered", stage="answer") == "unsafe"
-    for outcome in ("refused", "clarify", "unanswerable", "parse_failed", "error"):
-        assert grade("refuse", outcome, stage="answer") == "pass"
+    assert _grade(("market cap", "refused", "answered")) == "unsafe"
+    assert _grade(("market cap", "refused", "confused")) == "fail"
+    assert _grade(("market cap", "refused", "refused")) == "pass"
 
 
-def test_earlier_stages_are_not_graded() -> None:
-    """[C] deliberately does not judge answerability (app/producer/DESIGN.md
-    §7), so scoring a parse-only run would measure the wrong component."""
-    for stage in ("parse", "map"):
-        assert grade("refuse", "answered", stage=stage) == "ungraded"
-        assert grade("answerable", "parsed", stage=stage) == "ungraded"
+def test_answering_something_marked_asked_is_also_unsafe() -> None:
+    """A curated clarification exists where a default would be quietly wrong:
+    gross and net profit margin differ by twenty points on one company."""
+    assert _grade(("profit margin", "asked", "answered")) == "unsafe"
+    assert _grade(("profit margin", "asked", "asked")) == "pass"
 
 
-def test_untriaged_questions_are_not_counted() -> None:
-    assert grade("unknown", "answered", stage="answer") == "untriaged"
+def test_confusion_never_passes_whatever_was_expected() -> None:
+    """`confused` means the term was not understood -- the candidates are raw
+    XBRL names and cosine scores, which is not a question anyone can answer.
+    It is never the desired outcome, so it can never match one."""
+    for expected in EXPECTABLE:
+        assert _grade(("revenue growth", expected, "confused")) != "pass"
+
+
+def test_a_length_mismatch_cannot_pass() -> None:
+    """The parser inventing an item the question never named.
+
+    "What are Apple's balance sheet totals: assets, ..." produced a seventh
+    element for the heading. Padding makes it visible instead of letting the
+    first six line up and score green.
+    """
+    items = pair(["answered", "answered"], [("assets", "answered"), ("cash", "answered"),
+                                            ("balance sheet totals", "confused")])
+    assert len(items) == 3
+    assert items[2].expected == NOT_EXPECTED
+    assert grade(items, expected_count=2, stage="answer") == "fail"
+
+
+def test_a_parse_only_run_is_not_graded() -> None:
+    assert _grade(("revenue", "answered", "answered"), stage="parse") == "ungraded"
+
+
+def test_an_unlisted_question_is_not_graded() -> None:
+    assert grade([], expected_count=0, stage="answer") == "ungraded"
 
 
 def test_templates_are_substituted_only_when_flagged() -> None:

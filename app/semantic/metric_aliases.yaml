@@ -85,7 +85,14 @@ metrics:
     # nothing listed, so the commonest spelling of this metric missed the file
     # entirely and fell through to an embedding match that scored 0.699 --
     # one thousandth under the binding bar.
-    synonyms: [r d, r and d, rnd, research and development, research expense, r d expense]
+    # The "-ing"/"spend" forms were added 2026-09-22 from the first full eval
+    # run: q008, q012 and q040 all ask about "R&D spending" or "R&D spend", and
+    # all three fell past this entry into an embedding match that offered
+    # ResearchAndDevelopmentExpense at 0.72 -- under the 0.75 bar, so the
+    # question was refused for a term this file already knew.
+    synonyms: [r d, r and d, rnd, research and development, research expense, r d expense,
+               r d spending, r d spend, r d costs, research and development spending,
+               research and development spend, research and development expense]
     terms:
       - [us-gaap:ResearchAndDevelopmentExpense]
 
@@ -140,9 +147,22 @@ metrics:
 
   cash:
     label: Cash and cash equivalents
+    # Deliberately NOT widened to include short-term investments. The filed
+    # concept means what it says, and summing it with a securities line would
+    # invent a subtotal no filer reports (DESIGN.md §7). The caveat carries the
+    # difference instead, because for most large filers the excluded half is
+    # the bigger one -- measured 2026-09-22 at each filer's latest instant.
     synonyms: [cash and equivalents, cash on hand, cash balance]
     terms:
       - [us-gaap:CashAndCashEquivalentsAtCarryingValue]
+    caveats:
+      us-gaap:CashAndCashEquivalentsAtCarryingValue: >-
+        This is cash and cash equivalents only. Short-term investments and
+        marketable securities are NOT included, and at this size they are
+        usually the larger half: at FY2025 Microsoft held $30.2B of cash
+        against $64.3B of short-term investments, and Alphabet $30.7B against
+        $96.1B of marketable securities. Someone asking how much money the
+        company has on hand is being shown roughly a third of it.
 
   inventory:
     label: Inventory
@@ -240,7 +260,10 @@ metrics:
     # Verified as real capex by value for their latest full years: AAPL 12.7B,
     # AMZN 131.8B, CVX 17.3B, NVDA 3.2B, QCOM 1.2B. BAC and JPM report no capex
     # concept at all -- banks do not conventionally present one.
-    synonyms: [capex, capital spending, purchases of property and equipment]
+    # The metric name itself indexes "capital expenditures"; the singular did
+    # not, which is what q054 asks (2026-09-22 run).
+    synonyms: [capex, capital spending, purchases of property and equipment,
+               capital expenditure, capex spending, capex spend, capital spend]
     terms:
       - - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
         - us-gaap:PaymentsToAcquireProductiveAssets
@@ -318,7 +341,11 @@ metrics:
 
   share_buybacks:
     label: Share repurchases
-    synonyms: [buybacks, share repurchase, stock buybacks, repurchase of common stock]
+    # q053 asks for "share buyback spend" (2026-09-22 run). The plural
+    # "share buybacks" resolves through the metric name; nothing else did.
+    synonyms: [buybacks, share repurchase, stock buybacks, repurchase of common stock,
+               share buyback, share buyback spend, buyback spend, stock repurchases,
+               share repurchases]
     terms:
       - [us-gaap:PaymentsForRepurchaseOfCommonStock]
 

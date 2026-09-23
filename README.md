@@ -53,7 +53,7 @@ uv run ruff format   # format
 | `app/ingest/` | [H] SEC HTTP client, rate limiter, disk cache, XBRL store |
 | `app/db/` | [G] SQLAlchemy 2.0 models, migrations, the `reported_fact` view, read-only roles |
 | `app/schemas/` | The typed contracts: `xbrl.py`, `query.py` (`QueryIn` / `QueryPlan`), `result.py` |
-| `app/producer/` | [C] Query Parser — question → `QueryIn` |
+| `app/parser/` | [C] Query Parser — question → `QueryIn` |
 | `app/semantic/` | [D] Query Mapper — `QueryIn` → `QueryPlan`, plus the curated metric aliases |
 | `app/retrieval/` | [E] Executor — `QueryPlan` → SQL → `ResultSet` |
 | `data/xbrl/` | Curated per-company XBRL JSON (git-ignored) |

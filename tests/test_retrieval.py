@@ -15,15 +15,17 @@ from __future__ import annotations
 
 from datetime import date
 
+import httpx
 import pytest
 
 from app.retrieval import (
     GenerationError,
     UnsupportedPlan,
     build_prompt,
+    generate,
     plan_cells,
 )
-from app.retrieval.generator import extract_sql
+from app.retrieval.generator import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT, extract_sql
 from app.schemas.query import (
     Binding,
     ConceptRef,
@@ -297,3 +299,74 @@ def test_a_bare_answer_is_taken_from_the_first_keyword() -> None:
 def test_a_reply_with_no_statement_raises() -> None:
     with pytest.raises(GenerationError, match="no SELECT"):
         extract_sql("I cannot answer that.")
+
+
+# --------------------------------------------------------------------------- #
+# The generator's output ceiling
+# --------------------------------------------------------------------------- #
+#
+# Added after q015 of the eval set ran for 42 minutes and was killed. These
+# stub the client, not the model: what is under test is the branch `generate`
+# takes on what came back.
+
+
+class _FakeGenClient:
+    def __init__(self, response=None, raises=None):
+        self.response = response or {}
+        self.raises = raises
+        self.options: dict | None = None
+        self.init_kwargs: dict = {}
+
+    def __call__(self, *args, **kwargs):
+        self.init_kwargs = kwargs
+        return self
+
+    async def generate(self, **kwargs):
+        self.options = kwargs.get("options")
+        if self.raises:
+            raise self.raises
+        return dict(self.response)
+
+
+def _one_cell_plan() -> QueryPlan:
+    return _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)])
+
+
+async def test_the_sql_ceiling_is_actually_sent(monkeypatch):
+    """The regression that would be invisible: a cap nobody passes.
+
+    Dropping `num_predict` leaves every other test green and restores the
+    42-minute question.
+    """
+    client = _FakeGenClient({"response": "SELECT 1", "done_reason": "stop"})
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", client)
+    await generate(_one_cell_plan())
+    assert client.options["num_predict"] == MAX_OUTPUT_TOKENS
+    assert client.init_kwargs["timeout"] == REQUEST_TIMEOUT
+
+
+async def test_a_truncated_statement_never_reaches_the_validator(monkeypatch):
+    """Half a SELECT can parse and can run.
+
+    A statement that lost its last join returns rows that look like an answer,
+    which is the failure this project exists to prevent -- so truncation is
+    refused here rather than handed on to be judged on its merits.
+    """
+    client = _FakeGenClient(
+        {"response": "SELECT a, b FROM xbrl.reported_fact WHERE", "done_reason": "length"}
+    )
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", client)
+    with pytest.raises(GenerationError, match="ceiling"):
+        await generate(_one_cell_plan())
+
+
+async def test_a_slow_model_is_reported_not_left_hanging(monkeypatch):
+    """`GenerationError`, the channel that already means the machinery failed.
+
+    `answer()` lets it propagate, so [B] refuses and the eval runner records
+    it as `error` with this message -- no new channel needed.
+    """
+    client = _FakeGenClient(raises=httpx.ReadTimeout("too slow"))
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", client)
+    with pytest.raises(GenerationError, match="did not finish"):
+        await generate(_one_cell_plan())

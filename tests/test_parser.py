@@ -1,11 +1,11 @@
-"""app/producer/ -- the prompt, the wire shape and the acceptor.
+"""app/parser/ -- the prompt, the wire shape and the acceptor.
 
 All pure. Nothing here calls the model, for the reason recorded in
 `tests/test_retrieval.py`: a test that needs a language model to agree with it
 is not a test.
 
 What is worth checking here is mostly the faithfulness gate, because it is the
-one thing standing between a paraphrasing producer and a plausible wrong
+one thing standing between a paraphrasing parser and a plausible wrong
 answer. The prompt gets one test of its own that matters more than it looks:
 every worked example must itself obey rule 1, since an example that breaks the
 rule teaches the model to break it.
@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 
-from app.producer import (
+from app.parser import (
     MalformedProposal,
+    ProposalError,
     UnfaithfulSpan,
     accept,
     build_question_prompt,
@@ -26,10 +28,12 @@ from app.producer import (
     check_span,
     extract_json,
     normalize,
+    propose,
 )
-from app.producer.acceptor import _FIELDS_BY_KIND, _OPTIONAL_FIELDS
-from app.producer.prompt import _EXAMPLES
-from app.producer.wire import WireElement, WireQuery
+from app.parser.acceptor import _FIELDS_BY_KIND, _OPTIONAL_FIELDS
+from app.parser.prompt import _EXAMPLES
+from app.parser.proposer import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT
+from app.parser.wire import WireElement, WireQuery
 
 QUESTION = "How much revenue did Apple and Microsoft make in the last 3 years?"
 
@@ -78,7 +82,7 @@ def test_accept_builds_a_query_the_mapper_can_take():
     assert query.elements[3].last_n_years == 3
 
 
-def test_wants_chart_is_the_only_shape_the_producer_may_assert():
+def test_wants_chart_is_the_only_shape_the_parser_may_assert():
     """False leaves ``shape`` unset so ``_describe_result`` infers it, which it
     does better than a 7B guess. True is the one thing cardinality cannot say:
     the same twelve quarters drawn and not drawn need the same rows and
@@ -166,7 +170,7 @@ def test_a_modifier_already_carried_is_not_refused_again():
 
 
 def test_the_modifier_rule_applies_to_metrics_only():
-    """"net" before a company name is a coincidence; before a metric it is a
+    """ "net" before a company name is a coincidence; before a metric it is a
     different line of the accounts."""
     assert check_span(_element(kind="company", text="Systems"), "Net Systems revenue")
 
@@ -263,9 +267,7 @@ def test_a_period_cannot_be_absolute_and_relative_at_once():
 def test_a_period_naming_no_time_is_refused():
     """Reaches the mapper as ``Unresolved`` otherwise, which costs the reader a
     refusal where one more generation would have done."""
-    reply = _reply(
-        elements=[{"id": "e1", "kind": "period", "text": "the last 3 years"}]
-    )
+    reply = _reply(elements=[{"id": "e1", "kind": "period", "text": "the last 3 years"}])
     with pytest.raises(MalformedProposal, match="names no time at all"):
         accept(reply, QUESTION)
 
@@ -291,8 +293,13 @@ def test_a_period_span_need_not_be_in_the_question():
     reply = _reply(
         elements=[
             {"id": "e1", "kind": "metric", "text": "revenue"},
-            {"id": "e2", "kind": "period", "text": "Q4 last year", "last_n_years": 1,
-             "fiscal_period": "Q4"},
+            {
+                "id": "e2",
+                "kind": "period",
+                "text": "Q4 last year",
+                "last_n_years": 1,
+                "fiscal_period": "Q4",
+            },
         ]
     )
     assert accept(reply, "What was the Q4 revenue last year?").elements[1].text
@@ -342,8 +349,13 @@ def test_a_quarter_and_a_year_may_share_an_element():
     reply = _reply(
         elements=[
             {"id": "e1", "kind": "metric", "text": "revenue"},
-            {"id": "e2", "kind": "period", "text": "Q4 last year",
-             "fiscal_period": "Q4", "last_n_years": 1},
+            {
+                "id": "e2",
+                "kind": "period",
+                "text": "Q4 last year",
+                "fiscal_period": "Q4",
+                "last_n_years": 1,
+            },
         ]
     )
     period = accept(reply, "What was the Q4 revenue last year?").elements[1]
@@ -352,7 +364,7 @@ def test_a_quarter_and_a_year_may_share_an_element():
 
 def test_a_clarification_answer_is_a_faithful_source_of_spans():
     """Otherwise the round trip cannot close. Asked "measured by what?" about
-    Costco's strongest quarter and answered "Total revenue", the producer has
+    Costco's strongest quarter and answered "Total revenue", the parser has
     to emit a metric of "revenue" -- a word nowhere in the original question.
     The reader's answer is as authoritative as their question."""
     reply = _reply(
@@ -529,3 +541,80 @@ def test_the_repair_prompt_quotes_the_failure_and_the_reply():
     repair = build_repair_prompt(QUESTION, _reply(), "element 'e2' has text 'sales'")
     assert "element 'e2' has text 'sales'" in repair
     assert QUESTION in repair
+
+
+# --------------------------------------------------------------------------- #
+# The output ceiling
+# --------------------------------------------------------------------------- #
+#
+# These stub the client rather than the model. What is under test is the branch
+# `propose` takes on what came back -- our code -- not whether qwen agrees with
+# anything, so the rule at the top of this file still holds.
+
+
+class _FakeResponse(dict):
+    pass
+
+
+class _FakeClient:
+    """Records the options it was called with and replays a canned response."""
+
+    def __init__(self, response=None, raises=None):
+        self.response = response or {}
+        self.raises = raises
+        self.options: dict | None = None
+
+    def __call__(self, *args, **kwargs):  # stands in for AsyncClient(...)
+        self.init_kwargs = kwargs
+        return self
+
+    async def generate(self, **kwargs):
+        self.options = kwargs.get("options")
+        if self.raises:
+            raise self.raises
+        return _FakeResponse(self.response)
+
+
+async def test_the_ceiling_is_actually_sent(monkeypatch):
+    """The regression that would be invisible: a cap nobody passes.
+
+    Without this, dropping `num_predict` from the options dict leaves every
+    test green and restores the 4,810-second question.
+    """
+    client = _FakeClient({"response": _reply(), "done_reason": "stop"})
+    monkeypatch.setattr("app.parser.proposer.AsyncClient", client)
+    await propose("prompt")
+    assert client.options["num_predict"] == MAX_OUTPUT_TOKENS
+    assert client.init_kwargs["timeout"] == REQUEST_TIMEOUT
+
+
+async def test_a_truncated_reply_is_not_offered_for_repair(monkeypatch):
+    """`ProposalError`, not `UnacceptableProposal`.
+
+    The distinction is what stops the repair attempt: re-asking a model that
+    just ran out of room spends a second full generation to learn the same
+    thing. `parse_question` repairs only the latter.
+    """
+    client = _FakeClient({"response": '{"intent":"lookup","eleme', "done_reason": "length"})
+    monkeypatch.setattr("app.parser.proposer.AsyncClient", client)
+    with pytest.raises(ProposalError, match="ceiling"):
+        await propose("prompt")
+
+
+async def test_a_timeout_becomes_a_proposal_error(monkeypatch):
+    """A wedged server must not escape as httpx's own exception.
+
+    Callers catch this package's vocabulary; a raw `TimeoutException` walks
+    past `parse_question` and out of whatever loop is running the questions.
+    """
+    client = _FakeClient(raises=httpx.ReadTimeout("too slow"))
+    monkeypatch.setattr("app.parser.proposer.AsyncClient", client)
+    with pytest.raises(ProposalError, match="did not reply"):
+        await propose("prompt")
+
+
+async def test_an_empty_reply_is_still_a_proposal_error(monkeypatch):
+    client = _FakeClient({"response": "   ", "done_reason": "stop"})
+    monkeypatch.setattr("app.parser.proposer.AsyncClient", client)
+    with pytest.raises(ProposalError, match="empty"):
+        await propose("prompt")

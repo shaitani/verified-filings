@@ -1,4 +1,4 @@
-"""The flat JSON shape the producer's model is constrained to emit.
+"""The flat JSON shape the parser's model is constrained to emit.
 
 **Why a second schema exists at all.** ``QueryIn`` cannot be used as a
 decoding grammar. Its elements are a discriminated union, which

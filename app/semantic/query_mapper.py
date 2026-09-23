@@ -47,6 +47,7 @@ from app.schemas.query import (
     CompanyGroupElementIn,
     ConceptRef,
     Coverage,
+    Intent,
     MetricElementIn,
     Note,
     PeriodElementIn,
@@ -97,18 +98,63 @@ async def map_query(
     metrics = [e for e in query.elements if isinstance(e, MetricElementIn)]
 
     async with session_factory() as session:
-        ciks, company_problems = await _resolve_companies(companies, session)
+        ciks, company_problems, missing_companies = await _resolve_companies(
+            companies, session
+        )
         group_ciks, group_problems = await _resolve_company_groups(groups, session)
         ciks = _merge_ciks(ciks, group_ciks)
         company_problems += group_problems
         if not companies and not groups:
             ciks = await _all_loaded_ciks(session)
+        company_notes: list[Note] = []
+        if missing_companies:
+            named = ", ".join(repr(name) for name in missing_companies)
+            if ciks:
+                # Something else resolved, so there is an answer to give. Note
+                # it rather than refuse: "how does Apple compare to Samsung"
+                # is a real question about Apple, and a flat refusal tells the
+                # asker less than half an answer plus this sentence does.
+                company_notes.append(
+                    Note(
+                        kind="partial_coverage",
+                        message=(
+                            f"{named} is not a company loaded in this dataset and is "
+                            f"absent from the result; the answer covers "
+                            f"{await _describe_scope(ciks, session)} only"
+                        ),
+                    )
+                )
+            else:
+                # Nothing resolved. Refuse -- and note that this is the one
+                # path that must NOT widen to every loaded filer, which is why
+                # the `_all_loaded_ciks` fallback above is guarded on there
+                # being no company element at all rather than on `ciks` being
+                # empty.
+                company_problems += [
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"no loaded company matches {element.text!r}",
+                    )
+                    for element in companies
+                    if element.text in missing_companies
+                ]
         resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
-        bindings, ambiguous, metric_problems, clarifications = await _resolve_metrics(
-            metrics, session, ciks=ciks, periods=resolved_periods
+        (
+            bindings,
+            ambiguous,
+            metric_problems,
+            clarifications,
+            coverage_notes,
+        ) = await _resolve_metrics(
+            metrics, session, ciks=ciks, periods=resolved_periods, intent=query.intent
         )
 
-    result = _describe_result(query, ciks=ciks, periods=resolved_periods, metrics=len(metrics))
+    result = _describe_result(
+        query,
+        ciks=_answering_ciks(ciks, bindings),
+        periods=resolved_periods,
+        metrics=len(metrics),
+    )
     return QueryPlan(
         question=query.question,
         intent=query.intent,
@@ -118,9 +164,32 @@ async def map_query(
         ambiguous=ambiguous,
         unresolved=company_problems + period_problems + metric_problems,
         clarifications=clarifications,
-        notes=_alignment_notes(resolved_periods, result)
+        notes=company_notes
+        + coverage_notes
+        + _alignment_notes(resolved_periods, result)
         + _granularity_notes(result),
     )
+
+
+def _answering_ciks(ciks: list[int], bindings: list[Binding]) -> list[int]:
+    """The companies the result will actually carry rows for.
+
+    ``PlanFilters.ciks`` stays the full resolved scope -- it records what the
+    question reached, and narrowing it would erase the evidence that a dropped
+    filer was ever in it. ``ResultSpec`` is the other half of that pair and has
+    to be honest the other way: it states the cardinality retrieval must
+    produce, and promising a row for a company with no binding makes the
+    verdict report a shortfall for something the plan already disclosed.
+
+    Union, not intersection, when several metrics cover different companies.
+    That over-counts a plan whose metrics disagree, which is why the verdict
+    counts ``plan_cells`` rather than this -- ``row_count`` is what the reader
+    is promised, and the cells are what is checked.
+    """
+    if not bindings or any(binding.company_cik is None for binding in bindings):
+        return ciks
+    bound = {binding.company_cik for binding in bindings}
+    return [cik for cik in ciks if cik in bound]
 
 
 def _describe_result(
@@ -322,19 +391,28 @@ def _group_selector(element: CompanyGroupElementIn):
 
 async def _resolve_companies(
     elements: list[CompanyElementIn], session: AsyncSession
-) -> tuple[list[int], list[Unresolved]]:
+) -> tuple[list[int], list[Unresolved], list[str]]:
+    """``(ciks, refusals, names that matched nothing)``.
+
+    The third return is separated from the second because the two failures are
+    not the same failure. A name that matches **nothing** is droppable: "how
+    does Apple compare to Samsung" is answerable about Apple, as long as the
+    reader is told Samsung is missing, and the caller makes that call because
+    only it knows whether anything else resolved.
+
+    A name that matches **several** loaded companies is not droppable. Picking
+    one would be a guess between real alternatives, and dropping it would
+    answer a narrower question than the one asked without anybody choosing to.
+    That stays a refusal here.
+    """
     ciks: list[int] = []
     problems: list[Unresolved] = []
+    missing: list[str] = []
 
     for element in elements:
         matches = await _lookup_company(element, session)
         if not matches:
-            problems.append(
-                Unresolved(
-                    element_id=element.id,
-                    reason=f"no loaded company matches {element.text!r}",
-                )
-            )
+            missing.append(element.text)
         elif len(matches) > 1:
             # Company ambiguity has no home in ``Ambiguity`` -- that model is
             # concept-shaped. Reported here instead, naming the collisions so
@@ -353,7 +431,19 @@ async def _resolve_companies(
         else:
             ciks.append(matches[0])
 
-    return ciks, problems
+    return ciks, problems, missing
+
+
+async def _describe_scope(ciks: list[int], session: AsyncSession) -> str:
+    """The surviving companies, named while there are few enough to read.
+
+    A two-company comparison that lost one side has to say which side is left;
+    a twenty-company question that lost one does not need the other nineteen
+    listed back.
+    """
+    if len(ciks) > 4:
+        return f"the {len(ciks)} companies that resolved"
+    return await _describe_companies(ciks, session)
 
 
 async def _describe_companies(ciks: list[int], session: AsyncSession) -> str:
@@ -710,7 +800,8 @@ async def _resolve_metrics(
     *,
     ciks: list[int],
     periods: list[ResolvedPeriod],
-) -> tuple[list[Binding], list[Ambiguity], list[Unresolved], list[Clarification]]:
+    intent: Intent,
+) -> tuple[list[Binding], list[Ambiguity], list[Unresolved], list[Clarification], list[Note]]:
     """Bind every metric element to concepts that provably have the facts.
 
     The cascade, in order:
@@ -735,7 +826,7 @@ async def _resolve_metrics(
     whichever one its own facts support.
     """
     if not elements:
-        return [], [], [], []
+        return [], [], [], [], []
 
     blockers = []
     if not ciks:
@@ -744,13 +835,14 @@ async def _resolve_metrics(
         blockers.append("no reporting period in scope to verify coverage against")
     if blockers:
         reason = "; ".join(blockers)
-        return [], [], [Unresolved(element_id=e.id, reason=reason) for e in elements], []
+        return [], [], [Unresolved(element_id=e.id, reason=reason) for e in elements], [], []
 
     index = alias_index()
     bindings: list[Binding] = []
     ambiguous: list[Ambiguity] = []
     problems: list[Unresolved] = []
     clarifications: list[Clarification] = []
+    notes: list[Note] = []
 
     for element in elements:
         hit = index.lookup(element.text)
@@ -824,6 +916,8 @@ async def _resolve_metrics(
             concept_ids={c.concept_id for slot in slots for c in slot},
             periods=periods,
         )
+        bound_before = len(bindings)
+        uncovered: list[int] = []
         _bind_per_company(
             element,
             slots=slots,
@@ -838,9 +932,49 @@ async def _resolve_metrics(
             bindings=bindings,
             ambiguous=ambiguous,
             problems=problems,
+            uncovered_ciks=uncovered,
         )
+        if uncovered:
+            dropped = await _describe_companies(uncovered, session)
+            if len(bindings) > bound_before:
+                notes.append(
+                    Note(
+                        kind="partial_coverage",
+                        message=(
+                            f"{dropped} report no {element.text!r} for the periods asked "
+                            f"about, so they are absent from the result"
+                            + _subset_warning(intent, kept=len(ciks) - len(uncovered))
+                        ),
+                    )
+                )
+            else:
+                # Nothing bound anywhere. One refusal naming every company,
+                # not one per company: "total debt" over twenty filers used to
+                # produce twenty near-identical reasons for one phrase.
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"{element.text!r} has no concept with facts covering any "
+                        f"requested period for {dropped}",
+                    )
+                )
 
-    return bindings, ambiguous, problems, clarifications
+    return bindings, ambiguous, problems, clarifications, notes
+
+
+def _subset_warning(intent: Intent, *, kept: int) -> str:
+    """The extra sentence a ranking needs.
+
+    Dropping a company from a lookup costs a row. Dropping one from a *ranking*
+    can change the answer outright -- the excluded filer might have been first
+    -- and no row count downstream would show it.
+    """
+    if intent != "rank":
+        return ""
+    return (
+        f". The ordering below is over the remaining {kept} company(s) only, "
+        f"and is not necessarily the ordering over all of them"
+    )
 
 
 def _bind_per_company(
@@ -858,6 +992,7 @@ def _bind_per_company(
     bindings: list[Binding],
     ambiguous: list[Ambiguity],
     problems: list[Unresolved],
+    uncovered_ciks: list[int],
 ) -> None:
     """Commit bindings per company, splitting where the filer changed tags.
 
@@ -955,13 +1090,14 @@ def _bind_per_company(
             continue
 
         if not groups:
-            problems.append(
-                Unresolved(
-                    element_id=element.id,
-                    reason=f"{element.text!r} has no concept with facts covering any "
-                    f"requested period for cik {cik}",
-                )
-            )
+            # Not a refusal on its own. A filer that reports nothing for this
+            # metric is ordinary -- JPMorgan tags no OperatingIncomeLoss,
+            # correctly for a bank -- and refusing the whole question because
+            # one company of twenty cannot answer it is how "highest operating
+            # margin" came back as nothing at all. The caller decides: every
+            # company uncovered is still a refusal, some of them is a
+            # `partial_coverage` note naming who dropped out.
+            uncovered_ciks.append(cik)
             continue
 
         shared_notes = _switch_notes(concept_groups, chosen_by_key, cik=cik, evidence=evidence)

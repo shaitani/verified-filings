@@ -36,22 +36,22 @@ def main() -> None:
     questions = document["questions"]
     total = len(questions)
 
-    expect = Counter(q.get("expect", "unknown") for q in questions)
-    untriaged = [q for q in questions if q.get("expect", "unknown") == "unknown"]
+    expect = Counter(value for q in questions for value in q.get("expect", []))
+    untriaged = [q for q in questions if not q.get("expect")]
     needs = Counter(tag for q in questions for tag in q.get("needs", []))
     blocked = Counter(tag for q in questions for tag in q.get("blocked_by", []))
     exercises = Counter(tag for q in questions for tag in q.get("exercises", []))
 
-    answerable = [q for q in questions if q.get("expect") in {"answerable", "partial"}]
+    answerable = [q for q in questions if "answered" in q.get("expect", [])]
     plain = [q for q in answerable if not (set(q.get("needs", [])) & BEYOND_RETRIEVAL)]
 
     print(f"{total} questions\n")
 
-    print("expect")
+    print("expect (one entry per thing asked for)")
     for name, count in expect.most_common():
         print(f"  {name:<22}{count:>3}  {_bar(count, total)}")
 
-    print("\nneeds (answerable + partial)")
+    print("\nneeds (questions expecting at least one answer)")
     for name, count in needs.most_common():
         print(f"  {name:<22}{count:>3}  {_bar(count, len(answerable))}")
 

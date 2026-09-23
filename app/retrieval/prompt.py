@@ -228,7 +228,7 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
     return chr(10).join([header, rule, *rows])
 
 
-#: ``QueryIn.intent`` is the producer saying what kind of answer is wanted, and
+#: ``QueryIn.intent`` is the parser saying what kind of answer is wanted, and
 #: it is the only signal available here that separates "give me the figures"
 #: from "compute something from them".
 #:

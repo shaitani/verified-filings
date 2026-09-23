@@ -1,4 +1,4 @@
-# The producer — question → `QueryIn`
+# The parser — question → `QueryIn`
 
 Block **[C]** of the chain, and the head of the pipeline. A string of English
 in, a validated `QueryIn` out, or a refusal.
@@ -16,7 +16,7 @@ leaves here, nothing downstream can tell a language model was involved.
 
 ---
 
-## 1. What the producer can get wrong
+## 1. What the parser can get wrong
 
 Every design decision below comes out of this table. Eight ways to be wrong,
 and whether anything catches each one.
@@ -37,7 +37,7 @@ and whether anything catches each one.
 the mapper's company lookup is deterministic. 4–7 are what `accept()` was
 written for. **9 is the one that remains open**, and it is deliberate — see §7.
 
-The unifying observation: every dangerous producer mistake is a **paraphrase**.
+The unifying observation: every dangerous parser mistake is a **paraphrase**.
 The model restates rather than transcribes, the mapper resolves the
 restatement perfectly, coverage proves it, the verdict says `complete`, and a
 real figure comes back under a label it does not fit. Nothing further down can
@@ -178,9 +178,9 @@ Today that question happens to end in a refusal, because the model tags "these
 companies" as a company group that resolves to nobody. That is luck, not a
 gate.
 
-**Pinning metric-level ambiguity.** HANDOFF §3 assigns this to the producer:
+**Pinning metric-level ambiguity.** HANDOFF §3 assigns this to the parser:
 "how much money was made" is revenue or net income. The faithfulness rule means
-the producer *cannot* pin it by substitution — that is exactly the paraphrase
+the parser *cannot* pin it by substitution — that is exactly the paraphrase
 §2 forbids. The right home is a curated `clarify` entry in
 `metric_aliases.yaml`, which already has the machinery: a curated question with
 named options, surfaced through `QueryPlan.clarifications`, answered by the
@@ -219,8 +219,8 @@ the right answer to some of these questions. Against what the eval set expects:
 | partial (8) | 6 | 2 |
 | refuse (11) | 8 | 3 |
 
-**No answerable question is refused by the producer.** The eight `refuse`
-questions that parse are the correct division of labour — the producer's job
+**No answerable question is refused by the parser.** The eight `refuse`
+questions that parse are the correct division of labour — the parser's job
 is to find the elements, and the mapper is what knows that "market
 capitalisation" or "competition risk" is not a filed fact.
 
@@ -320,7 +320,7 @@ and rule 1b tells the model that the vague word *is* the metric.
 ### The round trip could not close
 
 Found by testing it rather than assuming it. Asked "measured by what?" and
-answered "Total revenue", the producer has to emit a metric of **"revenue"** —
+answered "Total revenue", the parser has to emit a metric of **"revenue"** —
 a word nowhere in *"Which quarter is Costco's strongest?"*. The faithfulness
 gate refused it, so `answers=` was decorative.
 

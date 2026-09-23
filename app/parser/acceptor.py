@@ -11,11 +11,11 @@ next could not catch.
 
 2. **Faithfulness** -- every element's ``text`` appears in the question. This
    is the gate the whole design leans on, and it is the reason a 7B model is
-   defensible here. Without it the producer can quietly substitute a phrase --
+   defensible here. Without it the parser can quietly substitute a phrase --
    "gross revenue" becoming "revenue" -- and the substitution is invisible
    downstream: the mapper resolves the replacement cleanly, coverage proves
    it, the verdict says ``complete``, and a real number comes back under a
-   label it does not fit. Every other producer mistake either fails loudly or
+   label it does not fit. Every other parser mistake either fails loudly or
    costs a refusal. This one costs a wrong answer, so it is checked in code
    rather than asked for in a prompt.
 
@@ -36,7 +36,7 @@ import re
 
 from pydantic import ValidationError
 
-from app.producer.wire import WireElement, WireQuery
+from app.parser.wire import WireElement, WireQuery
 from app.schemas.query import (
     CompanyElementIn,
     CompanyGroupElementIn,
@@ -96,7 +96,7 @@ _LOOKALIKES = str.maketrans(
 _EDGE = " \t\n\r\"'`.,;:!?()[]{}"
 
 #: Words that change which line of the accounts a metric names, and that a
-#: careless producer drops. Curated rather than inferred, and narrow on
+#: careless parser drops. Curated rather than inferred, and narrow on
 #: purpose: this is the one place where plain substring faithfulness is not
 #: enough, because a *shortened* span is genuinely present in the question.
 #: "What was Apple's gross revenue" with a metric span of "revenue" passes
@@ -237,7 +237,7 @@ def _haystack(normalized_question: str, answers: list[tuple[str, str]] | None) -
 
     Without this the round trip cannot close, which is how the omission was
     found: asked "measured by what?" about Costco's strongest quarter, the
-    reader picks "Total revenue", the producer rightly emits a metric of
+    reader picks "Total revenue", the parser rightly emits a metric of
     "revenue", and the gate refuses it because that word is nowhere in
     "Which quarter is Costco's strongest?".
 

@@ -19,7 +19,7 @@ observable downstream.
 
 **What keeps this safe with a 7B model** is the faithfulness gate in
 ``accept()`` -- every element's ``text`` must appear in the question. Of the
-ways a producer can be wrong, most either fail loudly (bad structure) or cost
+ways a parser can be wrong, most either fail loudly (bad structure) or cost
 a refusal (an unknown company, which the mapper's deterministic lookup
 rejects). The one that costs a *wrong answer* is a paraphrase, because the
 mapper resolves the replacement phrase perfectly and everything downstream
@@ -33,7 +33,7 @@ the eval set needs this module, so it is deliberately the next thing rather
 than part of this one.
 """
 
-from app.producer.acceptor import (
+from app.parser.acceptor import (
     MalformedProposal,
     UnacceptableProposal,
     UnfaithfulSpan,
@@ -42,21 +42,21 @@ from app.producer.acceptor import (
     extract_json,
     normalize,
 )
-from app.producer.prompt import build_question_prompt, build_repair_prompt
-from app.producer.proposer import (
+from app.parser.prompt import build_question_prompt, build_repair_prompt
+from app.parser.proposer import (
     CONTEXT_TOKENS,
-    PRODUCER_MODEL,
+    PARSER_MODEL,
     TEMPERATURE,
     ProposalError,
     propose,
 )
-from app.producer.wire import WIRE_SCHEMA, WireElement, WireQuery
+from app.parser.wire import WIRE_SCHEMA, WireElement, WireQuery
 from app.schemas.query import QueryIn
 
 __all__ = [
     "CONTEXT_TOKENS",
     "MalformedProposal",
-    "PRODUCER_MODEL",
+    "PARSER_MODEL",
     "ProposalError",
     "TEMPERATURE",
     "UnacceptableProposal",
@@ -85,7 +85,7 @@ async def parse_question(
     question: str,
     *,
     answers: list[tuple[str, str]] | None = None,
-    model: str = PRODUCER_MODEL,
+    model: str = PARSER_MODEL,
 ) -> QueryIn:
     """One question, parsed into a ``QueryIn`` the mapper can resolve.
 

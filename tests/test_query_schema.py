@@ -82,7 +82,7 @@ def test_elements_dispatch_on_kind() -> None:
 
 
 def test_retired_qualifier_kind_is_rejected() -> None:
-    """`qualifier` was inert -- nothing ever resolved it -- so a producer
+    """`qualifier` was inert -- nothing ever resolved it -- so a parser
     emitting one had its intent silently dropped. Removing the kind turns that
     into a loud error."""
     with pytest.raises(ValidationError):
@@ -103,7 +103,7 @@ def test_unknown_kind_is_rejected() -> None:
 
 def test_payload_from_the_wrong_kind_is_rejected() -> None:
     """A ticker on a metric element is extra="forbid" territory -- it means the
-    producer mislabelled the element, which should fail rather than be ignored."""
+    parser mislabelled the element, which should fail rather than be ignored."""
     with pytest.raises(ValidationError):
         QueryIn.model_validate(
             _query({"id": "e1", "text": "revenue", "kind": "metric", "ticker": "AAPL"})

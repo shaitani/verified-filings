@@ -941,6 +941,7 @@ def test_a_q4_is_bound_in_the_same_binding_as_its_neighbours() -> None:
         bindings=bindings,
         ambiguous=[],
         problems=[],
+        uncovered_ciks=[],
     )
     assert len(bindings) == 1
     assert {(p.fiscal_year, p.fiscal_period) for p in bindings[0].periods} == {
@@ -978,6 +979,7 @@ def test_a_ratio_is_dimensionless_not_the_numerator_s_unit() -> None:
             bindings=bindings,
             ambiguous=[],
             problems=[],
+            uncovered_ciks=[],
         )
         (binding,) = bindings
         assert binding.unit == expected, expression
@@ -1018,6 +1020,7 @@ def test_operands_in_different_units_are_refused() -> None:
         bindings=bindings,
         ambiguous=[],
         problems=problems,
+        uncovered_ciks=[],
     )
 
     assert bindings == []
@@ -1077,6 +1080,7 @@ def test_a_narrower_fallback_discloses_what_it_leaves_out() -> None:
         bindings=bindings,
         ambiguous=[],
         problems=[],
+        uncovered_ciks=[],
     )
 
     by_cik = {b.company_cik: b for b in bindings}
@@ -1145,6 +1149,7 @@ def test_ambiguity_is_reported_once_per_element_not_once_per_company() -> None:
         bindings=[],
         ambiguous=ambiguous,
         problems=[],
+        uncovered_ciks=[],
     )
 
     (report,) = ambiguous
@@ -1189,3 +1194,149 @@ def test_needs_input_separates_asking_from_impossible() -> None:
     )
     assert not askable.is_complete
     assert askable.needs_input
+
+
+# --------------------------------------------------------------------------- #
+# The partial path
+# --------------------------------------------------------------------------- #
+#
+# A company that reports nothing for a metric is ordinary, not an error:
+# JPMorgan tags no OperatingIncomeLoss, correctly for a bank. Before this, one
+# such filer in twenty refused the whole question -- measured on the eval set,
+# five of sixteen remaining failures were exactly that. What must NOT happen is
+# the answer quietly narrowing, so every drop leaves a `partial_coverage` note.
+
+
+def test_an_uncovered_company_is_collected_not_refused() -> None:
+    """The core change. One filer covers, one does not; the covered one still
+    binds and the other is handed back for the caller to disclose."""
+    element = MetricElementIn(id="m", text="operating margin")
+    window = (date(2024, 1, 1), date(2024, 12, 31))
+    candidate = query_mapper._Candidate(
+        concept_id=1, taxonomy="us-gaap", name="OperatingIncomeLoss", score=1.0
+    )
+    periods = [
+        ResolvedPeriod(
+            company_cik=cik,
+            fiscal_year=2024,
+            fiscal_period="FY",
+            period_start=window[0],
+            period_end=window[1],
+        )
+        for cik in (11, 22)
+    ]
+    # Only cik 11 has facts. cik 22 is the bank.
+    evidence = {
+        (11, 1): query_mapper._Evidence(
+            is_instant=False, unit="USD", values={window: Decimal("1")}
+        )
+    }
+
+    bindings: list = []
+    problems: list = []
+    uncovered: list = []
+    query_mapper._bind_per_company(
+        element,
+        slots=[[candidate]],
+        signs=["signed"],
+        expression="c0",
+        resolved_by="alias",
+        source="curated alias",
+        ciks=[11, 22],
+        periods=periods,
+        evidence=evidence,
+        bindings=bindings,
+        ambiguous=[],
+        problems=problems,
+        uncovered_ciks=uncovered,
+    )
+
+    assert [b.company_cik for b in bindings] == [11]
+    assert uncovered == [22]
+    assert problems == [], "an uncovered company is not a refusal on its own"
+
+
+def test_a_ranking_says_it_is_over_a_subset() -> None:
+    """Dropping a company from a lookup costs a row. Dropping one from a
+    ranking can change the answer, and no row count downstream would show it."""
+    assert query_mapper._subset_warning("rank", kept=19)
+    assert "19" in query_mapper._subset_warning("rank", kept=19)
+    assert query_mapper._subset_warning("lookup", kept=19) == ""
+    assert query_mapper._subset_warning("trend", kept=19) == ""
+
+
+def test_result_spec_counts_only_the_companies_that_bound() -> None:
+    """`row_count` is a promise about how many rows come back. Counting a
+    company with no binding promises a row nothing will produce."""
+    def _binding(cik: int | None) -> Binding:
+        return Binding(
+            element_id="m",
+            company_cik=cik,
+            concepts=[ConceptRef(concept_id=1, taxonomy="us-gaap", name="X")],
+            unit="USD",
+            is_instant=False,
+            coverage=Coverage(fact_count=1),
+            confidence=1.0,
+            resolved_by="alias",
+            rationale="test",
+        )
+
+    assert query_mapper._answering_ciks([11, 22], [_binding(11)]) == [11]
+    assert query_mapper._answering_ciks([11, 22], [_binding(11), _binding(22)]) == [11, 22]
+    # A binding for every company in scope, and one that resolved nothing.
+    assert query_mapper._answering_ciks([11, 22], [_binding(None)]) == [11, 22]
+    assert query_mapper._answering_ciks([11, 22], []) == [11, 22]
+
+
+async def test_an_unknown_company_alongside_a_known_one_is_noted_not_refused(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """"How does Apple compare to Samsung" is a real question about Apple.
+
+    The answer has to say Samsung is missing, but half an answer plus that
+    sentence tells the asker more than a flat refusal does.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c1", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "c2", "text": "Samsung", "kind": "company"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.is_complete, "the half that resolved is answerable"
+    assert plan.filters.ciks == [FAKE_CIK]
+    (note,) = [n for n in plan.notes if n.kind == "partial_coverage"]
+    assert "Samsung" in note.message
+    assert FIXTURE_TICKER in note.message or FIXTURE_NAME_FRAGMENT in note.message
+
+
+async def test_when_no_named_company_resolves_the_scope_does_not_widen(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The guard that keeps a dropped company from becoming every company.
+
+    `map_query` widens to every loaded filer only when the question names no
+    company *element* at all. A question that named one and failed to resolve
+    it has to refuse -- answering about twenty filers instead of the one that
+    was asked for is a different question, not a partial answer to this one.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c", "text": "Samsung", "kind": "company"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    assert plan.filters.ciks == []
+    assert any("Samsung" in u.reason for u in plan.unresolved)
+    assert not [n for n in plan.notes if n.kind == "partial_coverage"]

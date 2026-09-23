@@ -1,4 +1,4 @@
-"""The text the producer's model is shown. Writes no ``QueryIn``.
+"""The text the parser's model is shown. Writes no ``QueryIn``.
 
 Mirrors ``app/retrieval/prompt.py``'s discipline: this module assembles words,
 and the model produces the structure. Nothing here parses a reply.
@@ -7,7 +7,7 @@ The rules below are ordered by what they cost when broken, worst first. Two of
 them carry the whole safety argument for using a 7B model at all:
 
 * **Copy ``text`` exactly.** The model transcribes; it never rewords. A
-  producer that turns "gross revenue" into "revenue" walks straight around the
+  parser that turns "gross revenue" into "revenue" walks straight around the
   curated ``unavailable`` entry that exists to refuse that phrase, and hands
   back a real revenue figure under a label it does not fit. Enforced in
   ``acceptor.accept()``, not merely asked for here.

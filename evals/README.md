@@ -36,7 +36,7 @@ suite instead of a design instrument.
 |---|---|
 | `pass` | the chain did what the `expect` tag called for |
 | `fail` | it refused something it should have answered. Costly, but safe |
-| `unsafe` | it **answered** something tagged `refuse` |
+| `unsafe` | it **answered** something tagged `refuse` or `clarify` |
 | `untriaged` | `expect` is `unknown`; left out of the tally |
 
 `unsafe` is counted apart from `fail` and printed last, because the two are
@@ -71,8 +71,19 @@ count.
 |---|---|
 | `answerable` | the system should produce a complete answer |
 | `partial` | some of it resolves, the rest must be reported, not hidden |
+| `clarify` | the term is genuinely several things; **asking** is the correct behaviour |
 | `refuse` | the data cannot support it; saying so is the correct behaviour |
 | `unknown` | written down but not yet triaged — also what omitting the field means |
+
+`clarify` was added 2026-09-22, after the first full run scored four questions
+as failures for doing exactly what they were written to do. q046 is the case
+it exists for: its own note says *"Deliberately ASKS rather than resolving."*
+A curated `clarify` entry in `metric_aliases.yaml` is a designed outcome, not
+a half-answer, and the vocabulary had no way to say so.
+
+A `clarify` question that comes back **answered** is scored `unsafe`, not
+`fail`. Reading a bare "profit margin" as net rather than gross is twenty
+points on the same company, which is a wrong number, not a near miss.
 
 `unknown` entries are listed separately by `summarize.py` and left out of the
 tally, so an untriaged question never quietly skews a count. Write the question
