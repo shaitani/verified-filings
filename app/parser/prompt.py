@@ -232,7 +232,7 @@ _EXAMPLES: list[tuple[str, str]] = [
         "What was Tesla's year-over-year revenue growth in 2024?",
         """{"intent":"derive","elements":[
   {"id":"e1","kind":"company","text":"Tesla"},
-  {"id":"e2","kind":"metric","text":"revenue growth"},
+  {"id":"e2","kind":"metric","text":"revenue"},
   {"id":"e3","kind":"period","text":"the year before 2024","fiscal_year":2023},
   {"id":"e4","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
     ),

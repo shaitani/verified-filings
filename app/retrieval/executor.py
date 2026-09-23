@@ -45,17 +45,31 @@ from app.schemas.result import (
 LOG_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "retrieval_log.jsonl"
 
 
-def _log(sql: str, plan: QueryPlan, verdict: ResultVerdict) -> None:
+def _log(
+    sql: str,
+    plan: QueryPlan,
+    verdict: ResultVerdict | None,
+    *,
+    error: str | None = None,
+) -> None:
     """Append one line. Logging must never be the reason an answer fails, so
     every error here is swallowed -- a missing log line costs a debugging
-    session, a raised one costs the answer."""
+    session, a raised one costs the answer.
+
+    ``verdict`` is ``None`` when the statement did not survive long enough to
+    have one, and ``error`` then says what it hit. That combination is the
+    whole reason this takes an optional verdict: a statement that raises is
+    the one most worth reading, and it used to be the only one never written
+    down.
+    """
     try:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         entry = {
             "at": datetime.now(UTC).isoformat(),
             "question": plan.question,
             "sql": sql,
-            "verdict": verdict.model_dump(mode="json"),
+            "verdict": verdict.model_dump(mode="json") if verdict else None,
+            "error": error,
         }
         with LOG_PATH.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(entry) + "\n")
@@ -235,15 +249,23 @@ def _notes(plan: QueryPlan, verdict: ResultVerdict) -> list[Note]:
 
 async def execute(sql: str, plan: QueryPlan) -> ResultSet:
     """Run a **validated** statement and assemble the ``ResultSet``."""
-    async with RetrievalSessionLocal() as session:
-        result = await session.execute(text(sql))
-        records = result.mappings().all()
+    try:
+        async with RetrievalSessionLocal() as session:
+            result = await session.execute(text(sql))
+            records = result.mappings().all()
 
-    rows = [
-        AnnotatedRow(row=row, binding_keys=_attribute(row, plan))
-        for row in (ResultRow(**dict(record)) for record in records)
-    ]
-    verdict = _verdict(rows, plan)
+        rows = [
+            AnnotatedRow(row=row, binding_keys=_attribute(row, plan))
+            for row in (ResultRow(**dict(record)) for record in records)
+        ]
+        verdict = _verdict(rows, plan)
+    except Exception as exc:
+        # Log on the way out. Everything from here to the ``ResultSet`` can
+        # raise -- a database error, or a row the contract refuses, such as the
+        # NULL leading row a LAG growth calculation produces -- and the
+        # statement behind it is exactly what a person needs to see.
+        _log(sql, plan, None, error=f"{type(exc).__name__}: {exc}")
+        raise
     _log(sql, plan, verdict)
 
     return ResultSet(

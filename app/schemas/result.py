@@ -92,7 +92,9 @@ class ResultRow(_Base):
     period_end: date
     is_instant: bool
 
-    value: Decimal
+    #: ``None`` only at the leading edge of a derivation -- see
+    #: ``_null_value_needs_a_derivation``. Every as-reported figure has one.
+    value: Decimal | None = None
     #: Part of the *key*, not decoration. Measured: dropping it from the join
     #: makes AMD's FY2024 effective tax rate two rows (filed as both ``pure``
     #: and ``Rate``), and summing them gives 0.38 for a 0.19 figure.
@@ -105,6 +107,33 @@ class ResultRow(_Base):
     #: it as text. What matters is that it is set *whenever the value is not
     #: the metric*, because a presenter with no marker cites it as one.
     derivation: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _null_value_needs_a_derivation(self) -> ResultRow:
+        """A missing value is a real answer only for a computed row.
+
+        A growth figure over N periods has N-1 answers: the first period has
+        nothing before it to compare against, so ``LAG`` returns NULL there and
+        the row is the honest leading edge of the series rather than a fault.
+        Measured 2026-09-23 -- "What was Tesla's year-over-year revenue growth
+        in 2024?" produced exactly that, and a required ``Decimal`` rejected it,
+        taking the FY2024 row that held the answer down with it. Five prompt
+        variants failed to stop the model emitting the row, and it was right to
+        emit it.
+
+        A NULL on an **as-reported** row is still refused outright. There the
+        binding proved facts exist before the plan was made, so a missing value
+        means the query or the run went wrong, and the whole point of this
+        contract is that such a row never reaches a reader wearing a figure's
+        clothes.
+        """
+        if self.value is None and self.derivation is None:
+            raise ValueError(
+                "value is NULL on a row with no derivation. A filed figure was "
+                "proved to exist before this query ran, so a missing one is a "
+                "fault in the query, not an answer"
+            )
+        return self
 
     @model_validator(mode="after")
     def _instant_has_no_start(self) -> ResultRow:
