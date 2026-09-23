@@ -308,8 +308,8 @@ whether or not anyone inspects a return value.
 
 ### 4.3 What the model actually does, measured
 
-`qwen2.5-coder:7b`, writing the statement from the filter table. Five distinct
-failures. **Four were the prompt's fault, not the model's** — worth stating,
+`qwen2.5-coder:7b`, writing the statement from the filter table. Six distinct
+failures. **Five were the prompt's fault, not the model's** — worth stating,
 because "the model is too small" is where diagnosis stops rather than starts.
 
 | # | failure | cause | fix |
@@ -319,6 +319,7 @@ because "the model is too small" is where diagnosis stops rather than starts.
 | 3 | `fiscal_period = 'Q12023'` | a combined `Q12023` label needed splitting | give `fy` and `fp` as separate columns |
 | 4 | paraphrased dates | downstream of #2 | went away with #2 |
 | 5 | **skipped the Q4 subtraction** | — | not fixed; see below |
+| 6 | `LIMIT 1` on a ranking | rule 3 said `LIMIT 500` **"or less"** | drop "or less"; see §4.3c |
 
 The instructive one is **#2**. The filter table was introduced with "one row
 here = one row the answer needs", which says the rows *are* the output. With
@@ -404,6 +405,75 @@ Verified end to end against figures computed independently from the database:
 | free cash flow | `c0 - c1` | 108,807,000,000 |
 | free cash flow margin | `(c0 - c1) / c2` | 0.278254 |
 | current ratio | `c0 / c1` | 0.867313 |
+
+### 4.3c "or less" — two words that cost fifteen rows
+
+Measured 2026-09-23. "Which of these companies has the highest operating
+margin?" produced a plan for 16 companies and a statement ending:
+
+```sql
+ORDER BY value DESC
+LIMIT 1;
+```
+
+Everything above that line was right — the 32-row `VALUES` table, the join on
+all five key columns, the ratio, the `pure` unit. One row came back against
+16 expected, the verdict refused it, and nothing reached a reader.
+
+**The cause was rule 3**, which read:
+
+> `3. End with LIMIT 500 or less.`
+
+"or less" is permission. Asked for the *highest* of something and told a
+smaller limit was acceptable, the model took it.
+
+Six single-variable runs against the same plan, changing one thing each:
+
+| variation | `LIMIT` | `ORDER BY` |
+|---|---|---|
+| baseline | **1** | yes |
+| **rule 3 drops "or less"** | **500** | yes |
+| `YOUR JOB` preamble removed | 1 | yes |
+| **whole `YOUR JOB` section removed** | 1 | yes |
+| question reworded without "highest" | 500 | **no** |
+| rule 3 fixed *and* preamble removed | 500 | yes |
+
+And, on top of the rule-3 fix, applying both reverted edits together:
+
+| variation | `LIMIT` | `ORDER BY` |
+|---|---|---|
+| rule 3 fixed only (**shipped**) | **500** | yes |
+| + `rank` out of `DERIVING_INTENTS` | 500 | yes |
+| + *also* "a ranking" out of option (b) | **1** | yes |
+
+Three things those tables settle.
+
+**The job text was irrelevant.** Removing the entire `YOUR JOB` section left
+`LIMIT 1` intact. Three separate hypotheses about `rank` belonging in
+`DERIVING_INTENTS`, or about option (b) naming rankings as computations, were
+all wrong, and two of them were implemented and reverted before this was run.
+
+**Removing "or less" is the whole fix.** Nothing else in the prompt needed to
+change, and nothing else did.
+
+**A conditional warning, for future work only.** `intent="rank"` is in
+`DERIVING_INTENTS`, so a ranking's prompt renders `_JOB_MUST_DERIVE` and
+`_JOB_EITHER` — the "(a)/(b)" text, and the words "a ranking" inside it — is
+never shown for this question at all. The second table's last row is
+therefore hypothetical: it applies only if `rank` is ever moved out of
+`DERIVING_INTENTS`, at which point `_JOB_EITHER` starts being used and
+stripping "a ranking" from option (b) brings `LIMIT 1` back. As things stand
+that phrase has no effect on a ranking question.
+
+The recurring lesson of this section held again, and the cost of ignoring it
+was two wrong edits: **this model's behaviour is not reachable by reasoning
+about the prompt.** A six-variant harness took minutes and answered it
+outright. Reach for that first.
+
+**Nothing pins this wording.** All 58 retrieval and validator tests pass with
+"or less" present or absent, so a tidy-up could restore it and every ranking
+question would silently return one row again. A test asserting on the rules
+text would close that, and has not been written.
 
 ### 4.4 The Q4 subtraction -- fixed, by moving it
 

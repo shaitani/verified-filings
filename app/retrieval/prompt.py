@@ -577,8 +577,9 @@ RULES (the statement is rejected if it breaks one)
    CTE, no SELECT INTO, no locking clause.
 2. `{VIEW}` is the only readable relation. `fact`, `filing`, `company` and
    `concept` will raise a permission error.
-3. End with `LIMIT {MAX_ROWS}` or less. A statement with no LIMIT is rejected;
-   nothing adds one for you.
+3. End with `LIMIT {MAX_ROWS}`. A statement with no LIMIT is rejected;
+   nothing adds one for you, and a smaller limit is not an improvement --
+   it drops rows the plan asked for.
 4. Give every projected column an explicit alias unless it is a bare column
    reference. `NULL::text` without an alias is a column named "text".
 5. Never mix rows of different `unit` in one arithmetic expression.
