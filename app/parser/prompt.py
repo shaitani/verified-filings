@@ -104,6 +104,13 @@ RULES
       "this year"          -> last_n_years: 1
       "the last 3 years"   -> last_n_years: 3
       "recently"           -> last_n_years: 1
+    A FILING IS NOT A TIME, but naming one still means its period, which is
+    the most recent one on file:
+      "latest 10-K"        -> last_n_years: 1
+      "its latest 10-K"    -> last_n_years: 1
+      "the most recent 10-K" -> last_n_years: 1
+      "the latest filing"  -> last_n_years: 1
+      "the latest annual report" -> last_n_years: 1
 
 5b. EVERY QUESTION NEEDS AT LEAST ONE PERIOD ELEMENT. A question with no
     period covers every year on file, which is almost never what was meant.
