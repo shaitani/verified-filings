@@ -24,6 +24,7 @@ from app.retrieval import (
     build_prompt,
     generate,
     plan_cells,
+    prompt as prompt_module,
 )
 from app.retrieval.generator import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT, extract_sql
 from app.schemas.query import (
@@ -370,3 +371,30 @@ async def test_a_slow_model_is_reported_not_left_hanging(monkeypatch):
     monkeypatch.setattr("app.retrieval.generator.AsyncClient", client)
     with pytest.raises(GenerationError, match="did not finish"):
         await generate(_one_cell_plan())
+
+
+def test_a_prompt_too_long_for_the_context_window_is_refused() -> None:
+    """The worst failure shape in the project, made loud.
+
+    Measured 2026-09-24 on q038: 378 cells render to 53,114 characters against
+    an 8,192-token window, Ollama truncated it silently, and the model answered
+    from the part it saw -- computing the windows it could not read from the
+    fiscal-year label. Oracle's FY ends in May, so every one was twelve months
+    out, and the rows were attributable, plausible and in the right unit.
+    """
+    # An empty `Binding.periods` means every period in scope, so one binding
+    # over a hundred years is a hundred cells without listing them twice.
+    many = [_annual(APPLE, year) for year in range(2000, 2100)]
+    with pytest.raises(UnsupportedPlan, match="truncate it silently"):
+        build_prompt(_plan([_binding()], many))
+
+
+def test_the_char_budget_tracks_the_generator_s_context_window() -> None:
+    """Two copies of 8,192, so a test rather than a shared constants module --
+    `generator` imports this module, so importing back would be a cycle."""
+    from app.retrieval import generator
+
+    assert prompt_module._CONTEXT_TOKENS == generator.CONTEXT_TOKENS
+    assert prompt_module.MAX_PROMPT_CHARS == int(
+        generator.CONTEXT_TOKENS * prompt_module.CHARS_PER_TOKEN
+    )

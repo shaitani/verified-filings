@@ -485,8 +485,30 @@ def _plan_notes(plan: QueryPlan) -> list[str]:
     return notes
 
 
+#: Characters of *this* prompt per token, measured 2026-09-24: the 378-cell
+#: q038 prompt is 53,114 characters and Ollama reported ``prompt_eval_count``
+#: 25,729 for it. 2.06, nowhere near prose's usual 4 -- a filter table is
+#: digits, dashes and pipes, which tokenise badly. Rounded down, so the
+#: estimate errs towards refusing.
+CHARS_PER_TOKEN = 2.0
+
+#: Mirrors ``generator.CONTEXT_TOKENS``; a test keeps the two in step. Copied
+#: rather than imported because ``generator`` imports *this* module, and the
+#: cycle is not worth a shared constants file.
+_CONTEXT_TOKENS = 8192
+
+#: The longest prompt worth sending. Beyond the window the model reads through,
+#: **Ollama truncates silently** -- no error, no warning, and the model answers
+#: from the part it saw.
+MAX_PROMPT_CHARS = int(_CONTEXT_TOKENS * CHARS_PER_TOKEN)
+
+
 def build_prompt(plan: QueryPlan) -> str:
-    """Render ``plan`` as the text Qwen is asked to write SQL from."""
+    """Render ``plan`` as the text Qwen is asked to write SQL from.
+
+    Raises ``UnsupportedPlan`` when the rendered prompt cannot fit the model's
+    context window. See ``_refuse_if_too_long``.
+    """
     cells = plan_cells(plan)
     spec = plan.result
     notes = _plan_notes(plan)
@@ -496,7 +518,7 @@ def build_prompt(plan: QueryPlan) -> str:
     worked_example = _EXAMPLE_COMBINING if combining else _EXAMPLE_PLAIN
     combine_help = _combine_help(cells)
 
-    return f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
+    prompt = f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
 
 QUESTION
 {plan.question}
@@ -588,3 +610,42 @@ CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
 {chr(10).join(notes) if notes else "- none"}
 
 SQL:"""
+    _refuse_if_too_long(prompt, cells)
+    return prompt
+
+
+def _refuse_if_too_long(prompt: str, cells: list[PlanCell]) -> None:
+    """Refuse a prompt the model cannot read all of.
+
+    **Ollama truncates an over-long prompt without saying so.** Measured
+    2026-09-24 on q038, "Which company had the largest single-quarter revenue
+    decline?": 378 cells render to 53,114 characters, roughly 25,700 tokens,
+    against a window of 8,192. The model ingested 4,098 of them -- it never saw
+    five sixths of the filter table -- and wrote a syntactically valid statement
+    covering 40 cells.
+
+    What makes that the worst failure shape in this project is the second half.
+    Working from a table it could only partly see, the model stopped copying
+    windows and started *computing* them from the fiscal-year label: Oracle's
+    FY2021 Q1 came out as 2021-06-01 when the plan says 2020-06-01, because
+    Oracle's year ends in May. A fiscal year's name and its dates are
+    independent (PITFALLS §1.1), so every one of those windows was twelve months
+    wrong -- and the rows were attributable, plausible and in the right unit.
+    Nothing downstream would have caught it.
+
+    Raising the window is not the fix and was measured too: at ``num_ctx``
+    32,768 the same prompt got all 25,729 tokens in and the model still wrote
+    only 139 of 378 rows. Transcription fidelity is its own limit. This check
+    exists so the case *fails loudly* in the meantime, which is the whole
+    premise of the project -- the alternative is invented dates reaching a
+    reader.
+    """
+    if len(prompt) <= MAX_PROMPT_CHARS:
+        return
+    raise UnsupportedPlan(
+        f"the plan renders to {len(prompt):,} characters (~"
+        f"{int(len(prompt) / CHARS_PER_TOKEN):,} tokens) for {len(cells)} cell(s), "
+        f"against a {_CONTEXT_TOKENS:,}-token context window. Ollama would "
+        f"truncate it silently and the model would answer from the part it saw, "
+        f"inventing the windows it could not read"
+    )
