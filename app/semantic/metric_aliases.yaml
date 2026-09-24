@@ -482,6 +482,24 @@ metrics:
       cent, which is not a traded price. Answering this needs a market data
       source.
 
+  # Measured 2026-09-24: zero concepts matching NumberOfEmployees, Headcount or
+  # Workforce are loaded. The twelve that match "Employee" are all dollar
+  # amounts or share counts -- EmployeeRelatedLiabilitiesCurrent is accrued
+  # payroll. Left unlisted, "employees" fell to embedding search and came back
+  # offering that liability at 0.69, held back only by the binding bar.
+  headcount:
+    label: Employee headcount
+    synonyms: [employees, employee count, number of employees, staff, workforce,
+               total employees, how many employees, staff count, head count]
+    unavailable: >-
+      Employee headcount is filed as dei:EntityNumberOfEmployees on the cover
+      page of a 10-K, and the SEC's XBRL data endpoint does not return cover-page
+      dei facts -- so no headcount for any filer is in this store. The concepts
+      here whose names mention employees are all money or shares: accrued payroll
+      (us-gaap:EmployeeRelatedLiabilitiesCurrent), share-based compensation,
+      benefit-plan contributions. None is a count of people. Answering this needs
+      the filing cover page, not the XBRL facts.
+
   market_cap:
     label: Market capitalisation
     synonyms: [market capitalization, market capitalisation, market value, mkt cap]
