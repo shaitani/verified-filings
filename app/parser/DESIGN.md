@@ -165,6 +165,38 @@ The faithfulness gate still applies in full to metric, company and
 company_group elements, which is where a paraphrase actually costs a wrong
 number.
 
+## 6a. A qualifier is its own element, because every other home is worse
+
+Added 2026-09-23. "How much revenue did Apple make from iPhones?" has a phrase
+that cuts the metric down to part of the company, and before `metric_qualifier`
+existed the model had three places to put it and all three were wrong:
+
+| where it went | what happened |
+|---|---|
+| a **period** element | refused for naming no time. True, and tells the reader nothing about iPhones. Measured 5/5 runs |
+| folded into the **metric** text | falls to embedding search, comes back as something adjacent |
+| **dropped** | the metric binds alone and returns Apple's **total** revenue |
+
+The third is the one that matters. Measured before the fix: $391,035,000,000
+returned for a question about one product, verdict `complete`, fully
+attributable, answering something nobody asked. A prompt rule that only said
+"a product is not a period" produced exactly that, and turned the eval set's
+single `unsafe` into two.
+
+So the mapper rule is **an unsatisfiable qualifier takes its metric with it**
+(`_apply_qualifiers`), and the refusal names the metric, because the metric is
+what the reader will not be getting.
+
+No qualifier is satisfiable today: the XBRL data endpoint carries no
+dimensional facts at all (PITFALLS §3.2). The check is written as
+`_qualifier_is_satisfiable` rather than a flat refusal so a later segment
+ingest changes one function.
+
+Measured after: q030 and q031 both `refused`, three graded runs each, with
+q001, q012, q013, q016 and q025 unchanged -- including "revenue **from** 2021
+through 2025", which is the control most at risk from a rule about the word
+"from".
+
 ## 7. Deliberately not done
 
 **The answerability gate** (failure #9). "Did any of these companies restate

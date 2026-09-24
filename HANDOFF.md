@@ -284,6 +284,13 @@ In rough order of how much they matter.
   [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) §4.3d.
 - **Restatements** are picked correctly by `is_latest` but never *disclosed*
   (PITFALLS §2.2). The `Note` channel would carry it.
+- **Segment and geography questions refuse, by design.** "Revenue from
+  iPhones" resolves its qualifier to a refusal naming what is missing, because
+  the XBRL data endpoint carries no dimensional facts (PITFALLS §3.2). The
+  mechanism is `MetricQualifierElementIn` plus `_apply_qualifiers`, and the
+  load-bearing rule is that an unsatisfiable qualifier **takes its metric with
+  it** — without that, the metric binds alone and a question about one product
+  is answered with a company total. `app/parser/DESIGN.md` §6a.
 - **`sic_office` has no source.** `sic_numbers.json` carries code and
   description only, and the SEC assigns review offices by SIC *range*, a
   mapping this project does not have. Its refusal says exactly that.
@@ -322,7 +329,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (434 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (436 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 8. Verifying things yourself

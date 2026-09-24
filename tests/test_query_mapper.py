@@ -1340,3 +1340,65 @@ async def test_when_no_named_company_resolves_the_scope_does_not_widen(
     assert plan.filters.ciks == []
     assert any("Samsung" in u.reason for u in plan.unresolved)
     assert not [n for n in plan.notes if n.kind == "partial_coverage"]
+
+
+# --------------------------------------------------------------------------- #
+# metric_qualifier
+# --------------------------------------------------------------------------- #
+
+
+async def test_an_unsatisfiable_qualifier_takes_its_metric_with_it(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The safety property the element exists for.
+
+    "How much revenue did Apple make from iPhones?" must not come back as
+    Apple's total revenue. Measured 2026-09-23 before this existed: dropping
+    the qualifier left the metric bound and returned $391,035,000,000 for a
+    question about one product -- verdict `complete`, fully attributable, and
+    answering something nobody asked.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "q", "text": "from left-handed widgets", "kind": "metric_qualifier",
+             "qualifies": "m"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    assert plan.bindings == [], "the metric must not answer on its own"
+    (problem,) = [u for u in plan.unresolved if u.element_id == "m"]
+    assert "left-handed widgets" in problem.reason
+    assert "company totals only" in problem.reason
+
+
+async def test_a_qualifier_only_drops_the_metric_it_names(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """A second, unqualified metric still answers.
+
+    Otherwise one narrow phrase would refuse a whole multi-metric question,
+    which is the over-correction the partial path exists to avoid.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m1", "text": "widget sales", "kind": "metric"},
+            {"id": "m2", "text": "widget sales", "kind": "metric"},
+            {"id": "q", "text": "in Europe", "kind": "metric_qualifier", "qualifies": "m1"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    bound = {binding.element_id for binding in plan.bindings}
+    assert bound == {"m2"}, "only the qualified metric is dropped"
+    assert [u.element_id for u in plan.unresolved] == ["m1"]

@@ -68,6 +68,27 @@ RULES
    period        a span of time: "2024", "last 3 years", "Q3"
    company_group an industry rather than a named filer: "semiconductor
                  companies". Set sic_description to a word from the question.
+   metric_qualifier
+                 a phrase cutting a metric down to PART of the company:
+                 "from iPhones", "from outside the US", "in Europe", "for the
+                 cloud segment". Set `qualifies` to the id of the metric
+                 element it narrows.
+
+4a. A PRODUCT, PLACE OR BUSINESS LINE IS A metric_qualifier, NEVER A PERIOD.
+    "from 2021" is a period; "from iPhones" is not. The same words -- "from",
+    "in", "by", "for" -- introduce both, so read what FOLLOWS them: a year, a
+    quarter or a relative span is a period, anything else that narrows the
+    figure is a metric_qualifier.
+      "revenue from iPhones"
+        -> metric "revenue", metric_qualifier "from iPhones" qualifying it
+      "revenue from outside the United States"
+        -> metric "revenue", metric_qualifier "from outside the United States"
+      "revenue from 2021 through 2025"
+        -> periods, one per year. No qualifier.
+    Do NOT fold the phrase into the metric's `text`, and do NOT leave it out.
+    Leaving it out is the worst option available: the question becomes "what
+    was the company's revenue", and a total is returned for a question that
+    asked about one product.
 
 5. A period element MUST carry at least one of `fiscal_year`, `last_n_years`
    or `fiscal_period`, or it names no time at all.
