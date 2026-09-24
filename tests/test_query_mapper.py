@@ -1402,3 +1402,92 @@ async def test_a_qualifier_only_drops_the_metric_it_names(
     bound = {binding.element_id for binding in plan.bindings}
     assert bound == {"m2"}, "only the qualified metric is dropped"
     assert [u.element_id for u in plan.unresolved] == ["m1"]
+
+
+# --------------------------------------------------------------------------- #
+# Uneven freshness
+# --------------------------------------------------------------------------- #
+#
+# Nothing else in this file has two companies loaded to different points,
+# because the corpus never is. Both helpers below exist for the day it is.
+
+
+def _window(cik: int, year: int, period: str, end: date) -> ResolvedPeriod:
+    return ResolvedPeriod(
+        company_cik=cik,
+        fiscal_year=year,
+        fiscal_period=period,
+        period_start=end - timedelta(days=89),
+        period_end=end,
+    )
+
+
+def _windows(*periods: ResolvedPeriod) -> dict[tuple[int, int, str], ResolvedPeriod]:
+    return {(p.company_cik, p.fiscal_year, p.fiscal_period): p for p in periods}
+
+
+def test_each_company_gets_its_own_newest_year() -> None:
+    """One filer brought forward must not move everyone else's "last year".
+
+    This was a single global `max(fiscal_year)`. Load FY2026 for cik 11 and
+    every question asking for the last year would ask cik 22 for FY2026 too,
+    which it has no window for -- so it resolves to nothing and a question
+    about cik 22 fails because of an ingest that touched cik 11.
+    """
+    windows = _windows(
+        _window(11, 2026, "FY", date(2026, 12, 31)),
+        _window(11, 2025, "FY", date(2025, 12, 31)),
+        _window(22, 2025, "FY", date(2025, 6, 30)),
+        _window(22, 2024, "FY", date(2024, 6, 30)),
+    )
+    assert query_mapper._newest_by_company(windows) == {11: 2026, 22: 2025}
+
+
+def test_the_newest_quarter_is_found_by_date_not_by_label() -> None:
+    """`last_n_quarters` must not assume the newest quarter is a Q4.
+
+    A corpus loaded mid-year ends on Q2, and picking by label would either
+    name a quarter that does not exist or silently return an older one.
+    """
+    windows = _windows(
+        _window(11, 2026, "Q2", date(2026, 6, 30)),
+        _window(11, 2026, "Q1", date(2026, 3, 31)),
+        _window(11, 2025, "Q4", date(2025, 12, 31)),
+    )
+    picked = query_mapper._recent_quarters(windows, 1, ciks=[11])
+    assert [p.fiscal_period for p in picked.values()] == ["Q2"]
+    assert [p.fiscal_year for p in picked.values()] == [2026]
+
+
+def test_recent_quarters_are_taken_per_company() -> None:
+    """Fiscal calendars here sit up to three months apart, so one global
+    "newest quarter" would hand a June filer a December filer's window."""
+    windows = _windows(
+        _window(11, 2025, "Q4", date(2025, 12, 31)),
+        _window(11, 2025, "Q3", date(2025, 9, 30)),
+        _window(22, 2025, "Q4", date(2025, 6, 30)),
+        _window(22, 2025, "Q3", date(2025, 3, 31)),
+    )
+    picked = query_mapper._recent_quarters(windows, 1, ciks=[11, 22])
+    ends = {p.company_cik: p.period_end for p in picked.values()}
+    assert ends == {11: date(2025, 12, 31), 22: date(2025, 6, 30)}
+
+
+def test_a_company_out_of_scope_contributes_no_quarters() -> None:
+    windows = _windows(
+        _window(11, 2025, "Q4", date(2025, 12, 31)),
+        _window(99, 2025, "Q4", date(2025, 12, 31)),
+    )
+    picked = query_mapper._recent_quarters(windows, 4, ciks=[11])
+    assert {p.company_cik for p in picked.values()} == {11}
+
+
+def test_the_annual_window_is_never_offered_as_a_quarter() -> None:
+    """A full year ends on the same date as its own Q4, so sorting by
+    `period_end` alone would let the annual figure in."""
+    windows = _windows(
+        _window(11, 2025, "FY", date(2025, 12, 31)),
+        _window(11, 2025, "Q4", date(2025, 12, 31)),
+    )
+    picked = query_mapper._recent_quarters(windows, 2, ciks=[11])
+    assert [p.fiscal_period for p in picked.values()] == ["Q4"]

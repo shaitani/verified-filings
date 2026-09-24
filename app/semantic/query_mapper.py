@@ -620,6 +620,12 @@ async def _resolve_periods(
     answer for; a filing whose own reporting window can't be identified is not
     one of them.
 
+    That count is taken **per company**. It used to be one global
+    ``max(fiscal_year)`` across everything in scope, which is the same value
+    only while the corpus is evenly fresh. Load FY2026 for one filer and every
+    other filer's "last year" starts asking for a year it does not have, so a
+    question about Microsoft begins failing because of an Apple ingest.
+
     ``last_n_quarters`` is resolved **per company, by date**, which the year
     path is not -- see ``_recent_quarters``.
     """
@@ -636,7 +642,7 @@ async def _resolve_periods(
             for element in elements
         ]
 
-    newest = max(fiscal_year for _, fiscal_year, _ in windows)
+    newest_by_company = _newest_by_company(windows)
     resolved: dict[tuple[int, int, str], ResolvedPeriod] = {}
     problems: list[Unresolved] = []
 
@@ -668,18 +674,30 @@ async def _resolve_periods(
             continue
 
         wanted_period = element.fiscal_period or "FY"
-        if element.fiscal_year is not None:
-            wanted_years = {element.fiscal_year}
-        elif element.last_n_years is not None:
-            wanted_years = set(range(newest - element.last_n_years + 1, newest + 1))
-        else:
-            wanted_years = set()  # every year we have a window for
 
-        matched = {
-            key: period
-            for key, period in windows.items()
-            if key[2] == wanted_period and (not wanted_years or key[1] in wanted_years)
-        }
+        def _wanted(company_cik: int, element: PeriodElementIn = element) -> set[int] | None:
+            """The years this element selects *for this company*.
+
+            ``None`` means unconstrained -- every year there is a window for.
+            A year range is computed from that company's own newest year, so
+            filers loaded to different points each get their own last N.
+            """
+            if element.fiscal_year is not None:
+                return {element.fiscal_year}
+            if element.last_n_years is None:
+                return None
+            newest = newest_by_company.get(company_cik)
+            if newest is None:
+                return set()
+            return set(range(newest - element.last_n_years + 1, newest + 1))
+
+        matched = {}
+        for key, period in windows.items():
+            if key[2] != wanted_period:
+                continue
+            years = _wanted(key[0])
+            if years is None or key[1] in years:
+                matched[key] = period
         if not matched:
             problems.append(
                 Unresolved(
@@ -690,6 +708,25 @@ async def _resolve_periods(
         resolved.update(matched)
 
     return [resolved[key] for key in sorted(resolved)], problems
+
+
+def _newest_by_company(
+    windows: dict[tuple[int, int, str], ResolvedPeriod],
+) -> dict[int, int]:
+    """The newest fiscal year each company has a window for.
+
+    Per company rather than one global maximum, which is what this replaced.
+    The two are the same number only while every filer is loaded to the same
+    point; the day one is brought forward, a single maximum makes every other
+    filer's "last year" name a year they do not have, and they resolve to
+    nothing. Nothing about that failure points at the ingest that caused it.
+    """
+    newest: dict[int, int] = {}
+    for company_cik, fiscal_year, _ in windows:
+        current = newest.get(company_cik)
+        if current is None or fiscal_year > current:
+            newest[company_cik] = fiscal_year
+    return newest
 
 
 def _recent_quarters(
