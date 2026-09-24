@@ -63,6 +63,7 @@ class WireElement(BaseModel):
     fiscal_year: int | None = None
     fiscal_period: QueryFiscalPeriod | None = None
     last_n_years: int | None = None
+    last_n_quarters: int | None = None
 
     # Company-group selectors. Same rule.
     sic_code: str | None = None

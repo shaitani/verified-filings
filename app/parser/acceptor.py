@@ -138,7 +138,9 @@ _YEAR = re.compile(r"\b\d{4}\b")
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "metric": frozenset(),
     "company": frozenset(),
-    "period": frozenset({"fiscal_year", "fiscal_period", "last_n_years"}),
+    "period": frozenset(
+        {"fiscal_year", "fiscal_period", "last_n_years", "last_n_quarters"}
+    ),
     "company_group": frozenset({"sic_code", "sic_description"}),
     "metric_qualifier": frozenset({"qualifies"}),
 }
@@ -304,11 +306,18 @@ def _check_period(element: WireElement, span: str, question: str) -> None:
     one it names, and "revenue growth in 2024" is meaningless without 2023.
     Two years back is not a comparison, so that is where the line sits.
     """
-    if (element.fiscal_year, element.last_n_years, element.fiscal_period) == (None,) * 3:
+    if (
+        element.fiscal_year,
+        element.last_n_years,
+        element.last_n_quarters,
+        element.fiscal_period,
+    ) == (None,) * 4:
         raise MalformedProposal(
             f"period element {element.id!r} ({span!r}) carries no fiscal_year, "
-            "last_n_years or fiscal_period, so it names no time at all. Set "
-            "fiscal_year for a stated year, or last_n_years for a relative span."
+            "last_n_years, last_n_quarters or fiscal_period, so it names no time "
+            "at all. Set fiscal_year for a stated year, last_n_years for a "
+            "relative span of years, or last_n_quarters for the most recent "
+            "quarters."
         )
 
     if element.fiscal_year is None:
@@ -367,6 +376,7 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 fiscal_year=element.fiscal_year,
                 fiscal_period=element.fiscal_period,
                 last_n_years=element.last_n_years,
+                last_n_quarters=element.last_n_quarters,
             )
         if element.kind == "metric_qualifier":
             if element.qualifies is None:

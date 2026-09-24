@@ -120,11 +120,39 @@ def test_duplicate_element_ids_are_rejected() -> None:
         )
 
 
-def test_period_rejects_absolute_and_relative_together() -> None:
-    with pytest.raises(ValidationError, match="not both"):
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"fiscal_year": 2024, "last_n_years": 3},
+        {"fiscal_year": 2024, "last_n_quarters": 2},
+        {"last_n_years": 3, "last_n_quarters": 2},
+        {"fiscal_year": 2024, "last_n_years": 3, "last_n_quarters": 2},
+    ],
+)
+def test_a_period_says_when_in_exactly_one_way(fields) -> None:
+    """Absolute, relative-by-year and relative-by-quarter are exclusive.
+
+    A `fiscal_year` pins the window the relative forms are meant to search
+    for, and two relative counts ask for different counts of different things.
+    None of the combinations has a meaning the mapper could act on.
+    """
+    with pytest.raises(ValidationError, match="exactly one way"):
+        QueryIn.model_validate(_query({"id": "e1", "text": "x", "kind": "period", **fields}))
+
+
+def test_last_n_quarters_cannot_name_a_particular_quarter() -> None:
+    """`last_n_quarters` already means "the most recent"; `fiscal_period`
+    names a specific one. Both set, the element contradicts itself."""
+    with pytest.raises(ValidationError, match="cannot both be true"):
         QueryIn.model_validate(
             _query(
-                {"id": "e1", "text": "x", "kind": "period", "fiscal_year": 2024, "last_n_years": 3}
+                {
+                    "id": "e1",
+                    "text": "x",
+                    "kind": "period",
+                    "last_n_quarters": 2,
+                    "fiscal_period": "Q3",
+                }
             )
         )
 

@@ -619,6 +619,9 @@ async def _resolve_periods(
     ``Filing`` row. "The last 5 years" should mean five years this database can
     answer for; a filing whose own reporting window can't be identified is not
     one of them.
+
+    ``last_n_quarters`` is resolved **per company, by date**, which the year
+    path is not -- see ``_recent_quarters``.
     """
     if not elements:
         return [], []
@@ -638,7 +641,23 @@ async def _resolve_periods(
     problems: list[Unresolved] = []
 
     for element in elements:
-        if (element.fiscal_year, element.last_n_years, element.fiscal_period) == (None,) * 3:
+        if element.last_n_quarters is not None:
+            matched = _recent_quarters(windows, element.last_n_quarters, ciks=ciks)
+            if not matched:
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"no quarterly reporting window found for {element.text!r}",
+                    )
+                )
+            resolved.update(matched)
+            continue
+
+        if (
+            element.fiscal_year,
+            element.last_n_years,
+            element.fiscal_period,
+        ) == (None,) * 3:
             problems.append(
                 Unresolved(
                     element_id=element.id,
@@ -671,6 +690,41 @@ async def _resolve_periods(
         resolved.update(matched)
 
     return [resolved[key] for key in sorted(resolved)], problems
+
+
+def _recent_quarters(
+    windows: dict[tuple[int, int, str], ResolvedPeriod],
+    count: int,
+    *,
+    ciks: list[int],
+) -> dict[tuple[int, int, str], ResolvedPeriod]:
+    """The ``count`` newest quarter windows for each company, by ``period_end``.
+
+    **Per company, and by date rather than by label.** Both matter.
+
+    By date, because the label cannot be trusted to be the newest: "the last
+    quarter" was previously written as ``fiscal_period="Q4"`` with
+    ``last_n_years=1``, which is right only while every filer's data happens to
+    end at a fiscal year end. Load Q1 and Q2 of a new year and the newest
+    fiscal year has no Q4 at all, so that element resolves to nothing and a
+    working question starts refusing. Sorting the windows this company actually
+    has and taking the last few cannot go stale that way.
+
+    Per company, because fiscal calendars in this corpus are up to three months
+    apart. A single global "newest quarter" would hand Microsoft, whose year
+    ends in June, the window belonging to a December filer.
+    """
+    by_company: dict[int, list[tuple[int, int, str]]] = defaultdict(list)
+    for key, period in windows.items():
+        if period.fiscal_period != "FY" and period.company_cik in set(ciks):
+            by_company[period.company_cik].append(key)
+
+    picked: dict[tuple[int, int, str], ResolvedPeriod] = {}
+    for company_keys in by_company.values():
+        newest_first = sorted(company_keys, key=lambda k: windows[k].period_end, reverse=True)
+        for key in newest_first[:count]:
+            picked[key] = windows[key]
+    return picked
 
 
 def _with_derived_q4(

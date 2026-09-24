@@ -136,7 +136,6 @@ RULES
     WHICH YEAR'S quarter. Set both:
       "Q3 2024"          -> fiscal_period: "Q3", fiscal_year: 2024
       "Q4 last year"     -> fiscal_period: "Q4", last_n_years: 1
-      "last quarter"     -> fiscal_period: "Q4", last_n_years: 1
       "Q4" on its own    -> fiscal_period: "Q4", last_n_years: 1
     A quarter with NO year attached means that quarter in EVERY year on file,
     which is rarely what was meant. IF THE QUESTION NAMES ONE QUARTER, GIVE IT
@@ -162,6 +161,19 @@ RULES
     It also does not apply to a period that already covers every year -- one
     with only a fiscal_period and no year (rule 5d). There is nothing before
     "every year", so do not add an earlier one.
+
+5g. "THE LAST QUARTER" NAMES NO QUARTER, so do not pick one. Use
+    `last_n_quarters`, which means the most recent quarters on file whatever
+    they turn out to be:
+      "last quarter"          -> last_n_quarters: 1
+      "the latest quarter"    -> last_n_quarters: 1
+      "the most recent quarter" -> last_n_quarters: 1
+      "the last four quarters"  -> last_n_quarters: 4
+      "the past two quarters"   -> last_n_quarters: 2
+    Never set `fiscal_period` alongside it -- `last_n_quarters` already says
+    which quarters, and naming one as well contradicts it. Never write "Q4"
+    for "last quarter": the newest quarter on file is only a Q4 while the data
+    happens to stop at a year end.
 
 6. One period element covers ONE quarter label. "by quarter", "each quarter"
    or "quarterly" therefore needs FOUR elements -- Q1, Q2, Q3 and Q4 -- each

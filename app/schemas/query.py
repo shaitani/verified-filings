@@ -180,8 +180,9 @@ class CompanyElementIn(_ElementBase):
 
 
 class PeriodElementIn(_ElementBase):
-    """A time span. Either absolute (``fiscal_year`` / ``fiscal_period``) or
-    relative (``last_n_years``); the mapper turns both into concrete years.
+    """A time span. Absolute (``fiscal_year`` / ``fiscal_period``), relative by
+    year (``last_n_years``), or relative by quarter (``last_n_quarters``); the
+    mapper turns all three into concrete windows.
 
     ``fiscal_period`` uses ``QueryFiscalPeriod``, which accepts "Q4" even
     though no Q4 filing exists -- see that alias. The mapper turns it into the
@@ -193,10 +194,48 @@ class PeriodElementIn(_ElementBase):
     fiscal_period: QueryFiscalPeriod | None = None
     last_n_years: int | None = Field(default=None, ge=1, le=20)
 
+    #: "the last quarter", "the last four quarters" -- the N most recent
+    #: quarter windows **on file for that company**, whatever they happen to
+    #: be, rather than a named quarter of a named year.
+    #:
+    #: It exists because nothing else could say it. "Last quarter" used to be
+    #: written as ``fiscal_period="Q4", last_n_years=1``, which is only correct
+    #: while every filer's data happens to end at a fiscal year end. Load Q1
+    #: and Q2 of a new year and the newest fiscal year has no Q4, so the
+    #: element resolves to nothing and "last quarter" refuses outright -- not a
+    #: wrong figure, but a working question that silently stops working the day
+    #: the corpus is brought up to date mid-year.
+    #:
+    #: Resolved per company, which the year path is not: fiscal calendars are
+    #: three months apart across this corpus, so "the last two quarters" is a
+    #: different pair of windows for Apple than for Microsoft.
+    last_n_quarters: int | None = Field(default=None, ge=1, le=40)
+
     @model_validator(mode="after")
-    def _absolute_or_relative_not_both(self) -> PeriodElementIn:
-        if self.last_n_years is not None and self.fiscal_year is not None:
-            raise ValueError("set fiscal_year or last_n_years, not both")
+    def _one_way_of_saying_when(self) -> PeriodElementIn:
+        """Absolute, relative-by-year and relative-by-quarter are exclusive.
+
+        Combining them has no meaning the mapper could act on: a
+        ``fiscal_year`` pins the window the other two are supposed to search
+        for, and ``last_n_years`` with ``last_n_quarters`` asks for two
+        different counts of two different things.
+        """
+        ways = {
+            "fiscal_year": self.fiscal_year,
+            "last_n_years": self.last_n_years,
+            "last_n_quarters": self.last_n_quarters,
+        }
+        set_ways = sorted(name for name, value in ways.items() if value is not None)
+        if len(set_ways) > 1:
+            raise ValueError(
+                f"a period says when in exactly one way, but {set_ways} were all set"
+            )
+        if self.last_n_quarters is not None and self.fiscal_period is not None:
+            raise ValueError(
+                f"last_n_quarters={self.last_n_quarters} already means the most recent "
+                f"quarters; fiscal_period={self.fiscal_period!r} names a particular one, "
+                f"and the two cannot both be true"
+            )
         return self
 
 
