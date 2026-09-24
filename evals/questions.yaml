@@ -237,12 +237,12 @@ questions:
 
   - id: q032
     question: What does Intel say about competition risk in its latest 10-K?
-    expect: [refused]  # competition risk -- filing text
+    expect: [refused, refused]  # the "say about"; then competition risk
     blocked_by: [filing_text]
 
   - id: q033
     question: Why did Intel's margins fall in 2023?
-    expect: [refused]  # margins -- the question is causal
+    expect: [refused, asked]  # the "Why" itself; then which margin
     blocked_by: [causal, filing_text]
 
   - id: q034

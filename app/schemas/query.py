@@ -312,12 +312,44 @@ class MetricQualifierElementIn(_ElementBase):
     qualifies: str = Field(min_length=1, max_length=32)
 
 
+class NarrativeElementIn(_ElementBase):
+    """A phrase asking for words rather than a figure -- a cause, an
+    explanation, something the filing *says*. "**Why** did margins fall",
+    "what does Intel **say about** competition risk".
+
+    Modelled on ``MetricQualifierElementIn`` and for the same reason: the span
+    has nowhere else to go, and every wrong home for it misleads differently.
+    Folded into the *metric* text it reaches embedding search and comes back as
+    an adjacent concept. **Dropped**, it is worst: "Why did Intel's margins
+    fall in 2023?" becomes "Intel's margins in 2023", a well-formed question
+    nobody asked, answered with a figure that does not address it. Measured
+    2026-09-24 -- q033 came back offering to clarify *which margin*, having
+    never noticed the question was not about a figure at all.
+
+    This is the narrow, structural half of HANDOFF §6's "nothing checks that
+    the answer matches the question". It does not check meaning in general; it
+    catches the case where the asker named, in words, a thing this corpus is
+    not made of.
+
+    What it resolves to is always a refusal, because the store holds filed
+    numeric facts and nothing else -- no risk factors, no management
+    discussion, no causes. It is a first-class element rather than a rule in
+    the prompt so the refusal can be *specific* about which of those was
+    asked for, and so it can travel **alongside** a clarification: a question
+    can be partly unanswerable and partly ambiguous, and saying both in one
+    reply beats answering neither.
+    """
+
+    kind: Literal["narrative"] = "narrative"
+
+
 ElementIn = Annotated[
     MetricElementIn
     | CompanyElementIn
     | CompanyGroupElementIn
     | PeriodElementIn
-    | MetricQualifierElementIn,
+    | MetricQualifierElementIn
+    | NarrativeElementIn,
     Field(discriminator="kind"),
 ]
 

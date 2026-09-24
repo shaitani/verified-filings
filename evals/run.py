@@ -120,6 +120,11 @@ NOT_PRODUCED = "(not produced)"
 
 Stage = Literal["parse", "map", "answer"]
 
+#: Element kinds that count as "a thing the question asked for". A
+#: `metric_qualifier` is excluded on purpose: its refusal is attached to the
+#: metric it narrows, so counting it too would report one failure twice.
+ITEM_KINDS = ("metric", "narrative")
+
 
 @dataclass
 class Item:
@@ -166,7 +171,7 @@ def substitute(question: str, *, template: bool) -> str:
 
 
 def observe(query: QueryIn, plan: QueryPlan, result: ResultSet | None) -> list[tuple[str, Outcome]]:
-    """``(phrase, outcome)`` for every metric the question named, in order.
+    """``(phrase, outcome)`` for everything the question asked for, in order.
 
     Precedence matters where an element lands in two buckets at once. A
     curated question outranks everything: it is the one outcome a person
@@ -185,7 +190,12 @@ def observe(query: QueryIn, plan: QueryPlan, result: ResultSet | None) -> list[t
 
     observed: list[tuple[str, Outcome]] = []
     for element in query.elements:
-        if element.kind != "metric":
+        # Metrics and narrative spans only. A `narrative` span -- the "Why" in
+        # "why did margins fall" -- is a thing the question asked for and got
+        # an answer about, so it is an item. A `metric_qualifier` is not: its
+        # refusal is attached to the *metric* it narrows, which already appears
+        # here, and listing the qualifier too would double-count one failure.
+        if element.kind not in ITEM_KINDS:
             continue
         if element.id in clarified:
             state: Outcome = "asked"
@@ -301,13 +311,13 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
         )
 
     if stage == "parse":
-        return done([(e.text, "answered") for e in query.elements if e.kind == "metric"])
+        return done([(e.text, "answered") for e in query.elements if e.kind in ITEM_KINDS])
 
     try:
         plan = await map_query(query)
     except Exception as exc:  # the mapper does not raise by design; record it if it does
         return done(
-            [(e.text, "error") for e in query.elements if e.kind == "metric"],
+            [(e.text, "error") for e in query.elements if e.kind in ITEM_KINDS],
             detail=f"map_query {type(exc).__name__}: {exc}",
         )
 
@@ -324,13 +334,13 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
         result = await answer(plan)
     except (GenerationError, InvalidSQL, UnsupportedPlan) as exc:
         return done(
-            [(e.text, "error") for e in query.elements if e.kind == "metric"],
+            [(e.text, "error") for e in query.elements if e.kind in ITEM_KINDS],
             detail=f"{type(exc).__name__}: {exc}",
             **shared,
         )
     except Exception as exc:
         return done(
-            [(e.text, "error") for e in query.elements if e.kind == "metric"],
+            [(e.text, "error") for e in query.elements if e.kind in ITEM_KINDS],
             detail=f"unexpected {type(exc).__name__}: {exc}",
             **shared,
         )

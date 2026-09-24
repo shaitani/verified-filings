@@ -30,6 +30,7 @@ from app.schemas.query import (
     ConceptRef,
     Coverage,
     MetricElementIn,
+    NarrativeElementIn,
     Note,
     PeriodRef,
     PlanFilters,
@@ -1491,3 +1492,85 @@ def test_the_annual_window_is_never_offered_as_a_quarter() -> None:
     )
     picked = query_mapper._recent_quarters(windows, 2, ciks=[11])
     assert [p.fiscal_period for p in picked.values()] == ["Q4"]
+
+
+# --------------------------------------------------------------------------- #
+# Narrative spans: the unanswerable half of a question
+# --------------------------------------------------------------------------- #
+
+
+async def test_a_narrative_span_refuses_without_silencing_a_clarification(
+    test_session_factory, clean_fake_company
+) -> None:
+    """The point of making this an element: one reply can say both halves.
+
+    "Why did Intel's margins fall in 2023?" is unanswerable *and* ambiguous.
+    Refusing it flatly tells the reader less than the system knows, and the
+    round trip they then have to make is one they could have been spared.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "e1", "text": "Why", "kind": "narrative"},
+            {"id": "e2", "text": "profit margin", "kind": "metric"},
+            {"id": "e3", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "e4", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete, "an unanswerable span must stop the answer"
+    assert any(u.element_id == "e1" for u in plan.unresolved)
+    assert any(c.element_id == "e2" for c in plan.clarifications), (
+        "the clarification on the other half must survive the refusal"
+    )
+
+
+async def test_a_narrative_span_alone_still_refuses(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Without it the question silently becomes a different, answerable one.
+
+    Measured 2026-09-24: dropped, "why did margins fall" parses as "what were
+    the margins" and is answered with a figure that does not address it.
+    """
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "e1", "text": "Why", "kind": "narrative"},
+            {"id": "e2", "text": "widget sales", "kind": "metric"},
+            {"id": "e3", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "e4", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    assert plan.bindings, "the metric still binds; only the answer is withheld"
+    (refusal,) = [u for u in plan.unresolved if u.element_id == "e1"]
+    assert "why" in refusal.reason.lower()
+
+
+@pytest.mark.parametrize(
+    "span,expected_fragment",
+    [
+        ("Why", "why something happened"),
+        ("what caused", "why something happened"),
+        ("say about", "what the filing says"),
+        ("discuss", "what the filing says"),
+        ("the vibe", "other than a filed figure"),
+    ],
+)
+def test_the_refusal_names_which_kind_of_non_figure_was_asked_for(
+    span, expected_fragment
+) -> None:
+    """A generic "not in the dataset" would be true and useless.
+
+    q032 refused before this existed, but with "'competition risk' has no
+    concept with facts covering any requested period" -- accurate about the
+    machinery and silent about the actual reason.
+    """
+    element = NarrativeElementIn(id="e1", text=span)
+    assert expected_fragment in query_mapper._narrative_refusal(element)

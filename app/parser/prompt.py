@@ -73,6 +73,8 @@ RULES
                  "from iPhones", "from outside the US", "in Europe", "for the
                  cloud segment". Set `qualifies` to the id of the metric
                  element it narrows.
+   narrative     a phrase asking for WORDS rather than a figure: a cause, an
+                 explanation, or what the filing says. "Why", "say about".
 
 4a. A PRODUCT, PLACE OR BUSINESS LINE IS A metric_qualifier, NEVER A PERIOD.
     "from 2021" is a period; "from iPhones" is not. The same words -- "from",
@@ -89,6 +91,21 @@ RULES
     Leaving it out is the worst option available: the question becomes "what
     was the company's revenue", and a total is returned for a question that
     asked about one product.
+
+4b. A QUESTION ASKING *WHY*, OR WHAT THE FILING *SAYS*, HAS A narrative
+    ELEMENT. Copy the word that asks it. The rest of the question is still
+    parsed normally -- the company, the metric and the period all stay.
+      "Why did Intel's margins fall in 2023?"
+        -> narrative "Why", company "Intel", metric "margins", period "2023"
+      "What does Intel say about competition risk in its latest 10-K?"
+        -> narrative "say about", company "Intel", metric "competition risk",
+           period "latest 10-K"
+    Emit it ONLY for a cause or for the filing's own words. "How much", "how
+    many", "which", "what was" and "compare" all ask for figures and get NO
+    narrative element.
+    Leaving it out turns "why did margins fall" into "what were the margins",
+    a question nobody asked, and answers it with a number that does not
+    address it.
 
 5. A period element MUST carry at least one of `fiscal_year`, `last_n_years`
    or `fiscal_period`, or it names no time at all.
@@ -365,6 +382,29 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e1","kind":"company","text":"Microsoft"},
   {"id":"e2","kind":"metric","text":"free cash flow"},
   {"id":"e3","kind":"period","text":"last year","last_n_years":1}],"wants_chart":false}""",
+    ),
+    # Rule 4b. Measured 2026-09-24: the rule alone produced no narrative element
+    # on either shape -- the model parsed the company, metric and period and
+    # dropped the word that asked. Turning "why did margins fall" into "what
+    # were the margins" is a question nobody asked, answered with a figure that
+    # does not address it. Note the rest of the question still parses normally.
+    (
+        "Why did Intel's margins fall in 2023?",
+        """{"intent":"trend","elements":[
+  {"id":"e1","kind":"narrative","text":"Why"},
+  {"id":"e2","kind":"company","text":"Intel"},
+  {"id":"e3","kind":"metric","text":"margins"},
+  {"id":"e4","kind":"period","text":"2023","fiscal_year":2023}],"wants_chart":false}""",
+    ),
+    # Rule 4b again, for the filing-text half. The refusal it earns is a
+    # different sentence from the causal one, which is why both are shown.
+    (
+        "What does Intel say about competition risk in its latest 10-K?",
+        """{"intent":"lookup","elements":[
+  {"id":"e1","kind":"narrative","text":"say about"},
+  {"id":"e2","kind":"company","text":"Intel"},
+  {"id":"e3","kind":"metric","text":"competition risk"},
+  {"id":"e4","kind":"period","text":"latest 10-K","last_n_years":1}],"wants_chart":false}""",
     ),
 ]
 

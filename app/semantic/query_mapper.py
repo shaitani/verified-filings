@@ -50,6 +50,7 @@ from app.schemas.query import (
     Intent,
     MetricElementIn,
     MetricQualifierElementIn,
+    NarrativeElementIn,
     Note,
     PeriodElementIn,
     PeriodRef,
@@ -155,6 +156,18 @@ async def map_query(
         bindings, qualifier_problems = _apply_qualifiers(qualifiers, bindings, metrics)
         metric_problems += qualifier_problems
 
+    # Deliberately does NOT drop the metric's bindings or its clarification,
+    # unlike an unsatisfiable qualifier. The refusal already makes the plan
+    # incomplete, so nothing is answered -- and leaving the rest standing is
+    # what lets one reply say both halves: "I cannot tell you why, and which
+    # margin did you mean?" A reader who has to re-type the question to get the
+    # second half has been told less than the system knew.
+    narrative_problems = [
+        Unresolved(element_id=element.id, reason=_narrative_refusal(element))
+        for element in query.elements
+        if isinstance(element, NarrativeElementIn)
+    ]
+
     result = _describe_result(
         query,
         ciks=_answering_ciks(ciks, bindings),
@@ -168,7 +181,10 @@ async def map_query(
         filters=PlanFilters(ciks=ciks, periods=resolved_periods),
         bindings=bindings,
         ambiguous=ambiguous,
-        unresolved=company_problems + period_problems + metric_problems,
+        unresolved=company_problems
+        + period_problems
+        + metric_problems
+        + narrative_problems,
         clarifications=clarifications,
         notes=company_notes
         + coverage_notes
@@ -193,6 +209,48 @@ def _qualifier_is_satisfiable(qualifier: MetricQualifierElementIn) -> str | None
     return (
         "this dataset holds company totals only, with no breakdown by product, "
         "region or segment"
+    )
+
+
+#: Span fragments that say which *kind* of non-figure was asked for. Matched
+#: against the narrative element's own text, lowercased. Order matters only in
+#: that the first hit wins, and the two sets do not overlap in practice.
+_CAUSAL_MARKERS = ("why", "how come", "what caused", "reason for", "reason why",
+                   "driven by", "because")
+_FILING_TEXT_MARKERS = ("say about", "says about", "said about", "say", "says",
+                        "describe", "discuss", "disclose", "mention", "explain",
+                        "guidance", "outlook", "risk factor")
+
+
+def _narrative_refusal(element: NarrativeElementIn) -> str:
+    """Why this span cannot be honoured, said specifically.
+
+    A generic "not in the dataset" would be true and useless. The reader asked
+    for one of two different things and each deserves its own sentence: a cause,
+    which no quantity implies, or the filing's own words, which are not
+    ingested at all. Measured 2026-09-24: q032 already refused, but with
+    "'competition risk' has no concept with facts covering any requested
+    period" -- accurate about the machinery and silent about the actual reason.
+
+    Framed as a lookup over the span rather than a flat string so a later
+    ingest of narrative sections changes this function and nothing above it.
+    """
+    span = element.text.lower()
+    if any(marker in span for marker in _CAUSAL_MARKERS):
+        return (
+            f"{element.text!r} asks why something happened. The store holds filed "
+            f"figures, which can show that a number changed but never why it "
+            f"changed; a cause is not a quantity"
+        )
+    if any(marker in span for marker in _FILING_TEXT_MARKERS):
+        return (
+            f"{element.text!r} asks what the filing says. Only numeric XBRL facts "
+            f"are ingested -- no risk factors, no management discussion, none of "
+            f"the narrative sections"
+        )
+    return (
+        f"{element.text!r} asks for something other than a filed figure, and this "
+        f"store holds nothing else"
     )
 
 

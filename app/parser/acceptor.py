@@ -43,6 +43,7 @@ from app.schemas.query import (
     ElementIn,
     MetricElementIn,
     MetricQualifierElementIn,
+    NarrativeElementIn,
     PeriodElementIn,
     QueryIn,
 )
@@ -143,6 +144,7 @@ _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     ),
     "company_group": frozenset({"sic_code", "sic_description"}),
     "metric_qualifier": frozenset({"qualifies"}),
+    "narrative": frozenset(),
 }
 
 def _kind_owning(stray: set[str]) -> str:
@@ -378,6 +380,8 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 last_n_years=element.last_n_years,
                 last_n_quarters=element.last_n_quarters,
             )
+        if element.kind == "narrative":
+            return NarrativeElementIn(id=element.id, text=span)
         if element.kind == "metric_qualifier":
             if element.qualifies is None:
                 raise MalformedProposal(

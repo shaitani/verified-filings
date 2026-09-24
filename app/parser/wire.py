@@ -38,7 +38,7 @@ from app.schemas.query import Intent, QueryFiscalPeriod
 #: ``acceptor._FIELDS_BY_KIND`` by a test, so a kind added here without a
 #: field set there fails loudly rather than going unchecked.
 WireKind = Literal[
-    "metric", "company", "company_group", "period", "metric_qualifier"
+    "metric", "company", "company_group", "period", "metric_qualifier", "narrative"
 ]
 
 
