@@ -270,6 +270,18 @@ In rough order of how much they matter.
   tagged `refuse`. Every other failure costs a refusal, which is the outcome
   this project prefers; that one is the failure it exists to prevent, so it is
   counted apart from `fail` and printed last.
+- **A relationship between two metrics has nowhere to live.** "How much of
+  Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
+  chain cannot say so: the parser emits two independent metric elements, the
+  mapper builds two single-concept bindings, and the division survives only as
+  English in `question`. `QueryIn` is a flat list with no field relating one
+  element to another, so even a perfect parser would have nowhere to put it.
+  The only working route today is a curated alias per *phrase* — "R&D
+  intensity" binds, "how much of revenue goes to R&D" does not — which does
+  not scale, because a file cannot enumerate how English relates two
+  quantities. **Probably the highest-value thing not built.** Full write-up,
+  including what it would take and why the mapper half is nearly free:
+  [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) §4.3d.
 - **Restatements** are picked correctly by `is_latest` but never *disclosed*
   (PITFALLS §2.2). The `Note` channel would carry it.
 - **`sic_office` has no source.** `sic_numbers.json` carries code and
@@ -310,7 +322,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (427 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (434 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 8. Verifying things yourself

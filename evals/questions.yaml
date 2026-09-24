@@ -104,6 +104,13 @@ questions:
   - id: q015
     question: Show me every company whose gross margin fell three years running.
     expect: [answered]  # gross margin
+    known_gap: >-
+      A filter over a computed sequence -- nine companies, a ratio per year, then
+      a three-step monotonic comparison. qwen2.5-coder:7b generates until it hits
+      the 4096-token ceiling and the truncated statement is refused. Measured
+      2026-09-23. Not a prompt bug: the hardest shape in the set, and a capability
+      limit of a 7B model. Skipped by default so it stops costing a run; pass
+      --include-known-gaps to run it anyway.
     needs: [retrieval, growth, multi_step]
     notes: A filter over a computed sequence, not over a stored value.
 

@@ -92,7 +92,9 @@ metrics:
     # question was refused for a term this file already knew.
     synonyms: [r d, r and d, rnd, research and development, research expense, r d expense,
                r d spending, r d spend, r d costs, research and development spending,
-               research and development spend, research and development expense]
+               research and development spend, research and development expense,
+               r d investment, r d budget, research spending, research costs,
+               development costs, research development]
     terms:
       - [us-gaap:ResearchAndDevelopmentExpense]
 
@@ -395,6 +397,31 @@ metrics:
     expression: c0 / c1
     terms:
       - [us-gaap:OperatingIncomeLoss]
+      - concepts:
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+          - us-gaap:Revenues
+        sign: magnitude
+
+  rd_intensity:
+    label: R&D intensity
+    # Research and development as a share of revenue.
+    #
+    # Curated because the generic path cannot carry it. `QueryIn` is a flat
+    # list of elements with no way to say "divide e3 by e2", so a question the
+    # parser splits into two metric elements arrives as two independent asks
+    # and the relationship survives only as English in `question`. Measured
+    # 2026-09-23: "How much of Alphabet's revenue goes to R&D?" parses to
+    # ['revenue', 'R&D'] and never reaches this entry, while "What is Apple's
+    # R&D intensity?" parses to ['R&D intensity'] and does.
+    #
+    # So this entry fixes the NAMED ratio, not the phrased one. The general
+    # case is app/retrieval/DESIGN.md §4.3d.
+    synonyms: [r d intensity, research intensity, r d to revenue,
+               r d revenue ratio, r d as a share of revenue,
+               r d as a percentage of revenue]
+    expression: c0 / c1
+    terms:
+      - [us-gaap:ResearchAndDevelopmentExpense]
       - concepts:
           - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
           - us-gaap:Revenues

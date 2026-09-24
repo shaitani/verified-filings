@@ -475,6 +475,73 @@ outright. Reach for that first.
 question would silently return one row again. A test asserting on the rules
 text would close that, and has not been written.
 
+### 4.3d A relationship between two metrics has nowhere to live
+
+**This is the most valuable thing in this document that is not built.**
+
+"How much of Alphabet's revenue goes to R&D?" is a ratio of two filed figures.
+The chain has no way to say so. Measured 2026-09-23:
+
+```
+parser  -> metrics ['revenue', 'R&D']          two independent elements
+mapper  -> b0 expr='c0'  Revenues
+           b1 expr='c0'  ResearchAndDevelopmentExpense
+```
+
+Two bindings, no arithmetic. The fact that one is meant to be divided by the
+other exists **nowhere in the plan** -- it survives only as English in
+`QueryPlan.question`, which the SQL model reads as prose.
+
+#### The two mechanisms that do exist, and why neither covers this
+
+**Curated alias.** `metric_aliases.yaml` carries an `expression` per metric,
+so `gross_margin` is one element resolving to one binding with `c0 / c1` and a
+checked `operand_unit`. Deterministic, and it is why q007, q021, q022 and q024
+work. But it only fires when the question names the ratio as ONE phrase: "R&D
+intensity" parses to a single element and binds; "how much of revenue goes to
+R&D" parses to two and never reaches the file, whatever synonyms are in it.
+
+This is the ceiling: **an alias per phrasing**. `rd_intensity` was added for
+the named form, and the phrased form still fails. A file cannot enumerate the
+ways English relates two quantities.
+
+**The SQL model computes it.** `YOUR JOB` invites the model to wrap the query
+and derive. This is how growth and rankings work, and it is the path the
+generic case would take. It is not reliable: §4.3c is one measured failure in
+it, and q023 is another -- the model reads "one number wanted", then fetches
+one of the two inputs instead of computing. Five prompt variants were tried
+and none survived repetition (see the note on sampling below).
+
+**A third, pattern-based route does not exist.** `QueryIn` is a flat list --
+`version`, `question`, `intent`, `elements`, `shape`. There is no field
+relating one element to another, no operator, no `relations`. So even a parser
+that recognised "X as a share of Y" perfectly would have nowhere to put the
+result. **Closing this is a schema change before it is a prompt change.**
+
+#### What it would take
+
+Roughly, in order: a way for `QueryIn` to carry a relation between element ids
+(`{"op": "ratio", "of": "e3", "to": "e2"}`); a mapper that turns that into one
+`Binding` with a multi-operand `expression`, reusing the machinery the alias
+path already has; and a parser prompt that emits the relation. The middle step
+is nearly free -- `Binding`, `operand_unit`, the unit check and the "SOME ROWS
+COMBINE SEVERAL FACTS" prompt section were all built for exactly this shape.
+The ends are the work.
+
+The prize is that "share of", "per", "divided by", "as a percentage of" and
+"difference between" stop needing an alias each, over any two metrics the
+corpus holds.
+
+#### A methodological note, because it cost a day
+
+Ollama at `temperature=0` is **not** bit-deterministic across calls. The same
+byte-identical prompt produced a 1-row and a 2-row statement on different runs
+of q023, which made a single-sample variant sweep read as a clean result when
+it was noise. A variant that "fixes" something on one run has not been
+measured. **Prompt claims in this file need a rate over n runs, not an
+observation.** §4.3c's `LIMIT` finding stands because it reproduced across the
+full eval set afterwards; the q023 variants did not and were reverted.
+
 ### 4.4 The Q4 subtraction -- fixed, by moving it
 
 The fourth quarter is the annual figure minus the year-to-date one. Told in

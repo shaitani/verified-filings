@@ -129,6 +129,19 @@ def test_questions_that_should_answer_declare_what_they_need(questions) -> None:
             assert "retrieval" in q.get("needs", []), q["id"]
 
 
+def test_a_known_gap_explains_itself(questions) -> None:
+    """A question set aside has to say why, in enough detail to re-open it.
+
+    `known_gap` removes a question from every run, so the one thing that must
+    not happen is it quietly staying out after the cause is fixed. The reason
+    is what someone reads to decide that.
+    """
+    for q in questions:
+        if "known_gap" in q:
+            gap = q["known_gap"]
+            assert isinstance(gap, str) and len(gap.split()) >= 10, q["id"]
+
+
 def test_questions_that_should_refuse_say_why(questions) -> None:
     """A refusal has to name the hazard behind it, so a refusal that starts
     happening for a *new* reason is visible rather than silently still green."""

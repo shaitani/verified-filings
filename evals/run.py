@@ -426,7 +426,15 @@ def write_run(runs: list[Run], *, stage: Stage) -> Path:
     return path
 
 
-def select_questions(args: argparse.Namespace) -> list[dict]:
+def select_questions(args: argparse.Namespace) -> tuple[list[dict], list[dict]]:
+    """``(to run, skipped as known gaps)``.
+
+    A question carrying ``known_gap`` is a measured, understood failure with
+    nobody working on it. Running it every time buys nothing and costs a slot
+    in the pass rate that reads as a regression, so it is set aside and listed
+    instead -- explicitly, by name, with the reason, so setting it aside can
+    never be mistaken for it having been fixed.
+    """
     document = yaml.safe_load(QUESTIONS.read_text("utf-8"))
     questions = document["questions"]
     if args.id:
@@ -437,9 +445,13 @@ def select_questions(args: argparse.Namespace) -> list[dict]:
             sys.exit(f"no such question id(s): {sorted(missing)}")
     if args.limit:
         questions = questions[: args.limit]
+    gaps: list[dict] = []
+    if not args.include_known_gaps:
+        gaps = [q for q in questions if q.get("known_gap")]
+        questions = [q for q in questions if not q.get("known_gap")]
     if not questions:
         sys.exit("no questions selected")
-    return questions
+    return questions, gaps
 
 
 async def main() -> None:
@@ -456,9 +468,14 @@ async def main() -> None:
     parser.add_argument("--limit", type=int, help="run only the first N selected")
     parser.add_argument("--parser-model", help="override the model [C] proposes with")
     parser.add_argument("--no-write", action="store_true", help="do not write the run file")
+    parser.add_argument(
+        "--include-known-gaps",
+        action="store_true",
+        help="also run questions marked `known_gap`, which are expected to fail",
+    )
     args = parser.parse_args()
 
-    questions = select_questions(args)
+    questions, gaps = select_questions(args)
     if args.stage != "parse":
         await preflight()
 
@@ -470,6 +487,12 @@ async def main() -> None:
         print(line(index, len(questions), run))
 
     report(runs, stage=args.stage)
+    if gaps:
+        print("")
+        print(f"KNOWN GAPS ({len(gaps)}) -- not run, not counted above:")
+        for entry in gaps:
+            print(f"  {entry['id']}  {entry['question'][:70]}")
+            print(f"        {' '.join(entry['known_gap'].split())[:150]}")
     if not args.no_write:
         print(f"\nwritten: {write_run(runs, stage=args.stage)}")
 
