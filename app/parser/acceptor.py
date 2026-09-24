@@ -42,6 +42,7 @@ from app.schemas.query import (
     CompanyGroupElementIn,
     ElementIn,
     MetricElementIn,
+    MetricQualifierElementIn,
     PeriodElementIn,
     QueryIn,
 )
@@ -139,7 +140,19 @@ _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "company": frozenset(),
     "period": frozenset({"fiscal_year", "fiscal_period", "last_n_years"}),
     "company_group": frozenset({"sic_code", "sic_description"}),
+    "metric_qualifier": frozenset({"qualifies"}),
 }
+
+def _kind_owning(stray: set[str]) -> str:
+    """Which kind those fields belong to, for the message the model is shown.
+
+    Looked up rather than guessed: with several field-owning kinds, a two-way
+    guess names the wrong one and sends the model off correcting something
+    that was already right.
+    """
+    owners = sorted(kind for kind, fields in _FIELDS_BY_KIND.items() if stray & fields)
+    return " or ".join(owners) if owners else "another kind of"
+
 
 #: Every optional field on ``WireElement``, so a new one cannot be added
 #: without appearing in ``_FIELDS_BY_KIND`` above and failing the test that
@@ -332,7 +345,7 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
         raise MalformedProposal(
             f"element {element.id!r} is a {element.kind} but carries "
             f"{sorted(stray)}, which only a "
-            f"{'period' if stray & _FIELDS_BY_KIND['period'] else 'company_group'} "
+            f"{_kind_owning(stray)} "
             f"element can have. Either change `kind` or drop those fields."
         )
 
@@ -354,6 +367,15 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 fiscal_year=element.fiscal_year,
                 fiscal_period=element.fiscal_period,
                 last_n_years=element.last_n_years,
+            )
+        if element.kind == "metric_qualifier":
+            if element.qualifies is None:
+                raise MalformedProposal(
+                    f"metric_qualifier {element.id!r} needs `qualifies` set to the "
+                    f"id of the metric it narrows"
+                )
+            return MetricQualifierElementIn(
+                id=element.id, text=span, qualifies=element.qualifies
             )
         return CompanyGroupElementIn(
             id=element.id,

@@ -49,6 +49,7 @@ from app.schemas.query import (
     Coverage,
     Intent,
     MetricElementIn,
+    MetricQualifierElementIn,
     Note,
     PeriodElementIn,
     PeriodRef,
@@ -149,6 +150,11 @@ async def map_query(
             metrics, session, ciks=ciks, periods=resolved_periods, intent=query.intent
         )
 
+    qualifiers = [e for e in query.elements if isinstance(e, MetricQualifierElementIn)]
+    if qualifiers:
+        bindings, qualifier_problems = _apply_qualifiers(qualifiers, bindings, metrics)
+        metric_problems += qualifier_problems
+
     result = _describe_result(
         query,
         ciks=_answering_ciks(ciks, bindings),
@@ -169,6 +175,63 @@ async def map_query(
         + _alignment_notes(resolved_periods, result)
         + _granularity_notes(result),
     )
+
+
+def _qualifier_is_satisfiable(qualifier: MetricQualifierElementIn) -> str | None:
+    """``None`` if the qualifier can be honoured, else why it cannot.
+
+    Always a reason today, and the reason is a property of the corpus rather
+    than of the phrase: the SEC's XBRL data endpoint returns company totals
+    only, with no dimensional breakdown at all (PITFALLS §3.2). There is no
+    product axis, no geography axis and no segment axis to filter on, for any
+    filer.
+
+    Written as a satisfiability question rather than a flat refusal so the day
+    segment facts are ingested this is the one function that changes. Nothing
+    above it assumes the answer.
+    """
+    return (
+        "this dataset holds company totals only, with no breakdown by product, "
+        "region or segment"
+    )
+
+
+def _apply_qualifiers(
+    qualifiers: list[MetricQualifierElementIn],
+    bindings: list[Binding],
+    metrics: list[MetricElementIn],
+) -> tuple[list[Binding], list[Unresolved]]:
+    """Narrow each qualified metric, or refuse it and drop its bindings.
+
+    **An unsatisfiable qualifier takes its metric with it.** That is the whole
+    safety argument for this element existing: "how much revenue did Apple make
+    from iPhones" must not be answered with Apple's total revenue, and leaving
+    the metric bound is exactly how that happened when the qualifier was simply
+    dropped (measured 2026-09-23 -- $391,035,000,000 returned for a question
+    about iPhones, verdict `complete`, attributable, and wrong).
+
+    The refusal names the *metric*, not the qualifier, because the metric is
+    what the reader asked for and what they will not be getting.
+    """
+    problems: list[Unresolved] = []
+    refused: set[str] = set()
+    labels = {metric.id: metric.text for metric in metrics}
+
+    for qualifier in qualifiers:
+        reason = _qualifier_is_satisfiable(qualifier)
+        if reason is None:
+            continue
+        refused.add(qualifier.qualifies)
+        problems.append(
+            Unresolved(
+                element_id=qualifier.qualifies,
+                reason=f"{labels.get(qualifier.qualifies, qualifier.qualifies)!r} was "
+                f"asked for only {qualifier.text!r}, and {reason}",
+            )
+        )
+
+    kept = [binding for binding in bindings if binding.element_id not in refused]
+    return kept, problems
 
 
 def _answering_ciks(ciks: list[int], bindings: list[Binding]) -> list[int]:

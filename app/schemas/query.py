@@ -238,8 +238,47 @@ class CompanyGroupElementIn(_ElementBase):
         return self
 
 
+class MetricQualifierElementIn(_ElementBase):
+    """A phrase that narrows a metric to part of it -- a product, a region, a
+    business line. "revenue **from iPhones**", "revenue **from outside the
+    United States**".
+
+    It exists because such a phrase has nowhere else to go, and every wrong
+    home for it is dangerous in a different way. As part of the *metric* text
+    it falls to embedding search and comes back as something adjacent. As a
+    *period* it is refused for naming no time, which is true and tells the
+    reader nothing about their actual question. **Dropped**, it is worst of
+    all: the metric binds on its own and "how much revenue did Apple make from
+    iPhones" is answered with Apple's total revenue. That was measured
+    2026-09-23, and it is the failure this project exists to prevent.
+
+    What it resolves to today is always a refusal. The SEC's XBRL data
+    endpoint carries **no dimensional facts at all** -- only company totals
+    (PITFALLS §3.2) -- so no qualifier can be satisfied from this corpus. It is
+    still a first-class element rather than a rule in the prompt, because the
+    refusal has to be *specific*: "this dataset holds only company totals, not
+    revenue broken down by iPhones". The reader learns what is missing instead
+    of being told their period names no time.
+
+    The check is deliberately framed as "can this qualifier be satisfied?"
+    rather than "refuse all qualifiers", so a later ingest that does carry
+    segment facts changes one function and not this schema.
+    """
+
+    kind: Literal["metric_qualifier"] = "metric_qualifier"
+
+    #: The element id of the metric this narrows. Required, because a question
+    #: with two metrics gives no other way to know which one is being cut
+    #: down, and guessing would attach "from iPhones" to the wrong figure.
+    qualifies: str = Field(min_length=1, max_length=32)
+
+
 ElementIn = Annotated[
-    MetricElementIn | CompanyElementIn | CompanyGroupElementIn | PeriodElementIn,
+    MetricElementIn
+    | CompanyElementIn
+    | CompanyGroupElementIn
+    | PeriodElementIn
+    | MetricQualifierElementIn,
     Field(discriminator="kind"),
 ]
 
@@ -257,6 +296,27 @@ class QueryIn(_Base):
     #: period rather than one summary figure. Left unset when the question does
     #: not indicate; the mapper then infers it from what actually resolved.
     shape: ResultShape | None = None
+
+    @model_validator(mode="after")
+    def _qualifiers_point_at_metrics(self) -> QueryIn:
+        """A qualifier must narrow a metric element of this same query.
+
+        Checked here rather than in the mapper because a dangling id is a
+        malformed object, not a resolution failure to report back: the parser
+        that produced it did not understand the question, and a qualifier
+        attached to nothing would silently stop narrowing anything.
+        """
+        metrics = {e.id for e in self.elements if e.kind == "metric"}
+        for element in self.elements:
+            if element.kind != "metric_qualifier":
+                continue
+            if element.qualifies not in metrics:
+                raise ValueError(
+                    f"metric_qualifier {element.id!r} qualifies "
+                    f"{element.qualifies!r}, which is not a metric element of this "
+                    f"query (metrics: {sorted(metrics)})"
+                )
+        return self
 
     @model_validator(mode="after")
     def _element_ids_unique(self) -> QueryIn:

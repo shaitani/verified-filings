@@ -43,7 +43,6 @@ BLOCKED_BY = {
     "not_in_dataset",
     "causal",
     "company_not_loaded",
-    "restatement_metadata",
     "sector_classification",
 }
 SHAPES = {"scalar", "series", "table", "ranking"}

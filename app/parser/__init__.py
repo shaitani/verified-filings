@@ -26,11 +26,11 @@ mapper resolves the replacement phrase perfectly and everything downstream
 agrees. That is checked in code rather than asked for in the prompt.
 
 **What this does not do, on purpose.** It does not decide whether the question
-is answerable from filed facts at all. "Did any of these companies restate its
-revenue?" parses into perfectly good elements and comes back with a revenue
-series -- see HANDOFF §6. Closing that needs the eval set to be runnable, and
-the eval set needs this module, so it is deliberately the next thing rather
-than part of this one.
+is answerable from filed facts at all. "Why did Intel's margins fall in 2023?"
+parses into perfectly good elements and comes back with margins -- the figures
+are right and the question was "why" -- see HANDOFF §6. Closing that needs the
+eval set to be runnable, and the eval set needs this module, so it is
+deliberately the next thing rather than part of this one.
 """
 
 from app.parser.acceptor import (

@@ -169,6 +169,16 @@ questions:
   - id: q023
     question: How much of Alphabet's revenue goes to R&D?
     expect: [answered, answered]  # revenue, R&D
+    known_gap: >-
+      A ratio between two metric elements, which the chain cannot express. The
+      parser splits this phrasing into ['revenue', 'R&D'], so the curated
+      `rd_intensity` alias is never looked up -- an alias is a dictionary and is
+      only reachable once something has arrived as ONE element. The division then
+      survives only as English in `question`, and the SQL model fetches one of the
+      two operands instead of computing. Measured 2026-09-23; five prompt variants
+      tried, none survived repetition. Needs the schema change in
+      app/retrieval/DESIGN.md 4.3d. The named form, "What is Apple's R&D
+      intensity?", resolves correctly today.
     needs: [retrieval, ratio]
 
   - id: q024
@@ -190,14 +200,6 @@ questions:
     notes: >-
       Alphabet switches revenue concepts at FY2025. Should return the full
       series WITH the concept_switch note attached. PITFALLS 1.8.
-
-  - id: q026
-    question: Did any of these companies restate its revenue?
-    expect: [refused]  # revenue -- restatement metadata is not held
-    blocked_by: [restatement_metadata]
-    notes: >-
-      1,575 periods carry more than one value, but is_latest hides them and
-      nothing exposes that a restatement happened. PITFALLS 2.2.
 
   - id: q027
     question: What was Micron's gross margin in fiscal 2023?

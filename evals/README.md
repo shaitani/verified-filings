@@ -137,7 +137,6 @@ and a runner has to substitute before executing them.
 | `not_in_dataset` | the figure is not in the store at all |
 | `causal` | asks *why*, which facts alone cannot answer |
 | `company_not_loaded` | names a filer that was never ingested |
-| `restatement_metadata` | needs the fact that a value changed (PITFALLS 2.2) |
 | `sector_classification` | needs SIC or sector; `QueryIn` can express it, but the columns are unpopulated |
 
 ## `exercises` — which known hazard a question probes

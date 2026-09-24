@@ -34,10 +34,12 @@ from pydantic import BaseModel, ConfigDict
 
 from app.schemas.query import Intent, QueryFiscalPeriod
 
-#: The four ``ElementIn`` kinds, flattened into one enum. Kept in step with
+#: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
 #: ``acceptor._FIELDS_BY_KIND`` by a test, so a kind added here without a
 #: field set there fails loudly rather than going unchecked.
-WireKind = Literal["metric", "company", "company_group", "period"]
+WireKind = Literal[
+    "metric", "company", "company_group", "period", "metric_qualifier"
+]
 
 
 class WireElement(BaseModel):
@@ -65,6 +67,11 @@ class WireElement(BaseModel):
     # Company-group selectors. Same rule.
     sic_code: str | None = None
     sic_description: str | None = None
+
+    # Metric-qualifier target. An element id, so unlike every other field here
+    # it points at something else in the same reply -- which is why `QueryIn`
+    # checks it names a metric rather than trusting it.
+    qualifies: str | None = None
 
 
 class WireQuery(BaseModel):
