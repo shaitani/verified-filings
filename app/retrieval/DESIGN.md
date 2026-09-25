@@ -748,6 +748,55 @@ to surface it.
 
 ---
 
+### 4.6 Moving work out of the model is the lever that keeps working
+
+Two changes on 2026-09-24 did more for correctness than any prompt wording has,
+and they are the same move twice: **take a thing the model was being asked to
+produce, produce it in Python, and hand it over already correct.**
+
+| | before | after |
+|---|---|---|
+| q038 coordinate rows in the statement | 40 of 378 | **378 of 378** |
+| q038 invented windows | 16 | **0 — unrepresentable** |
+| prompt size | 53,114 chars, **growing with the plan** | ~6,200 chars, **constant** |
+
+`emit_cte` writes the coordinate CTE from the plan's typed objects. The model
+now writes only the `SELECT`, and the failure that mattered most is gone not
+because the model was persuaded but because it is never asked: a window it does
+not write cannot be a window it computes from the fiscal-year label.
+
+The second lever is the same in spirit — a worked example of the *form* the
+answer takes, so the shape is shown rather than described. §4.3's whole
+catalogue says this, and the derivation example in §4.3 is the fourth instance.
+
+**Where to look next, when optimising.** Every one of these is currently prose
+in the prompt and could be structure instead:
+
+- **The join itself.** Five equality conditions, identical in every statement.
+  A second emitted CTE — `figures AS (SELECT ... FROM wanted JOIN view ON ...)`
+  — would leave the model only the analytical layer. It also removes the
+  `unit`-in-the-join rule, `period_start`-only-when-duration, and "do not use
+  BETWEEN", which are three of the measured failures in §4.3.
+- **The fixed twelve-column projection.** `RESULT_COLUMNS` never varies, and
+  the contract refuses any deviation. Emitting the projection would retire
+  rule 4 and the `NULL::text` alias trap with it.
+- **`LIMIT`.** Rule 3 exists only because nothing adds one; §4.3c is two words
+  in that rule costing fifteen rows.
+- **The operand expression.** `max(v.value) FILTER (WHERE operand = N)` per
+  `cN` is mechanical substitution into `Binding.expression`. Doing it here
+  would close §9's "same-unit arithmetic has no structural check", which is
+  currently defended by a prompt line alone.
+
+The pattern to keep in mind: a prompt rule exists because the model can get
+something wrong, so every rule names a candidate for deterministic emission.
+The model is good at the analytical layer — ranking, growth, a filter over a
+computed value — and reliably bad at transcription. The less it transcribes,
+the less there is to check.
+
+None of this is required for correctness today; it is where to spend effort
+when effort is available, and it shrinks the prompt every time, which is its
+own reward on a 1080 Ti.
+
 ## 9. Open
 
 - **`ResultShape` is not enforced.** The verdict checks cardinality; nothing

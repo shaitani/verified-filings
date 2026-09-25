@@ -282,6 +282,17 @@ In rough order of how much they matter.
   quantities. **Probably the highest-value thing not built.** Full write-up,
   including what it would take and why the mapper half is nearly free:
   [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) §4.3d.
+- **The optimisation lever, when there is time for one.** Writing the
+  coordinate CTE in Python instead of asking the model to transcribe it took
+  q038 from 40 of 378 rows to 378 of 378, made mislabelled dates
+  unrepresentable rather than discouraged, and shrank the prompt from 53,114
+  characters — growing with the plan — to about 6,200, constant. The same move
+  is available for the join, the fixed projection, the `LIMIT` and the operand
+  expression, all of which are prose in the prompt today. Every prompt rule
+  exists because the model can get something wrong, so every rule names a
+  candidate. Listed with measurements in
+  [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) §4.6.
+
 - **Restatements** are picked correctly by `is_latest` but never *disclosed*
   (PITFALLS §2.2). The `Note` channel would carry it.
 - **Segment and geography questions refuse, by design.** "Revenue from
