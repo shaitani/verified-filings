@@ -336,31 +336,70 @@ between them answers a different question.
 
 (b) The question asks for something COMPUTED from them -- a growth rate, a
     ranking, a share of a total, a difference, a filter on a computed value.
-    Then wrap the worked example in a SUBQUERY and compute from it -- not in
-    a CTE, because one is already open and a second would replace it:
-
-      SELECT ... FROM ( <the worked example, without its LIMIT> ) base
-      ... LIMIT 500
-
+    Then follow the DERIVATION example below instead of the as-filed one.
     Set `derivation` to a short name for what you computed. Leave it NULL only
     on rows whose `value` is a figure exactly as filed -- a computed value with
     a NULL derivation is reported to the reader as the metric itself, which is
     wrong."""
 
+#: The derivation the model is shown, on an invented derivation name.
+#:
+#: Added 2026-09-24, and it is the difference between q038 failing and passing.
+#: Told in prose to compute, qwen2.5-coder:7b wrote
+#: ``WHERE w.fiscal_period = 'Q4' ORDER BY v.value DESC LIMIT 1`` -- a filter
+#: the plan never asked for, an ordering by *revenue* rather than by change, and
+#: one row, labelled ``derivation = 'revenue_decline'`` having computed no
+#: decline. One row of twenty companies also fails the verdict, correctly.
+#:
+#: **One level, not two.** A first attempt showed the computation in a subquery
+#: with the outer level filtering the NULL leading row. The model flattened it,
+#: aliased the computed column ``AS change``, and the projection was refused --
+#: the same refusal to restructure measured earlier the same day on q011's
+#: growth query. It does not need two levels: PostgreSQL takes an output alias
+#: in ORDER BY, and a NULL ``value`` is legal on a derived row now
+#: (``ResultRow._null_value_needs_a_derivation``), so there is nothing to filter.
+_EXAMPLE_DERIVED = f"""WORKED EXAMPLE OF A DERIVATION (invented name -- copy the FORM)
+
+A question asking which company's figure fell most from one period to the next.
+ONE level: the computed column is aliased `value`, and the window function goes
+straight in the projection.
+
+  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
+         w.fiscal_year, w.fiscal_period,
+         v.period_start, v.period_end, v.is_instant,
+         v.value - LAG(v.value) OVER (
+           PARTITION BY v.company_cik ORDER BY v.period_end) AS value,
+         v.unit, 'qoq_change' AS derivation
+  FROM {CTE_NAME} w
+  JOIN {VIEW} v
+    ON  v.company_cik = w.company_cik
+    AND v.concept_id  = w.concept_id
+    AND v.unit        = w.unit
+    AND v.is_instant  = w.is_instant
+    AND v.period_end  = w.window_end
+    AND (w.is_instant OR v.period_start = w.window_start)
+  ORDER BY value ASC
+  LIMIT {MAX_ROWS}
+
+Three things that gets right and are easy to get wrong:
+
+  - The computed column is aliased `value`, never its own name. The projection
+    is fixed and `change` is not one of its columns.
+  - `PARTITION BY v.company_cik`, so each company is compared against ITSELF.
+  - No `LIMIT 1` and no WHERE of your own. `LIMIT 1` answers "what is the
+    biggest fall" but not "which company", and a ranking the reader cannot see
+    is not a ranking. The first period of each company has nothing before it,
+    so its computed value is NULL -- that is expected, and it is kept.
+"""
+
 _JOB_MUST_DERIVE = """This question asks for a value that must be COMPUTED from those rows. The
-worked example above is NOT the answer -- returning it unchanged, or with only
-an ORDER BY added, answers a different question.
+as-filed example is NOT the answer -- returning it unchanged, or with only an
+ORDER BY added, answers a different question.
 
-Wrap it in a SUBQUERY and compute the answer from that -- not in a CTE,
-because one is already open and a second would replace it:
-
-  SELECT ... FROM ( <the worked example, without its LIMIT> ) base
-  ... LIMIT 500
-
-In every row you compute, set `derivation` to a short name for what it is, and
-set `unit` to what the computed number actually is ('pure' for a ratio or a
-growth rate). Leave `derivation` NULL only on rows whose `value` is a figure
-exactly as filed."""
+Follow the DERIVATION example instead. In every row you compute, set
+`derivation` to a short name for what it is, and set `unit` to what the computed
+number actually is ('pure' for a ratio or a growth rate). Leave `derivation`
+NULL only on rows whose `value` is a figure exactly as filed."""
 
 
 #: One worked example, on **invented data**.
@@ -601,6 +640,18 @@ def build_prompt(plan: QueryPlan) -> str:
     job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
     combining = any(cell.operands > 1 for cell in cells)
     worked_example = _EXAMPLE_COMBINING if combining else _EXAMPLE_PLAIN
+    # Shown only for a single-operand deriving plan, and the `not combining` half
+    # is not tidiness. Measured 2026-09-24: shown alongside _EXAMPLE_COMBINING on
+    # q009 ("highest operating margin", a `c0 / c1` ratio), the model took three
+    # things from this one that belong to the other -- `v.unit` in the projection
+    # without adding it to GROUP BY, the invented name `qoq_change` on a margin,
+    # and the example's `-` where its own expression says `/`. A wrong operator
+    # in the right unit is the failure app/retrieval/DESIGN.md §6 calls out as
+    # having no structural check behind it, so the two examples are never shown
+    # together. An as-filed question is not helped by a window function either,
+    # and every line of prompt is a line that can be copied for the wrong reason.
+    if plan.intent in DERIVING_INTENTS and not combining:
+        worked_example = worked_example + chr(10) + _EXAMPLE_DERIVED
     combine_help = _combine_help(cells)
     declared = ", ".join(_cte_columns(cells))
 
