@@ -30,7 +30,7 @@ import httpx
 from ollama import AsyncClient
 
 from app.config import settings
-from app.retrieval.prompt import build_prompt
+from app.retrieval.prompt import build_prompt, emit_cte, plan_cells
 from app.schemas.query import QueryPlan
 
 #: The model that writes the SQL. Mirrored in ``docker-compose.yml``'s pull
@@ -120,6 +120,16 @@ def extract_sql(reply: str) -> str:
 async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     """Ask the model for the SQL that answers ``plan``, and return it.
 
+    **The model writes only the SELECT.** The coordinate CTE in front of it is
+    written by ``emit_cte`` from the plan's own typed objects, and this function
+    joins the two. That is the division ``app/retrieval/__init__.py`` describes:
+    fetching the values a ``Binding`` names is deterministic work, and the model
+    writes the layer above it.
+
+    The join is done here rather than in ``execute`` so that what ``validate()``
+    judges is exactly what runs -- the whole statement, CTE included. Nothing
+    downstream sees a half-statement.
+
     The statement is **not** validated here. Callers pass the result to
     ``validate()``, which is what decides whether it runs.
 
@@ -157,4 +167,27 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     reply = response.get("response") or ""
     if not reply.strip():
         raise GenerationError(f"{model} returned an empty response")
-    return extract_sql(reply)
+    return _splice(plan, extract_sql(reply))
+
+
+def _splice(plan: QueryPlan, select: str) -> str:
+    """Put the generated SELECT behind the CTE this package wrote.
+
+    The model is told to begin at ``SELECT``, and mostly does. When it opens
+    with its own ``WITH`` anyway the two cannot be concatenated -- the result
+    would be ``WITH ... WITH ...``, which does not parse -- so that is a
+    generation failure, reported as one rather than handed to ``validate()``
+    as a mystery syntax error.
+    """
+    body = select.strip().rstrip(";").strip()
+    if body.upper().startswith("WITH"):
+        raise GenerationError(
+            "the model opened with its own WITH clause. The coordinate CTE is "
+            "written for it and a second one replaces it, so the reply has to "
+            "begin at SELECT"
+        )
+    if not body.upper().startswith("SELECT"):
+        raise GenerationError(
+            f"the reply does not begin at SELECT: {body[:80]!r}"
+        )
+    return emit_cte(plan_cells(plan)) + chr(10) + body

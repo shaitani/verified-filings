@@ -234,27 +234,61 @@ def test_plan_notes_reach_the_prompt() -> None:
     assert "tag changed" in build_prompt(plan)
 
 
-def test_each_worked_example_declares_as_many_columns_as_its_table() -> None:
-    """The bug this catches cost a live failure. The plain example's CTE names
-    nine columns; handed to a model alongside an operand filter table of ten,
-    it produced ten values per row against those nine names -- so `unit`
-    received a concept id and `is_instant` received 'USD', failing as
-    `boolean = text`. Each example now matches the table it is shown with.
-    """
-    from app.retrieval.prompt import (
-        _EXAMPLE_COMBINING,
-        _EXAMPLE_PLAIN,
-        _TABLE_HEADER,
-        _TABLE_HEADER_OPERANDS,
-    )
+def _cell(**overrides) -> prompt_module.PlanCell:
+    kwargs = {
+        "element_id": "e1",
+        "company_cik": APPLE,
+        "fiscal_year": 2024,
+        "fiscal_period": "FY",
+        "period_start": date(2023, 10, 1),
+        "period_end": date(2024, 9, 28),
+        "concept_ids": (77,),
+        "expression": "c0",
+        "unit": "USD",
+        "result_unit": "USD",
+        "is_instant": False,
+        "binding_index": 0,
+    }
+    return prompt_module.PlanCell(**(kwargs | overrides))
 
-    for example, header in (
-        (_EXAMPLE_PLAIN, _TABLE_HEADER),
-        (_EXAMPLE_COMBINING, _TABLE_HEADER_OPERANDS),
+
+def test_the_emitted_cte_has_one_value_per_declared_column() -> None:
+    """The bug this catches cost a live failure, before the CTE was emitted here.
+
+    Shown a nine-column CTE declaration alongside a ten-column operand table,
+    the model wrote ten values per row against nine names -- `unit` received a
+    concept id and `is_instant` received 'USD', failing as `boolean = text`.
+    Emitting both sides from one constant makes that unrepresentable, and this
+    pins it for the operand shape as well as the plain one.
+    """
+    for cells in (
+        [_cell(concept_ids=(77,))],
+        [_cell(concept_ids=(77, 88), expression="c0 / c1")],
     ):
-        table_columns = len(header.split("|"))
-        cte = example[example.index("WITH wanted(") : example.index(") AS (")]
-        assert len(cte.split(",")) == table_columns, cte
+        cte = prompt_module.emit_cte(cells)
+        declared = cte[cte.index("(") + 1 : cte.index(") AS (")].split(", ")
+        for line in cte.splitlines():
+            line = line.strip().rstrip(",")
+            if not line.startswith("("):
+                continue
+            values = line[1:-1].split(", ")
+            assert len(values) == len(declared), (len(values), len(declared), line)
+
+
+def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
+    """The reason this function exists.
+
+    Measured 2026-09-24: asked to transcribe 378 coordinate rows, the model
+    wrote 40 and computed their windows from the fiscal-year label -- Oracle's
+    FY2021 Q1 came back as 2021-06-01 where the plan says 2020-06-01, because
+    Oracle's year ends in May. Emitted here, a window cannot be anything but
+    what the plan says.
+    """
+    cells = [_cell(fiscal_year=2021, period_start=date(2020, 6, 1),
+                   period_end=date(2020, 8, 31))]
+    cte = prompt_module.emit_cte(cells)
+    assert "DATE '2020-06-01'" in cte and "DATE '2020-08-31'" in cte
+    assert "2021-06-01" not in cte
 
 
 def test_the_combining_example_shows_both_operators() -> None:
@@ -374,19 +408,36 @@ async def test_a_slow_model_is_reported_not_left_hanging(monkeypatch):
 
 
 def test_a_prompt_too_long_for_the_context_window_is_refused() -> None:
-    """The worst failure shape in the project, made loud.
+    """A backstop, not a live limit any more.
 
-    Measured 2026-09-24 on q038: 378 cells render to 53,114 characters against
-    an 8,192-token window, Ollama truncated it silently, and the model answered
-    from the part it saw -- computing the windows it could not read from the
-    fiscal-year label. Oracle's FY ends in May, so every one was twelve months
-    out, and the rows were attributable, plausible and in the right unit.
+    It was added when the model had to transcribe the coordinates: 378 cells
+    rendered to 53,114 characters against an 8,192-token window, Ollama
+    truncated it silently, and the model answered from the part it saw --
+    computing the windows it could not read from the fiscal-year label. Oracle's
+    FY ends in May, so every one was twelve months out, attributable, plausible
+    and in the right unit.
+
+    ``emit_cte`` removed the cause, so `build_prompt` no longer grows with the
+    plan and cannot reach this on coordinate count alone -- see the test below.
+    The check stays for whatever else can grow without bound: a very long
+    question, or a plan carrying many caveats.
     """
-    # An empty `Binding.periods` means every period in scope, so one binding
-    # over a hundred years is a hundred cells without listing them twice.
-    many = [_annual(APPLE, year) for year in range(2000, 2100)]
     with pytest.raises(UnsupportedPlan, match="truncate it silently"):
-        build_prompt(_plan([_binding()], many))
+        prompt_module._refuse_if_too_long("x" * (prompt_module.MAX_PROMPT_CHARS + 1), [])
+
+
+def test_the_prompt_no_longer_grows_with_the_plan() -> None:
+    """The measurable half of moving the CTE out of the model's hands.
+
+    One cell and a hundred cells now produce the same prompt, because the
+    coordinates are not in it. Before, 378 cells was 53,114 characters and
+    three times the context window.
+    """
+    one = build_prompt(_plan([_binding()], [_annual()]))
+    many = [_annual(APPLE, year) for year in range(2000, 2100)]
+    hundred = build_prompt(_plan([_binding()], many))
+    assert len(hundred) - len(one) < 200, (len(one), len(hundred))
+    assert "DATE '" not in hundred, "no coordinate should reach the prompt"
 
 
 def test_the_char_budget_tracks_the_generator_s_context_window() -> None:

@@ -133,9 +133,95 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     return cells
 
 
-#: Column names for the filter table. One constant so the worked example below
-#: and the real table can never drift apart -- a model shown two different
-#: headers has been given a reason to invent a third.
+NEWLINE = chr(10)
+
+#: The name of the CTE this module writes and the model selects from.
+CTE_NAME = "wanted"
+
+#: Column names for the coordinate CTE. One constant so the worked example, the
+#: CTE's own declaration and the prose describing it can never drift apart -- a
+#: model shown two different column lists has been given a reason to invent a
+#: third.
+#:
+#: Every column is named either exactly as the contract wants it projected, or
+#: after the view column it joins to. Nothing needs renaming on the way
+#: through. Two measured failures produced that: short names `fy`/`fp` came
+#: back projected as `fy` and `fp`, which the contract refused, and before that
+#: a single combined "Q12023" label came back as `fiscal_period = 'Q12023'`.
+_CTE_COLUMNS = (
+    "element_id", "company_cik", "fiscal_year", "fiscal_period",
+    "concept_id", "unit", "is_instant", "window_start", "window_end",
+)
+
+#: The same, plus `operand`, used only when some metric is arithmetic over more
+#: than one concept. Two shapes rather than one column that is always 0,
+#: because the single-operand path is the one that took five measured failures
+#: to get right and is not worth disturbing for the 13% of curated metrics that
+#: are ratios.
+_CTE_COLUMNS_OPERANDS = (
+    "element_id", "company_cik", "fiscal_year", "fiscal_period", "operand",
+    "concept_id", "unit", "is_instant", "window_start", "window_end",
+)
+
+
+def _cte_columns(cells: list[PlanCell]) -> tuple[str, ...]:
+    combining = any(cell.operands > 1 for cell in cells)
+    return _CTE_COLUMNS_OPERANDS if combining else _CTE_COLUMNS
+
+
+def emit_cte(cells: list[PlanCell]) -> str:
+    """The coordinate CTE, written by **this module** rather than by the model.
+
+    The single most important line in this package, for one reason: every date,
+    cik and concept_id in the statement now comes from a typed Python object,
+    so the model cannot get one wrong. It is not persuaded not to -- it is never
+    asked.
+
+    Measured 2026-09-24 on q038, "Which company had the largest single-quarter
+    revenue decline?". Asked to transcribe 378 coordinate rows into a VALUES
+    list, qwen2.5-coder:7b wrote 40 of them and **computed** the windows for
+    those from the fiscal-year label: Oracle's FY2021 Q1 came out as 2021-06-01
+    where the plan says 2020-06-01, because Oracle's year ends in May. A fiscal
+    year's name and its dates are independent (PITFALLS §1.1). Every window was
+    twelve months wrong, and the rows were attributable, plausible and in the
+    right unit -- nothing downstream would have caught it.
+
+    Two limits caused that and this removes both. The 378-row prompt was ~25,700
+    tokens against an 8,192-token window, which Ollama truncates silently; and
+    even given the whole thing at ``num_ctx`` 32,768 the model still wrote only
+    139 of 378 rows, because transcription fidelity is its own ceiling. Emitting
+    the CTE here took the prompt from 53,114 characters to 1,701 and the answer
+    from 40 rows to 378.
+
+    This is the division ``app/retrieval/__init__.py`` always described: fetching
+    the values a ``Binding`` names is bounded, deterministic work, and the model
+    writes the layer above it.
+    """
+    columns = _cte_columns(cells)
+    combining = "operand" in columns
+    rows = []
+    for cell in cells:
+        for operand, concept_id in enumerate(cell.concept_ids):
+            values = [
+                f"'{cell.element_id}'",
+                str(cell.company_cik),
+                str(cell.fiscal_year),
+                f"'{cell.fiscal_period}'",
+                *([str(operand)] if combining else []),
+                str(concept_id),
+                f"'{cell.unit}'",
+                "true" if cell.is_instant else "false",
+                f"DATE '{cell.period_start}'",
+                f"DATE '{cell.period_end}'",
+            ]
+            rows.append("    (" + ", ".join(values) + ")")
+    declared = ", ".join(columns)
+    opener = f"WITH {CTE_NAME}({declared}) AS (" + NEWLINE + "  VALUES" + NEWLINE
+    return opener + ("," + NEWLINE).join(rows) + NEWLINE + ")"
+
+
+#: Superseded by ``emit_cte``: the model is no longer shown a table to copy.
+#: Kept only as the header the prose and worked example quote.
 #: Every column here is named either exactly as the contract wants it
 #: projected, or after the view column it joins to. Nothing needs renaming on
 #: the way through, which is the point: a model copies what it is shown.
@@ -246,24 +332,35 @@ choosing -- returning the figures when the question asked for a comparison
 between them answers a different question.
 
 (a) The question asks for the figures themselves ("what was X's revenue").
-    Reply with the query above, unchanged.
+    Reply with the worked example above, unchanged.
 
 (b) The question asks for something COMPUTED from them -- a growth rate, a
     ranking, a share of a total, a difference, a filter on a computed value.
-    Then wrap it, keeping the query above as a CTE, and set `derivation` to a
-    short name for what you computed. Leave `derivation` NULL only on rows
-    whose `value` is a figure exactly as filed -- a computed value with a NULL
-    derivation is reported to the reader as the metric itself, which is
+    Then wrap the worked example in a SUBQUERY and compute from it -- not in
+    a CTE, because one is already open and a second would replace it:
+
+      SELECT ... FROM ( <the worked example, without its LIMIT> ) base
+      ... LIMIT 500
+
+    Set `derivation` to a short name for what you computed. Leave it NULL only
+    on rows whose `value` is a figure exactly as filed -- a computed value with
+    a NULL derivation is reported to the reader as the metric itself, which is
     wrong."""
 
 _JOB_MUST_DERIVE = """This question asks for a value that must be COMPUTED from those rows. The
-query above is NOT the answer -- returning it unchanged, or with only an
-ORDER BY added, answers a different question.
+worked example above is NOT the answer -- returning it unchanged, or with only
+an ORDER BY added, answers a different question.
 
-Keep it as a CTE and compute the answer from it. In every row you compute,
-set `derivation` to a short name for what it is, and set `unit` to what the
-computed number actually is ('pure' for a ratio or a growth rate). Leave
-`derivation` NULL only on rows whose `value` is a figure exactly as filed."""
+Wrap it in a SUBQUERY and compute the answer from that -- not in a CTE,
+because one is already open and a second would replace it:
+
+  SELECT ... FROM ( <the worked example, without its LIMIT> ) base
+  ... LIMIT 500
+
+In every row you compute, set `derivation` to a short name for what it is, and
+set `unit` to what the computed number actually is ('pure' for a ratio or a
+growth rate). Leave `derivation` NULL only on rows whose `value` is a figure
+exactly as filed."""
 
 
 #: One worked example, on **invented data**.
@@ -281,37 +378,25 @@ computed number actually is ('pure' for a ratio or a growth rate). Leave
 #:
 #: The closing sentence does most of the work: it names the three columns the
 #: model was inventing and says where they come from.
-_EXAMPLE_PLAIN = f"""WORKED EXAMPLE (different company and dates -- copy the FORM, not the values)
+_EXAMPLE_PLAIN = f"""WORKED EXAMPLE -- this is the whole shape of an as-filed answer:
 
-If the filter table were:
-
-{_TABLE_HEADER}
-{_table_row("e9", 11111, 2019, "FY", 77, "USD", False, "2018-01-01", "2018-12-31")}
-{_table_row("e9", 22222, 2019, "FY", 88, "USD", False, "2018-07-01", "2019-06-30")}
-
-the statement would be:
-
-  WITH wanted(element_id, company_cik, fiscal_year, fiscal_period,
-              concept_id, unit, is_instant, window_start, window_end) AS (
-    VALUES ('e9', 11111, 2019, 'FY', 77, 'USD', false, DATE '2018-01-01', DATE '2018-12-31'),
-           ('e9', 22222, 2019, 'FY', 88, 'USD', false, DATE '2018-07-01', DATE '2019-06-30')
-  )
   SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
          w.fiscal_year, w.fiscal_period,
          v.period_start, v.period_end, v.is_instant,
          v.value, v.unit, NULL::text AS derivation
-  FROM wanted w
-  JOIN xbrl.reported_fact v
+  FROM {CTE_NAME} w
+  JOIN {VIEW} v
     ON  v.company_cik = w.company_cik
     AND v.concept_id  = w.concept_id
     AND v.unit        = w.unit
     AND v.is_instant  = w.is_instant
     AND v.period_end  = w.window_end
     AND (w.is_instant OR v.period_start = w.window_start)
-  LIMIT 500
+  LIMIT {MAX_ROWS}
 
 Note that value, ticker and entity_name appear ONLY as v.<column>. They are
-never written as literals -- they are what you are querying FOR.
+never written as literals -- they are what you are querying FOR. Every
+coordinate is w.<column>, because those are already in `{CTE_NAME}`.
 """
 
 
@@ -517,8 +602,9 @@ def build_prompt(plan: QueryPlan) -> str:
     combining = any(cell.operands > 1 for cell in cells)
     worked_example = _EXAMPLE_COMBINING if combining else _EXAMPLE_PLAIN
     combine_help = _combine_help(cells)
+    declared = ", ".join(_cte_columns(cells))
 
-    prompt = f"""You write one PostgreSQL SELECT statement. Reply with the SQL and nothing else.
+    prompt = f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
 QUESTION
 {plan.question}
@@ -542,24 +628,27 @@ THE ONLY RELATION YOU CAN READ
     company, concept and period can be filed under two units, and ignoring it
     returns each value twice.
 
-FILTER TABLE -- WHICH ROWS TO FETCH
-This is a filter, not data to output. Each line says how to FIND one row in
-the relation. The values themselves are in the database and are the whole
-point of the query; they are not here, and they are not yours to supply.
-`concept_id` differs per company on purpose: filers tag the same business
-concept differently.
+A COORDINATE CTE IS ALREADY WRITTEN FOR YOU
+Do NOT write `WITH`. Do NOT write a `VALUES` list. Begin your reply at
+`SELECT`. A CTE named `{CTE_NAME}` is already defined above whatever you write,
+holding {len(cells)} row(s) of coordinates across {spec.companies} compan(ies):
 
-{_coordinate_table(cells)}
+  {CTE_NAME}({declared})
 
-Every value in that table is a literal you write into the SQL. `element_id`,
-`fiscal_year` and `fiscal_period` exist ONLY there -- the relation has no such
-columns, so they have to be selected as constants per row.
+Every coordinate you need is in it, already correct. **Never write a date, a
+cik or a concept_id as a literal** -- there is nothing to copy and nothing to
+work out. `concept_id` differs per company on purpose, because filers tag the
+same business concept differently, and `{CTE_NAME}` already knows which is
+which.
 
-The table is the COMPLETE row selection. Add no other filter. In particular,
+`element_id`, `fiscal_year` and `fiscal_period` exist ONLY in `{CTE_NAME}` --
+the relation has no such columns -- so project them as `w.<column>`.
+
+`{CTE_NAME}` is the COMPLETE row selection. Add no other filter. In particular,
 do not filter on `ticker` or `entity_name` using names from the question: the
 question says "Apple", the database says "Apple Inc.", and a filter on the
-one finds none of the other. `company_cik` in the table already identifies
-the company exactly; `ticker` and `entity_name` are for display only.
+one finds none of the other. `company_cik` in the CTE already identifies the
+company exactly; `ticker` and `entity_name` are for display only.
 
 A Q4 row is no different from any other: no filer reports a fourth quarter,
 but the relation supplies one anyway, already computed. Fetch it like the rest.
@@ -570,9 +659,8 @@ and, only when is_instant is false, period_start = window_start.
 Do not use BETWEEN or a date range: two different periods can end in the same
 year, and a range returns both.
 
-The straightforward way is a VALUES list of the table above joined to the
-relation, which also keeps `element_id` and the period labels attached to the
-right rows.
+Joining `{CTE_NAME}` to the relation also keeps `element_id` and the period
+labels attached to the right rows.
 {worked_example}
 {combine_help}
 YOUR JOB
@@ -582,21 +670,21 @@ OUTPUT
 Project exactly these column names, in any order:
   {columns}
 
-  - `element_id`, `fiscal_year` and `fiscal_period` come from the filter
-    table and are projected under exactly those names -- the relation has no
-    such columns, so they are constants per row. `fiscal_period` is one of
-    'FY', 'Q1', 'Q2', 'Q3', 'Q4' and nothing else.
+  - `element_id`, `fiscal_year` and `fiscal_period` come from `{CTE_NAME}`
+    and are projected under exactly those names -- the relation has no such
+    columns. `fiscal_period` is one of 'FY', 'Q1', 'Q2', 'Q3', 'Q4' and
+    nothing else.
   - `period_start`, `period_end`, `is_instant`, `value`, `unit`, `ticker`,
     `entity_name`, `company_cik` come from the relation.
 
 RULES (the statement is rejected if it breaks one)
-0. EVERY value must be read from the relation. Never write a number, a ticker
-   or a company name into the SQL as a literal -- a statement that does not
-   read `{VIEW}` is rejected outright. The table above tells you WHICH rows to
-   fetch; it does not contain the values, and the values are not yours to
-   supply.
-1. One statement. SELECT only -- no SET, no set_config(), no data-modifying
-   CTE, no SELECT INTO, no locking clause.
+0. EVERY value must be read from the relation. Never write a number, a
+   ticker, a date or a company name into the SQL as a literal -- a statement
+   that does not read `{VIEW}` is rejected outright. `{CTE_NAME}` says WHICH
+   rows to fetch; it holds no values, and the values are not yours to supply.
+1. Begin at SELECT. No `WITH` and no `VALUES` -- the CTE is already written,
+   and a second one replaces it. SELECT only: no SET, no set_config(), no
+   data-modifying CTE, no SELECT INTO, no locking clause.
 2. `{VIEW}` is the only readable relation. `fact`, `filing`, `company` and
    `concept` will raise a permission error.
 3. End with `LIMIT {MAX_ROWS}`. A statement with no LIMIT is rejected;
