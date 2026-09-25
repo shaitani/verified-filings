@@ -9,6 +9,7 @@ operands in range) fail loudly, and that the strictness inherited from
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -24,6 +25,7 @@ from app.schemas.query import (
     MetricElementIn,
     PeriodElementIn,
     PlanFilters,
+    PlanThreshold,
     QueryIn,
     QueryPlan,
     ResolvedPeriod,
@@ -319,3 +321,83 @@ def test_a_q4_resolved_period_is_an_ordinary_period() -> None:
     assert "residual_of" not in ResolvedPeriod.model_fields
     assert "period_rule" not in Binding.model_fields
     assert "components" not in Coverage.model_fields
+
+
+# --------------------------------------------------------------------------- #
+# Thresholds
+# --------------------------------------------------------------------------- #
+
+
+def test_a_threshold_must_name_a_metric_of_the_same_query() -> None:
+    """A dangling id is a malformed object, not something to report back.
+
+    Same rule as a qualifier, and for the same reason: a comparison attached to
+    nothing silently stops narrowing anything, and the reader gets every row.
+    """
+    with pytest.raises(ValidationError, match="not a metric element"):
+        QueryIn.model_validate(
+            {
+                "question": "revenue over 100 billion",
+                "intent": "rank",
+                "elements": [
+                    {"id": "e1", "kind": "metric", "text": "revenue"},
+                    {
+                        "id": "e2",
+                        "kind": "metric_threshold",
+                        "text": "over 100 billion",
+                        "qualifies": "e9",
+                        "comparison": "gt",
+                        "value": "100000000000",
+                    },
+                ],
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "comparison,value,passes,fails",
+    [
+        ("gt", "100", "101", "100"),
+        ("gte", "100", "100", "99"),
+        ("lt", "100", "99", "100"),
+        ("lte", "100", "100", "101"),
+        ("eq", "100", "100", "101"),
+    ],
+)
+def test_holds_implements_every_comparison(comparison, value, passes, fails) -> None:
+    """The predicate is re-applied to returned rows, so it has to be right.
+
+    `gt` vs `gte` on the boundary is the case that matters: a company at exactly
+    the threshold either belongs in the answer or does not, and a reader cannot
+    tell which from the figure alone.
+    """
+    threshold = PlanThreshold(
+        element_id="e1",
+        element_text="over a hundred",
+        comparison=comparison,
+        value=Decimal(value),
+    )
+    assert threshold.holds(Decimal(passes))
+    assert not threshold.holds(Decimal(fails))
+
+
+def test_a_null_value_satisfies_any_threshold() -> None:
+    """A NULL is the leading edge of a derivation, not a failed comparison.
+
+    `ResultRow` allows one on a derived row -- the first period has nothing
+    before it -- and a row holding nothing has not failed a test; there is
+    nothing to test.
+    """
+    threshold = PlanThreshold(
+        element_id="e1", element_text="over a hundred", comparison="gt", value=Decimal("100")
+    )
+    assert threshold.holds(None)
+
+
+def test_the_operator_is_rendered_for_the_prompt() -> None:
+    assert [
+        PlanThreshold(
+            element_id="e1", element_text="x", comparison=c, value=Decimal(1)
+        ).operator
+        for c in ("gt", "gte", "lt", "lte", "eq")
+    ] == [">", ">=", "<", "<=", "="]

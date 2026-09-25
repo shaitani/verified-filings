@@ -601,6 +601,34 @@ def _combine_help(cells: list[PlanCell]) -> str:
     return _COMBINE_HELP.format(expressions=chr(10).join(lines))
 
 
+#: Shown only when the plan carries one. A threshold is the one narrowing that
+#: is *meant* to return fewer rows than the grid, so it is stated apart from the
+#: row-count promise rather than folded into it -- the two would otherwise
+#: contradict each other, which is the shape of §4.3c.
+_THRESHOLD_HELP = """KEEP ONLY THE ROWS THAT SATISFY THIS
+The question asks for a subset. Compute the metric as usual, then keep only the
+rows where it holds:
+
+{tests}
+
+This is the one case where FEWER rows than the count above is correct -- that
+count is how many the grid holds, and the comparison cuts it down. Apply it to
+the metric's own value, at the outermost level, and to nothing else. Every row
+you return is checked against it, so a row that does not satisfy it is rejected.
+"""
+
+
+def _threshold_help(plan: QueryPlan) -> str:
+    if not plan.thresholds:
+        return ""
+    tests = chr(10).join(
+        f"  {threshold.element_id}: keep rows where value {threshold.operator} "
+        f"{threshold.value:f}   (from {threshold.element_text!r})"
+        for threshold in plan.thresholds
+    )
+    return _THRESHOLD_HELP.format(tests=tests) + chr(10)
+
+
 def _plan_notes(plan: QueryPlan) -> list[str]:
     notes = [f"- {note.kind}: {note.message}" for note in plan.notes]
     for index, binding in enumerate(plan.bindings):
@@ -654,6 +682,7 @@ def build_prompt(plan: QueryPlan) -> str:
         worked_example = worked_example + chr(10) + _EXAMPLE_DERIVED
     combine_help = _combine_help(cells)
     declared = ", ".join(_cte_columns(cells))
+    threshold_help = _threshold_help(plan)
 
     prompt = f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
@@ -713,7 +742,7 @@ year, and a range returns both.
 Joining `{CTE_NAME}` to the relation also keeps `element_id` and the period
 labels attached to the right rows.
 {worked_example}
-{combine_help}
+{combine_help}{threshold_help}
 YOUR JOB
 {job}
 

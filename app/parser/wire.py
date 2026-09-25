@@ -32,13 +32,19 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.query import Intent, QueryFiscalPeriod
+from app.schemas.query import Comparison, Intent, QueryFiscalPeriod
 
 #: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
 #: ``acceptor._FIELDS_BY_KIND`` by a test, so a kind added here without a
 #: field set there fails loudly rather than going unchecked.
 WireKind = Literal[
-    "metric", "company", "company_group", "period", "metric_qualifier", "narrative"
+    "metric",
+    "company",
+    "company_group",
+    "period",
+    "metric_qualifier",
+    "metric_threshold",
+    "narrative",
 ]
 
 
@@ -69,10 +75,16 @@ class WireElement(BaseModel):
     sic_code: str | None = None
     sic_description: str | None = None
 
-    # Metric-qualifier target. An element id, so unlike every other field here
-    # it points at something else in the same reply -- which is why `QueryIn`
-    # checks it names a metric rather than trusting it.
+    # Metric-qualifier and metric-threshold target. An element id, so unlike
+    # every other field here it points at something else in the same reply --
+    # which is why `QueryIn` checks it names a metric rather than trusting it.
     qualifies: str | None = None
+
+    # Threshold fields. `threshold` is a float on the wire and a Decimal on
+    # `MetricThresholdElementIn`: a grammar constrains a number, and the
+    # exactness matters only once it is being compared against stored values.
+    comparison: Comparison | None = None
+    threshold: float | None = None
 
 
 class WireQuery(BaseModel):

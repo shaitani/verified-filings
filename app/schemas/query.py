@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -124,6 +125,22 @@ NoteKind = Literal[
     "narrower_than_asked",
     "incomplete_result",
 ]
+
+#: How a threshold compares a metric against its number. Five operators and no
+#: "between": a range is two thresholds on the same metric, which the plan
+#: already supports, and one operator per element keeps the parser's job to
+#: reading a phrase rather than composing a predicate.
+Comparison = Literal["gt", "gte", "lt", "lte", "eq"]
+
+#: Rendered into the SQL prompt, and the one place the mapping from name to
+#: operator lives.
+COMPARISON_SQL: dict[str, str] = {
+    "gt": ">",
+    "gte": ">=",
+    "lt": "<",
+    "lte": "<=",
+    "eq": "=",
+}
 
 #: Matches a concept reference inside ``Binding.expression`` -- "c0", "c1", ...
 _CONCEPT_REF = re.compile(r"c(\d+)")
@@ -278,9 +295,21 @@ class CompanyGroupElementIn(_ElementBase):
 
 
 class MetricQualifierElementIn(_ElementBase):
-    """A phrase that narrows a metric to part of it -- a product, a region, a
-    business line. "revenue **from iPhones**", "revenue **from outside the
-    United States**".
+    """A phrase naming a **slice of the business** a metric should be cut down
+    to -- a product, a region, a segment, a business line. "revenue **from
+    iPhones**", "revenue **from outside the United States**", "revenue **in the
+    cloud segment**".
+
+    **This is not the element for a comparison against a value.** "revenue
+    **more than 100 billion dollars**" does not name a slice of anything; it
+    tests the metric's number, and it belongs in
+    ``MetricThresholdElementIn``. The two were confused once, measured
+    2026-09-24 on q039 ("List companies with more than 100 billion dollars in
+    revenue last year"): read as a qualifier, the threshold earned the
+    dimensional refusal below and a perfectly answerable question came back as
+    "this dataset holds company totals only". The test to apply is whether the
+    phrase could name a *column of a breakdown* the filer might publish. A
+    product could. A number could not.
 
     It exists because such a phrase has nowhere else to go, and every wrong
     home for it is dangerous in a different way. As part of the *metric* text
@@ -343,12 +372,52 @@ class NarrativeElementIn(_ElementBase):
     kind: Literal["narrative"] = "narrative"
 
 
+class MetricThresholdElementIn(_ElementBase):
+    """A phrase testing a metric against a number. "revenue **more than 100
+    billion dollars**", "margin **below 10%**", "debt that **more than
+    doubled**"... no -- that last one is a *change* over periods, not a
+    threshold, and belongs to the derivation the SQL step computes.
+
+    Sits beside ``MetricQualifierElementIn`` because both narrow what comes
+    back, and apart from it because they narrow different things and only one
+    is answerable. A qualifier asks for a slice of the business, which this
+    corpus does not carry; a threshold asks for a subset of the *rows*, which
+    is ordinary work.
+
+    The number is a typed field rather than prose for the same reason a period
+    carries ``fiscal_year`` rather than the words "last year": the parser is
+    the only component that can read "100 billion dollars" into a quantity, and
+    leaving it in English means the SQL model has to guess at the scale. It is
+    also what makes the filter **checkable** -- ``execute()`` can confirm every
+    returned row satisfies it, so a model that quietly drops the comparison is
+    caught rather than trusted. A dropped threshold is the failure that
+    matters: the reader asked for companies above $100B and would be handed all
+    twenty with nothing saying the question had been widened.
+    """
+
+    kind: Literal["metric_threshold"] = "metric_threshold"
+
+    #: The element id of the metric this tests. Required, for the same reason
+    #: as ``MetricQualifierElementIn.qualifies``: a question with two metrics
+    #: gives no other way to know which number the comparison is about.
+    qualifies: str = Field(min_length=1, max_length=32)
+
+    comparison: Comparison
+
+    #: The number, in the metric's own unit -- dollars for a dollar figure, a
+    #: fraction for a ratio ("below 10%" is 0.1, not 10). ``Decimal`` because
+    #: every value it is compared against is one, and mixing in a float is how
+    #: a boundary case lands on the wrong side.
+    value: Decimal
+
+
 ElementIn = Annotated[
     MetricElementIn
     | CompanyElementIn
     | CompanyGroupElementIn
     | PeriodElementIn
     | MetricQualifierElementIn
+    | MetricThresholdElementIn
     | NarrativeElementIn,
     Field(discriminator="kind"),
 ]
@@ -370,7 +439,7 @@ class QueryIn(_Base):
 
     @model_validator(mode="after")
     def _qualifiers_point_at_metrics(self) -> QueryIn:
-        """A qualifier must narrow a metric element of this same query.
+        """A qualifier or threshold must name a metric element of this query.
 
         Checked here rather than in the mapper because a dangling id is a
         malformed object, not a resolution failure to report back: the parser
@@ -379,11 +448,11 @@ class QueryIn(_Base):
         """
         metrics = {e.id for e in self.elements if e.kind == "metric"}
         for element in self.elements:
-            if element.kind != "metric_qualifier":
+            if element.kind not in ("metric_qualifier", "metric_threshold"):
                 continue
             if element.qualifies not in metrics:
                 raise ValueError(
-                    f"metric_qualifier {element.id!r} qualifies "
+                    f"{element.kind} {element.id!r} qualifies "
                     f"{element.qualifies!r}, which is not a metric element of this "
                     f"query (metrics: {sorted(metrics)})"
                 )
@@ -559,6 +628,56 @@ class Binding(_Base):
         return self
 
 
+class PlanThreshold(_Base):
+    """A comparison the answer's rows must satisfy, carried into the plan.
+
+    Plan-level rather than per-binding: "revenue over 100 billion" is one
+    statement about the question, not twenty statements about twenty companies,
+    and duplicating it per binding would invite them to disagree.
+
+    Unlike every other narrowing in a plan this one **reduces the row count on
+    purpose**. Twenty companies resolve and perhaps eight clear the bar, so the
+    verdict cannot treat the other twelve as a shortfall -- see
+    ``executor._threshold_violations``, which instead checks the far more useful
+    thing: that every row which *did* come back satisfies it. A model that
+    quietly drops the comparison is then caught, rather than trusted.
+    """
+
+    element_id: str = Field(min_length=1, max_length=32)
+
+    #: The phrase as the asker wrote it, for the sentence a reader is shown.
+    element_text: str = Field(min_length=1, max_length=256)
+
+    comparison: Comparison
+    value: Decimal
+
+    @property
+    def operator(self) -> str:
+        """The SQL operator, for the prompt."""
+        return COMPARISON_SQL[self.comparison]
+
+    def holds(self, value: Decimal | None) -> bool:
+        """Does one returned value satisfy this?
+
+        ``None`` passes. A NULL value is the leading edge of a derivation
+        (``ResultRow._null_value_needs_a_derivation``), and a row with nothing
+        in it has not failed a comparison -- there is nothing to compare.
+        """
+        if value is None:
+            return True
+        match self.comparison:
+            case "gt":
+                return value > self.value
+            case "gte":
+                return value >= self.value
+            case "lt":
+                return value < self.value
+            case "lte":
+                return value <= self.value
+            case _:
+                return value == self.value
+
+
 class Candidate(_Base):
     """A concept the mapper considered but did not commit to."""
 
@@ -717,6 +836,11 @@ class QueryPlan(_Base):
     #: Curated questions to put back to the asker. See ``Clarification`` --
     #: these are answerable, unlike ``unresolved``.
     clarifications: list[Clarification] = Field(default_factory=list)
+
+    #: Comparisons the rows must satisfy -- "revenue over 100 billion". Empty
+    #: for almost every question. See ``PlanThreshold``: these are the one
+    #: narrowing that is *meant* to return fewer rows than the grid promises.
+    thresholds: list[PlanThreshold] = Field(default_factory=list)
 
     #: Caveats about the result as a whole rather than about one binding --
     #: currently only that the companies' fiscal labels cover different dates.

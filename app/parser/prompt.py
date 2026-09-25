@@ -73,6 +73,11 @@ RULES
                  "from iPhones", "from outside the US", "in Europe", "for the
                  cloud segment". Set `qualifies` to the id of the metric
                  element it narrows.
+   metric_threshold
+                 a phrase comparing a metric to a NUMBER: "more than 100
+                 billion dollars", "under 10%", "at least 50 million". Set
+                 `qualifies` to the metric's id, `comparison` to one of gt,
+                 gte, lt, lte, eq, and `threshold` to the number.
    narrative     a phrase asking for WORDS rather than a figure: a cause, an
                  explanation, or what the filing says. "Why", "say about".
 
@@ -106,6 +111,27 @@ RULES
     Leaving it out turns "why did margins fall" into "what were the margins",
     a question nobody asked, and answers it with a number that does not
     address it.
+
+4c. A NUMBER IS A metric_threshold, NEVER A metric_qualifier. A qualifier
+    names a SLICE OF THE BUSINESS -- a product, a region, a segment -- and this
+    dataset has none of those, so a qualifier always ends in a refusal. A
+    number is an ordinary filter and is answerable. Ask whether the phrase
+    could be a column of a breakdown the company might publish: a product
+    could, a number could not.
+      "revenue from iPhones"
+        -> metric "revenue", metric_qualifier "from iPhones"
+      "more than 100 billion dollars in revenue"
+        -> metric "revenue", metric_threshold "more than 100 billion dollars"
+           qualifying it, comparison: "gt", threshold: 100000000000
+      "companies with a margin under 10%"
+        -> metric "margin", metric_threshold "under 10%", comparison: "lt",
+           threshold: 0.1
+    `threshold` is a plain number in the metric's own unit. Write dollars out
+    in full -- "100 billion" is 100000000000, not 100. A percentage is a
+    fraction: "10%" is 0.1.
+    A phrase about CHANGE is neither. "more than doubled", "grew fastest" and
+    "fell the most" compare two periods, so they need two periods (rule 5f) and
+    no threshold element.
 
 5. A period element MUST carry at least one of `fiscal_year`, `last_n_years`
    or `fiscal_period`, or it names no time at all.
@@ -381,6 +407,19 @@ _EXAMPLES: list[tuple[str, str]] = [
         """{"intent":"lookup","elements":[
   {"id":"e1","kind":"company","text":"Microsoft"},
   {"id":"e2","kind":"metric","text":"free cash flow"},
+  {"id":"e3","kind":"period","text":"last year","last_n_years":1}],"wants_chart":false}""",
+    ),
+    # Rule 4c. Measured 2026-09-24: read as a metric_qualifier, "more than 100
+    # billion dollars" earned the dimensional refusal -- "this dataset holds
+    # company totals only" -- and a perfectly answerable question came back as
+    # unanswerable. The number goes in a typed field so the SQL step is not left
+    # to read "100 billion" out of English, and so `execute()` can check every
+    # returned row against it.
+    (
+        "List companies with more than 100 billion dollars in revenue last year.",
+        """{"intent":"rank","elements":[
+  {"id":"e1","kind":"metric","text":"revenue"},
+  {"id":"e2","kind":"metric_threshold","text":"more than 100 billion dollars","qualifies":"e1","comparison":"gt","threshold":100000000000},
   {"id":"e3","kind":"period","text":"last year","last_n_years":1}],"wants_chart":false}""",
     ),
     # Rule 4b. Measured 2026-09-24: the rule alone produced no narrative element

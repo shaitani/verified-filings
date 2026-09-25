@@ -14,6 +14,7 @@ rule teaches the model to break it.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -618,3 +619,74 @@ async def test_an_empty_reply_is_still_a_proposal_error(monkeypatch):
     monkeypatch.setattr("app.parser.proposer.AsyncClient", client)
     with pytest.raises(ProposalError, match="empty"):
         await propose("prompt")
+
+
+# --------------------------------------------------------------------------- #
+# Thresholds versus qualifiers
+# --------------------------------------------------------------------------- #
+
+
+def test_a_threshold_carries_its_number_as_a_decimal() -> None:
+    """The number is typed so the SQL step never reads "100 billion" out of
+    English, and so `execute()` can re-check every returned row against it."""
+    query = accept(
+        _reply(
+            intent="rank",
+            elements=[
+                {"id": "e1", "kind": "metric", "text": "revenue"},
+                {
+                    "id": "e2",
+                    "kind": "metric_threshold",
+                    "text": "more than 100 billion dollars",
+                    "qualifies": "e1",
+                    "comparison": "gt",
+                    "threshold": 100000000000,
+                },
+                {"id": "e3", "kind": "period", "text": "last year", "last_n_years": 1},
+            ],
+        ),
+        "List companies with more than 100 billion dollars in revenue last year.",
+    )
+    threshold = next(e for e in query.elements if e.kind == "metric_threshold")
+    assert threshold.value == Decimal("100000000000")
+    assert isinstance(threshold.value, Decimal)
+    assert threshold.comparison == "gt"
+    assert threshold.qualifies == "e1"
+
+
+def test_a_threshold_missing_its_number_is_refused() -> None:
+    """Dropped, the comparison silently stops narrowing and the reader gets
+    every row -- which is the failure the element exists to prevent."""
+    with pytest.raises(MalformedProposal, match="needs `threshold`"):
+        accept(
+            _reply(
+                elements=[
+                    {"id": "e1", "kind": "metric", "text": "revenue"},
+                    {
+                        "id": "e2",
+                        "kind": "metric_threshold",
+                        "text": "more than 100 billion dollars",
+                        "qualifies": "e1",
+                        "comparison": "gt",
+                    },
+                    {"id": "e3", "kind": "period", "text": "last year", "last_n_years": 1},
+                ]
+            ),
+            "List companies with more than 100 billion dollars in revenue last year.",
+        )
+
+
+def test_no_worked_example_reads_a_number_as_a_qualifier() -> None:
+    """Measured 2026-09-24 on q039: read as a `metric_qualifier`, "more than
+    100 billion dollars" earned the dimensional refusal -- "this dataset holds
+    company totals only" -- and a perfectly answerable question came back
+    unanswerable. The model copies what it is shown, so no example may show it.
+    """
+    for question, reply in _EXAMPLES:
+        for element in json.loads(reply)["elements"]:
+            if element["kind"] != "metric_qualifier":
+                continue
+            assert not any(ch.isdigit() for ch in element["text"]), (
+                f"{question!r} shows a qualifier containing a number: "
+                f"{element['text']!r}"
+            )

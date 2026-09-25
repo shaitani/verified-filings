@@ -162,6 +162,39 @@ def _wrong_unit(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int]:
     return wrong
 
 
+def _threshold_violations(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int]:
+    """Rows that came back but do not satisfy the plan's comparison.
+
+    This is what makes a threshold worth modelling rather than leaving in the
+    question text for the model to notice. "List companies with more than 100
+    billion dollars in revenue" narrows twenty rows to about eight, and the
+    dangerous failure is the model dropping the comparison: the reader gets all
+    twenty, every one attributable and in the right unit, with nothing saying
+    the question had been widened. Here the plan holds the number, so the
+    predicate can simply be re-applied to what came back.
+
+    A row that fails is marked unattributable, which makes the result
+    unanswerable -- the same channel a row in the wrong unit uses, and for the
+    same reason: whatever it holds is not what the plan promised.
+
+    Only rows for the threshold's own element are checked. A question with two
+    metrics and a bar on one of them leaves the other alone.
+    """
+    if not plan.thresholds:
+        return []
+    by_element: dict[str, list] = {}
+    for threshold in plan.thresholds:
+        by_element.setdefault(threshold.element_id, []).append(threshold)
+    return [
+        index
+        for index, annotated in enumerate(rows)
+        if not all(
+            threshold.holds(annotated.row.value)
+            for threshold in by_element.get(annotated.row.element_id, ())
+        )
+    ]
+
+
 def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     expected = plan_cells(plan)
     expected_keys = {
@@ -190,10 +223,22 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     # A row in the wrong unit is not attributable to its binding in any useful
     # sense: the binding says `pure` and the row says `USD`, so whatever it
     # holds is not what the binding promised.
-    unattributable = sorted(set(unattributable) | set(_wrong_unit(rows, plan)))
+    unattributable = sorted(
+        set(unattributable)
+        | set(_wrong_unit(rows, plan))
+        | set(_threshold_violations(rows, plan))
+    )
 
     if not rows:
         status = "empty"
+    elif plan.thresholds:
+        # A threshold is *meant* to cut rows, so neither the row-count equality
+        # nor the per-company coverage check applies: a company below the bar is
+        # correctly absent, and so is every period of it. What is checked instead
+        # is that the rows which came back satisfy the comparison, which
+        # `_threshold_violations` has already folded into `unattributable`.
+        status = "complete"
+        missing = []
     elif derived:
         # The row-count equality describes the grid of *filed* values, and a
         # five-year growth series has four points. What still has to hold is

@@ -50,11 +50,13 @@ from app.schemas.query import (
     Intent,
     MetricElementIn,
     MetricQualifierElementIn,
+    MetricThresholdElementIn,
     NarrativeElementIn,
     Note,
     PeriodElementIn,
     PeriodRef,
     PlanFilters,
+    PlanThreshold,
     QueryIn,
     QueryPlan,
     ResolvedPeriod,
@@ -168,6 +170,23 @@ async def map_query(
         if isinstance(element, NarrativeElementIn)
     ]
 
+    # A threshold is answerable, so unlike a qualifier it is carried rather than
+    # refused. It is attached to the metric it tests, and dropped silently if
+    # that metric never bound -- there is nothing to compare against, and the
+    # unresolved metric is already the reason the reader is being told no.
+    bound_elements = {binding.element_id for binding in bindings}
+    thresholds = [
+        PlanThreshold(
+            element_id=element.qualifies,
+            element_text=element.text,
+            comparison=element.comparison,
+            value=element.value,
+        )
+        for element in query.elements
+        if isinstance(element, MetricThresholdElementIn)
+        and element.qualifies in bound_elements
+    ]
+
     result = _describe_result(
         query,
         ciks=_answering_ciks(ciks, bindings),
@@ -186,6 +205,7 @@ async def map_query(
         + metric_problems
         + narrative_problems,
         clarifications=clarifications,
+        thresholds=thresholds,
         notes=company_notes
         + coverage_notes
         + _alignment_notes(resolved_periods, result)

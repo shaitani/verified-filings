@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 
 from pydantic import ValidationError
 
@@ -43,6 +44,7 @@ from app.schemas.query import (
     ElementIn,
     MetricElementIn,
     MetricQualifierElementIn,
+    MetricThresholdElementIn,
     NarrativeElementIn,
     PeriodElementIn,
     QueryIn,
@@ -144,6 +146,7 @@ _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     ),
     "company_group": frozenset({"sic_code", "sic_description"}),
     "metric_qualifier": frozenset({"qualifies"}),
+    "metric_threshold": frozenset({"qualifies", "comparison", "threshold"}),
     "narrative": frozenset(),
 }
 
@@ -382,6 +385,28 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
             )
         if element.kind == "narrative":
             return NarrativeElementIn(id=element.id, text=span)
+        if element.kind == "metric_threshold":
+            if element.qualifies is None or element.comparison is None:
+                raise MalformedProposal(
+                    f"metric_threshold {element.id!r} needs `qualifies` set to the id "
+                    f"of the metric it tests and `comparison` set to one of gt, gte, "
+                    f"lt, lte, eq"
+                )
+            if element.threshold is None:
+                raise MalformedProposal(
+                    f"metric_threshold {element.id!r} needs `threshold` set to the "
+                    f"number being compared against, in the metric's own unit -- "
+                    f"dollars for a dollar figure, a fraction for a percentage"
+                )
+            return MetricThresholdElementIn(
+                id=element.id,
+                text=span,
+                qualifies=element.qualifies,
+                comparison=element.comparison,
+                # str() first: Decimal(float) carries the float's binary error
+                # into a value that gets compared against stored Decimals.
+                value=Decimal(str(element.threshold)),
+            )
         if element.kind == "metric_qualifier":
             if element.qualifies is None:
                 raise MalformedProposal(

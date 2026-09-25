@@ -14,6 +14,7 @@ because the model copies what it is shown, and `yes` produced
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -22,6 +23,7 @@ from app.retrieval import (
     GenerationError,
     UnsupportedPlan,
     build_prompt,
+    executor,
     generate,
     plan_cells,
     prompt as prompt_module,
@@ -34,10 +36,12 @@ from app.schemas.query import (
     Note,
     PeriodRef,
     PlanFilters,
+    PlanThreshold,
     QueryPlan,
     ResolvedPeriod,
     ResultSpec,
 )
+from app.schemas.result import AnnotatedRow, Citation, ResultRow, ResultSet
 
 APPLE = 320193
 NVIDIA = 1045810
@@ -449,3 +453,115 @@ def test_the_char_budget_tracks_the_generator_s_context_window() -> None:
     assert prompt_module.MAX_PROMPT_CHARS == int(
         generator.CONTEXT_TOKENS * prompt_module.CHARS_PER_TOKEN
     )
+
+
+# --------------------------------------------------------------------------- #
+# Thresholds -- checked, not trusted
+# --------------------------------------------------------------------------- #
+
+
+def _citation() -> Citation:
+    return Citation(
+        binding_key="b0",
+        element_id="e1",
+        concepts=[_concept()],
+        expression="c0",
+        unit="USD",
+        resolved_by="alias",
+        confidence=1.0,
+        rationale="because",
+    )
+
+
+def _threshold(value: str = "100", comparison: str = "gt") -> PlanThreshold:
+    return PlanThreshold(
+        element_id="e1",
+        element_text="more than a hundred",
+        comparison=comparison,
+        value=Decimal(value),
+    )
+
+
+def _annotated(value: str | None, element_id: str = "e1") -> AnnotatedRow:
+    return AnnotatedRow(
+        row=ResultRow(
+            element_id=element_id,
+            company_cik=APPLE,
+            fiscal_year=2024,
+            fiscal_period="FY",
+            period_start=date(2023, 10, 1),
+            period_end=date(2024, 9, 28),
+            is_instant=False,
+            value=None if value is None else Decimal(value),
+            unit="USD",
+        ),
+        binding_keys=["b0"],
+    )
+
+
+def test_a_row_below_the_threshold_is_unattributable() -> None:
+    """The failure this exists for.
+
+    A model that drops the comparison returns every row -- attributable, right
+    unit, plausible -- and the reader who asked for companies above $100B is
+    handed all twenty with nothing saying the question was widened. Because the
+    plan holds the number, the predicate is simply re-applied to what came back.
+    """
+    plan = _plan([_binding()], [_annual()]).model_copy(
+        update={"thresholds": [_threshold()]}
+    )
+    rows = [_annotated("101"), _annotated("99")]
+    assert executor._threshold_violations(rows, plan) == [1]
+
+
+def test_a_threshold_only_judges_its_own_metric() -> None:
+    """A question with two metrics and a bar on one leaves the other alone."""
+    plan = _plan([_binding()], [_annual()]).model_copy(
+        update={"thresholds": [_threshold()]}
+    )
+    rows = [_annotated("1", element_id="e2")]
+    assert executor._threshold_violations(rows, plan) == []
+
+
+def test_a_plan_with_no_threshold_checks_nothing() -> None:
+    plan = _plan([_binding()], [_annual()])
+    assert executor._threshold_violations([_annotated("1")], plan) == []
+
+
+def test_a_threshold_makes_fewer_rows_correct_rather_than_a_shortfall() -> None:
+    """The one narrowing that is *meant* to return less than the grid holds.
+
+    Twenty companies resolve and eleven clear the bar; the other nine are
+    correctly absent, so neither the row-count equality nor the per-company
+    coverage check applies. Measured on q039, which returns 11 of 20 `complete`.
+    """
+    plan = _plan(
+        [_binding(company_cik=APPLE), _binding(company_cik=NVIDIA)],
+        [_annual(APPLE, 2024), _annual(NVIDIA, 2024)],
+        companies=2,
+    ).model_copy(update={"thresholds": [_threshold()]})
+
+    verdict = executor._verdict([_annotated("101")], plan)
+    assert verdict.status == "complete"
+    assert verdict.returned_rows == 1 and verdict.expected_rows == 2
+    assert verdict.missing == []
+    assert ResultSet(
+        question="q", rows=[_annotated("101")], verdict=verdict,
+        citations={"b0": _citation()},
+    ).is_answerable
+
+
+def test_the_prompt_states_the_comparison_when_the_plan_carries_one() -> None:
+    """Stated apart from the row-count promise, because the two would otherwise
+    contradict each other -- which is the shape of §4.3c."""
+    plan = _plan([_binding()], [_annual()]).model_copy(
+        update={"thresholds": [_threshold()]}
+    )
+    text = build_prompt(plan)
+    assert "value > 100" in text
+    assert "FEWER rows than the count above is correct" in text
+    assert "more than a hundred" in text
+
+
+def test_the_prompt_says_nothing_about_thresholds_when_there_are_none() -> None:
+    assert "FEWER rows" not in build_prompt(_plan([_binding()], [_annual()]))
