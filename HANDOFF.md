@@ -233,18 +233,17 @@ so it is the annual figure minus the year-to-date one. 100,841 filed rows plus
 
 In rough order of how much they matter.
 
-- **Nothing checks that the answer matches the question.** The last
-  plausible-wrong-answer in the eval set. **q026**, "Did any of these
-  companies restate its revenue?", comes back `is_complete` with a 100-row
-  revenue series and no caveat: every element resolved, so by every measure
-  the mapper has, the plan is perfect. It answers a different question. Seen
-  again live — a ranking question returned the underlying figures, verdict
-  `complete`, `is_answerable` true. The verdict checks cardinality and
-  attribution, not meaning. Natural home is [C], which deliberately does not
-  do it yet: it needs the eval runner first, so the gate can be measured
-  rather than guessed at (`app/parser/DESIGN.md` §7). Shapes that
-  fail this way: restatement, causality, counts of filings, anything about the
-  *filing* rather than the figures.
+- **Nothing checks that the answer matches the question.** "Did any of these
+  companies restate its revenue?" comes back `is_complete` with a revenue
+  series and no caveat: every element resolved, so by every measure the mapper
+  has, the plan is perfect. It answers a different question. Seen again live —
+  a ranking question returned the underlying figures, verdict `complete`,
+  `is_answerable` true. The verdict checks cardinality and attribution, not
+  meaning. Shapes that fail this way: restatement, causality, counts of
+  filings, anything about the *filing* rather than the figures. Natural home
+  is [C], which deliberately does not do it yet: it needs the eval runner
+  first, so the gate can be measured rather than guessed at
+  (`app/parser/DESIGN.md` §7).
 - **Same-unit arithmetic rests on the prompt alone.** A ratio in the wrong
   unit is caught — `execute()` refuses a row whose unit is not the binding's —
   but `free_cash_flow` is `c0 - c1` over two USD concepts, so a wrong operator
@@ -257,44 +256,44 @@ In rough order of how much they matter.
   scores the *decision* — did it answer, and was answering the right call. It
   does not check the figure.
 
-  **Last full run, 2026-09-25: 32/55 pass, 21 fail, 2 set aside, 1 unsafe.**
-  That run is stale in both directions and the number should not be quoted.
-  Eight questions were re-run individually afterwards and seven of them moved;
-  a fresh full run is the first thing worth doing. `data/question-walkthrough.md`
-  holds a per-question breakdown — the question, how the parser understood it,
-  expected against observed per item, the rows with their windows, the
-  provenance and the caveats — but **q009 onward in that file predates the
-  fixes below**, so treat any failure there as unconfirmed.
+  **No current number is recorded here, on purpose.** Earlier runs were
+  deleted along with their artefacts: they were taken across a week of prompt
+  changes, several were stale in both directions, and a stale pass rate is
+  worse than none — it gets quoted. Run it and see.
 
-  Two traps in reading it. `expect` is a **list**, one entry per metric the
-  question names, because "assets, liabilities, equity, cash, goodwill,
-  inventory" is six asks and five can succeed while the sixth fails. And a
-  question carrying `known_gap` is skipped by default and listed separately;
-  `--include-known-gaps` runs it anyway.
+  Two things to know before reading the output. `expect` is a **list**, one
+  entry per metric the question names, because "assets, liabilities, equity,
+  cash, goodwill, inventory" is six asks and five can succeed while the sixth
+  fails. And a question carrying `known_gap` is skipped by default and listed
+  separately; `--include-known-gaps` runs it anyway. Two carry one today.
 
   The grade to watch is **`unsafe`** — the system answering an item marked
   `refused` or `asked`. Every other failure costs a refusal, which is the
   outcome this project prefers; that one is the failure it exists to prevent,
   so it is counted apart from `fail` and printed last.
 
-- **A wrong number passed the verdict for three days, and the runner scored it
-  `pass`.** q007, "Compare gross margins for Intel and AMD", computed
-  `GrossProfit - Revenue` and returned about -12.2 billion USD where a margin
-  of 0.46 was wanted. Four consecutive runs came back `complete` and
-  answerable. `_wrong_unit` exists to catch exactly this — a `pure` binding
-  cannot have `USD` rows — but it skips any row whose `derivation` is set, and
-  the model was setting it. **A model-supplied flag switches off the one
-  structural check on its own arithmetic.** TODO in
-  `app/retrieval/executor.py`; not fixed.
+- **The unit guard can be switched off by the model, and has been.**
+  `_wrong_unit` is the one structural check on derived arithmetic: a binding
+  whose result unit is `pure` cannot have rows in `USD`, because dividing like
+  by like is dimensionless. It skips any row whose `derivation` is set — and
+  `derivation` is a string the *model* writes. A ratio question that came back
+  as a subtraction, labelled `USD`, with a plausible `derivation` name, was
+  graded `complete` and answerable for three days before anything noticed.
+  **Do not trust a model-supplied flag to gate a check on that model's own
+  output.** TODO in `app/retrieval/executor.py`; not fixed.
 
-  Two things follow. The runner grades the *decision*, not the figure, so it
-  cannot catch this class on its own — that is by design
-  (`evals/README.md`) and this is the first time it visibly cost something.
-  And q007 is still wrong: `_JOB_EITHER` sends any question phrased as a
-  comparison down its branch (b), which points at a `DERIVATION example` that
-  is never attached to a multi-operand plan, so the model improvises. Fixing
-  it by choosing the job text on `combining` rather than `intent` was tried
-  and reverted — it made q009 fail the same way.
+  Worth pairing with the limit above it: the runner grades the *decision*, not
+  the figure. It cannot catch this class on its own, by design
+  (`evals/README.md`). When a run says `pass`, that means the chain made the
+  right call about whether to answer — not that the number is right.
+
+- **`_JOB_EITHER` can point at an example that is not in the prompt.** Its
+  branch (b) says to follow the `DERIVATION example`, which is attached only to
+  a single-operand deriving plan. A multi-operand plan phrased as a comparison
+  therefore takes branch (b), finds nothing to follow, and improvises the
+  arithmetic. Selecting the job text on `combining` rather than `intent` looks
+  like the fix and is not: it was tried and reverted, because it broke a
+  question that had been passing. See `app/retrieval/DESIGN.md` §4.3e.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the
