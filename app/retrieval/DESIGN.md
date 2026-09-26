@@ -542,6 +542,65 @@ measured. **Prompt claims in this file need a rate over n runs, not an
 observation.** §4.3c's `LIMIT` finding stands because it reproduced across the
 full eval set afterwards; the q023 variants did not and were reverted.
 
+### 4.3d The CTE the model could not see
+
+Measured 2026-09-25. Moving the coordinate CTE out of the prompt (§4.3c's
+optimisation) shrank it to a constant ~6,200 characters and fixed q038. It also
+broke q001, q004, q005, q007, q008, q013, q025, q036, q041, q054 and q056, and
+the mechanism took a day to find.
+
+Told only *"a CTE named `wanted` is already defined, holding 1 row(s) of
+coordinates"*, **a model that cannot see the CTE invents a filter to narrow
+it.** q001 came back with:
+
+```sql
+WHERE w.fiscal_year = '2024' AND w.fiscal_period = 'Q2'
+```
+
+`Q2` is lifted from the OUTPUT section -- the one place in the whole prompt
+where a `fiscal_period` value appears. The plan asked for FY, the join matched
+nothing, and the verdict was `empty`.
+
+Eight wordings were measured against it and only one held: show the rows.
+Dropping the `FY/Q1..Q4` enumeration, saying "your statement has NO `WHERE`
+clause at all", and making that a numbered RULE each fixed some questions and
+broke others -- and q005 answered every prohibition with a *different* invented
+filter (`v.concept_id`, then `v.concept_name`, then a scalar subquery). Showing
+the model the two bad clauses as things not to write taught it to write them.
+
+The gate is `MAX_INLINE_CTE_CHARS`, on characters rather than rows because a
+multi-operand plan carries two rows per cell. At 4,000 the whole eval set
+inlines except q038, which passes without seeing the CTE and would otherwise
+put the prompt at ~11k tokens against an 8,192 window.
+
+### 4.3e The example that contradicted its own rules
+
+`_EXAMPLE_COMBINING` was the last thing still opening with `WITH wanted(...) AS
+(VALUES` -- written before the CTE moved into Python, and missed when
+`_EXAMPLE_PLAIN` and `_EXAMPLE_DERIVED` were rewritten. So a multi-operand plan
+was shown, as its single worked example, exactly what rule 1 of the same prompt
+forbids. It also hard-coded `c0 / c1` and then spent two paragraphs correcting
+itself: *"Had the expression been `c0 - c1` instead..."*, *"do not copy the
+operator from this example"*.
+
+Measured on q024 (free cash flow, `c0 - c1`): the model wrote `max(v.value)`
+with no `FILTER` at all -- neither operator, a maximum where a subtraction
+belonged -- and left `v.unit` out of `GROUP BY`, which is the only reason it
+crashed rather than returning NVIDIA's operating cash flow wearing free cash
+flow's label.
+
+It is now `_example_combining(expression, unit)`: begins at `SELECT`, renders
+the plan's own operator, and states that `v.unit` is never projected. A test
+asserts none of the three examples contains `WITH` or `VALUES`, which would
+have caught the staleness when the CTE moved.
+
+**What was tried and reverted.** q007 and q009 have the identical `c0 / c1`
+binding and reach opposite outcomes, because `rank` is in `DERIVING_INTENTS`
+and `compare` is not -- so q007 gets `_JOB_EITHER`, whose branch (b) points at a
+`DERIVATION example` never attached to a combining plan. Selecting the job text
+on `combining` instead of `intent` looked like the alignment, and made q009 fail
+the same way q007 does. Reverted; the diagnosis stands, the remedy does not.
+
 ### 4.4 The Q4 subtraction -- fixed, by moving it
 
 The fourth quarter is the annual figure minus the year-to-date one. Told in

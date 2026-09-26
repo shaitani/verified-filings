@@ -257,19 +257,44 @@ In rough order of how much they matter.
   scores the *decision* — did it answer, and was answering the right call. It
   does not check the figure.
 
-  **First full run, 2026-09-22: 31/56 pass (55%), 0 unsafe.** By expectation:
-  `refuse` 11/11, `answerable` 20/37, `partial` **0/8**. Every one of the 25
-  misses was a refusal or a request for clarification — the safe direction.
-  Wall clock 91 minutes, not the 15 estimated: one question (q050) spent
-  4,810s of it, because [C] capped neither output nor time. Fixed the same day
-  — `MAX_OUTPUT_TOKENS = 1536` and a 180s request timeout in
-  `app/parser/proposer.py`, which brings q050 to 41.9s. The next full run
-  should land near 15 minutes.
+  **Last full run, 2026-09-25: 32/55 pass, 21 fail, 2 set aside, 1 unsafe.**
+  That run is stale in both directions and the number should not be quoted.
+  Eight questions were re-run individually afterwards and seven of them moved;
+  a fresh full run is the first thing worth doing. `data/question-walkthrough.md`
+  holds a per-question breakdown — the question, how the parser understood it,
+  expected against observed per item, the rows with their windows, the
+  provenance and the caveats — but **q009 onward in that file predates the
+  fixes below**, so treat any failure there as unconfirmed.
 
-  The grade to watch is **`unsafe`** — an answerable result for a question
-  tagged `refuse`. Every other failure costs a refusal, which is the outcome
-  this project prefers; that one is the failure it exists to prevent, so it is
-  counted apart from `fail` and printed last.
+  Two traps in reading it. `expect` is a **list**, one entry per metric the
+  question names, because "assets, liabilities, equity, cash, goodwill,
+  inventory" is six asks and five can succeed while the sixth fails. And a
+  question carrying `known_gap` is skipped by default and listed separately;
+  `--include-known-gaps` runs it anyway.
+
+  The grade to watch is **`unsafe`** — the system answering an item marked
+  `refused` or `asked`. Every other failure costs a refusal, which is the
+  outcome this project prefers; that one is the failure it exists to prevent,
+  so it is counted apart from `fail` and printed last.
+
+- **A wrong number passed the verdict for three days, and the runner scored it
+  `pass`.** q007, "Compare gross margins for Intel and AMD", computed
+  `GrossProfit - Revenue` and returned about -12.2 billion USD where a margin
+  of 0.46 was wanted. Four consecutive runs came back `complete` and
+  answerable. `_wrong_unit` exists to catch exactly this — a `pure` binding
+  cannot have `USD` rows — but it skips any row whose `derivation` is set, and
+  the model was setting it. **A model-supplied flag switches off the one
+  structural check on its own arithmetic.** TODO in
+  `app/retrieval/executor.py`; not fixed.
+
+  Two things follow. The runner grades the *decision*, not the figure, so it
+  cannot catch this class on its own — that is by design
+  (`evals/README.md`) and this is the first time it visibly cost something.
+  And q007 is still wrong: `_JOB_EITHER` sends any question phrased as a
+  comparison down its branch (b), which points at a `DERIVATION example` that
+  is never attached to a multi-operand plan, so the model improvises. Fixing
+  it by choosing the job text on `combining` rather than `intent` was tried
+  and reverted — it made q009 fail the same way.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the
@@ -340,7 +365,7 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (436 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (478 passing).
 Lint: `uv run ruff check app/ tests/ evals/`.
 
 ## 8. Verifying things yourself
