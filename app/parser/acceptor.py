@@ -127,6 +127,75 @@ _METRIC_MODIFIERS = (
     "non-operating",
 )
 
+#: Time words a colon-list heading can carry that belong to the period, not to
+#: the metric: "yearly revenue: gross, net" asks for gross revenue and net
+#: revenue, for the year. A small closed class of words, unlike the open-ended
+#: vocabulary of metrics, so a list is the honest tool here. Measured
+#: 2026-09-26: "gross yearly revenue" misses the curated alias and embedding
+#: search puts GrossProfit on top at 0.751, while "gross revenue" hits the
+#: curated refusal it should.
+_TIME_WORDS = frozenset(
+    {"yearly", "annual", "annually", "quarterly", "monthly", "weekly", "daily",
+     "year-to-date", "ytd"}
+)
+
+#: A possessive, which is where a colon-list heading starts: "Apple's cash
+#: flow: ...", "the companies' margins: ...". Matched on normalized text, so
+#: the apostrophe is already ASCII.
+_POSSESSIVE = re.compile(r"(?:'s|s')(?=\s|$)")
+
+#: What separates list items after the colon. "and" / "or" split too, so
+#: "operating, investing and financing" is three items -- at the cost that
+#: "research and development" is two, which only means that item has no
+#: reading and must be copied as written.
+_LIST_SEPARATORS = re.compile(r",|;|&|\band\b|\bor\b")
+
+
+class _SharedHead:
+    """A colon list whose items share the heading before the colon.
+
+    "What is Apple's cash flow: operating, investing, financing" asks for
+    three figures, and none of their names appears whole in the question:
+    each item names one only together with the heading. The substring check
+    cannot see that, so this recovers it from the grammar -- the colon, the
+    heading back to the possessive, the items after it -- and offers exactly
+    one reading per item, ``"<item> <heading>"``.
+
+    Never from vocabulary: no word decides whether the structure applies.
+    What makes a composed span faithful is that the question itself
+    distributes the heading over the items; composing freely from words that
+    merely *occur* would accept "net income" from "net revenue and operating
+    income", a real and different figure. See ``app/parser/DESIGN.md`` §2a.
+    """
+
+    def __init__(self, heading: str, items: list[str]) -> None:
+        self.heading = heading
+        self.items = items
+        #: reading -> the item it spells. Empty when there is no heading.
+        self.readings = {f"{item} {heading}": item for item in items} if heading else {}
+
+    @classmethod
+    def find(cls, normalized_question: str) -> _SharedHead | None:
+        if ":" not in normalized_question:
+            return None
+        before, after = normalized_question.split(":", 1)
+        possessives = list(_POSSESSIVE.finditer(before))
+        heading_words = before[possessives[-1].end():].split() if possessives else []
+        heading = " ".join(w for w in heading_words if w not in _TIME_WORDS).strip(_EDGE)
+        items = [
+            item
+            for item in (part.strip(_EDGE) for part in _LIST_SEPARATORS.split(after))
+            if item
+        ]
+        return cls(heading, items) if items else None
+
+    def item_of(self, span: str) -> str | None:
+        """The list item a metric span was taken from, if any."""
+        if span in self.items:
+            return span
+        return self.readings.get(span)
+
+
 #: A four-digit year. Matched against the **question**: a ``fiscal_year`` the
 #: reader never mentioned is invented, because the model is told nothing about
 #: today's date. Measured on the first live run, "last year" came back as
@@ -231,20 +300,37 @@ def check_span(
         return span
 
     normalized_span, normalized_question = normalize(span), normalize(question)
-    if normalized_span not in _haystack(normalized_question, answers):
+    haystack = _haystack(normalized_question, answers)
+    # A colon list's readings are faithful sources for a metric and nothing
+    # else: a company or a period is never spelled by a list item plus a
+    # heading. Joined with the same seam as a clarification answer, so no span
+    # can straddle a reading and the question.
+    shared = _SharedHead.find(normalized_question) if element.kind == "metric" else None
+    readings = list(shared.readings) if shared else []
+    if normalized_span not in " ~ ".join([haystack, *readings]):
+        hint = (
+            f" The list after the colon is written one metric per item, each "
+            f"with its heading: {', '.join(repr(r) for r in readings)}."
+            if readings
+            else ""
+        )
         raise UnfaithfulSpan(
             f"element {element.id!r} has text {element.text!r}, which does not "
             f"appear in the question: {question!r}. Copy the words from the "
-            "question exactly -- do not reword, expand or correct them."
+            "question exactly -- do not reword, expand or correct them." + hint
         )
 
     if element.kind == "metric":
-        # Against the question alone. The rule exists to stop the model
-        # dropping a qualifier the *reader typed*; an answer they chose from a
-        # curated list is already exact, and policing it would refuse the
-        # obvious reply -- the label "Total revenue" would forbid the span
-        # "revenue" that it names.
-        _refuse_dropped_modifier(element, normalized_span, normalized_question)
+        # Against the question alone -- plus its colon-list readings, where
+        # "revenue: gross, net" says "gross revenue" as plainly as the words
+        # side by side do. The rule exists to stop the model dropping a
+        # qualifier the *reader typed*; an answer they chose from a curated
+        # list is already exact, and policing it would refuse the obvious
+        # reply -- the label "Total revenue" would forbid the span "revenue"
+        # that it names.
+        _refuse_dropped_modifier(
+            element, normalized_span, " ~ ".join([normalized_question, *readings])
+        )
     return span
 
 
@@ -288,6 +374,32 @@ def _refuse_dropped_modifier(
                 f"question says {modifier + ' ' + span!r}. Copy the whole "
                 f"phrase: {modifier!r} changes which figure is meant."
             )
+
+
+def _refuse_a_list_item_used_twice(elements: list[ElementIn], question: str) -> None:
+    """One metric per item of a colon list.
+
+    The readings give each item exactly one spelling, but the item on its own
+    is in the question too, so "gross" and "gross revenue" could both pass
+    the span check and ask for one thing twice.
+    """
+    shared = _SharedHead.find(normalize(question))
+    if shared is None:
+        return
+    used: dict[str, str] = {}
+    for element in elements:
+        if element.kind != "metric":
+            continue
+        item = shared.item_of(normalize(element.text))
+        if item is None:
+            continue
+        if item in used:
+            raise MalformedProposal(
+                f"elements {used[item]!r} and {element.id!r} both come from the list "
+                f"item {item!r}. Each item after the colon is one metric -- keep one "
+                "element for it."
+            )
+        used[item] = element.id
 
 
 def _check_period(element: WireElement, span: str, question: str) -> None:
@@ -458,6 +570,8 @@ def accept(
         _build_element(element, check_span(element, question, answers), question)
         for element in wire.elements
     ]
+
+    _refuse_a_list_item_used_twice(elements, question)
 
     if not any(element.kind == "metric" for element in elements):
         # Measured: "How did Apple do last year?" came back with a company and

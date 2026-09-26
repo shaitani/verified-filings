@@ -365,6 +365,21 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e3","kind":"metric","text":"net income"},
   {"id":"e4","kind":"period","text":"most recent year","last_n_years":1}],"wants_chart":false}""",
     ),
+    # The other colon list: items that name a figure only together with the
+    # heading. Each is one metric, written with the heading, and never a
+    # metric_qualifier -- a qualifier is a product, place or business line.
+    # Measured 2026-09-26: q051 came back as one "cash flow" metric carrying
+    # three qualifiers, which asked "which cash flow?" while refusing all three,
+    # and q044's "gross revenue" was refused for not being in the question.
+    # `accept()` takes exactly these readings (acceptor._SharedHead).
+    (
+        "What is Oracle's cash flow: operating, investing",
+        """{"intent":"lookup","elements":[
+  {"id":"e1","kind":"company","text":"Oracle"},
+  {"id":"e2","kind":"metric","text":"operating cash flow"},
+  {"id":"e3","kind":"metric","text":"investing cash flow"},
+  {"id":"e4","kind":"period","text":"most recent year","last_n_years":1}],"wants_chart":false}""",
+    ),
     # Rule 5e's bare quarter. Measured: "Q4" alone came back with no year,
     # which means Q4 of every year on file -- five times the rows for a
     # question comparing three companies in one quarter.

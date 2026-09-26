@@ -176,6 +176,111 @@ def test_the_modifier_rule_applies_to_metrics_only():
     assert check_span(_element(kind="company", text="Systems"), "Net Systems revenue")
 
 
+# --------------------------------------------------------------------------- #
+# colon lists that share a heading
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("span", "question"),
+    [
+        ("gross revenue", "What is Apple's yearly revenue: gross, net"),
+        ("net revenue", "What is Apple's yearly revenue: gross, net"),
+        ("gross revenues", "What are Apple's quarterly revenues: gross, net"),
+        ("operating cash flow", "What is Apple's cash flow: operating, investing, financing"),
+        ("financing cash flow", "What is Apple's cash flow: operating, investing and financing"),
+    ],
+)
+def test_a_list_item_with_its_heading_is_faithful(span, question):
+    """The question distributes the heading over the items, so each item plus
+    the heading is what it asks for -- q044, q048, q051."""
+    assert check_span(_element(text=span), question)
+
+
+@pytest.mark.parametrize(
+    "span",
+    [
+        "gross yearly revenue",  # the time word belongs to the period
+        "revenue gross",  # one reading per item, heading last
+        "gross net revenue",
+    ],
+)
+def test_only_one_reading_per_item_is_faithful(span):
+    """Measured: "gross yearly revenue" lands on GrossProfit at 0.751. One
+    spelling per item, and the refusal names it."""
+    with pytest.raises(UnfaithfulSpan, match="'gross revenue', 'net revenue'"):
+        check_span(_element(text=span), "What is Apple's yearly revenue: gross, net")
+
+
+def test_a_reading_is_never_built_from_words_that_merely_occur():
+    """No list, no composition: "net income" is not in "net revenue and
+    operating income", and it is a real, different figure."""
+    with pytest.raises(UnfaithfulSpan):
+        check_span(_element(text="net income"), "Apple's net revenue and operating income")
+
+
+def test_a_reading_is_for_metrics_only():
+    with pytest.raises(UnfaithfulSpan):
+        check_span(
+            _element(kind="company", text="gross revenue"),
+            "What is Apple's yearly revenue: gross, net",
+        )
+
+
+def test_the_bare_heading_of_a_modifier_list_is_a_dropped_modifier():
+    """ "revenue" alone, for "revenue: gross, net", drops the word that says
+    which line is meant -- the colon form of the omission check."""
+    with pytest.raises(UnfaithfulSpan, match="changes which figure is meant"):
+        check_span(_element(text="revenue"), "What is Apple's revenue: gross, net")
+
+
+@pytest.mark.parametrize(
+    ("span", "question"),
+    [
+        # No heading at all: every item is copied as written (q052).
+        ("goodwill", "What are Apple's: assets, liabilities, goodwill"),
+        ("stockholders' equity", "What are Apple's: assets, stockholders' equity"),
+        # Items that are metrics themselves (q053).
+        ("dividends per share", "What are Apple's returns: buybacks, dividends per share"),
+    ],
+)
+def test_a_list_without_a_shared_heading_is_copied_as_written(span, question):
+    assert check_span(_element(text=span), question)
+
+
+def test_a_list_item_is_one_metric():
+    """ "gross" and "gross revenue" are one ask."""
+    reply = _reply(
+        intent="lookup",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple"},
+            {"id": "e2", "kind": "metric", "text": "gross"},
+            {"id": "e3", "kind": "metric", "text": "gross revenue"},
+            {"id": "e4", "kind": "metric", "text": "net revenue"},
+            {"id": "e5", "kind": "period", "text": "most recent year", "last_n_years": 1},
+        ],
+    )
+    with pytest.raises(MalformedProposal, match="both come from the list item 'gross'"):
+        accept(reply, "What is Apple's yearly revenue: gross, net")
+
+
+def test_a_list_reads_as_one_metric_per_item():
+    reply = _reply(
+        intent="lookup",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple"},
+            {"id": "e2", "kind": "metric", "text": "gross revenue"},
+            {"id": "e3", "kind": "metric", "text": "net revenue"},
+            {"id": "e4", "kind": "period", "text": "most recent year", "last_n_years": 1},
+        ],
+    )
+    query = accept(reply, "What is Apple's yearly revenue: gross, net")
+    assert [e.text for e in query.elements if e.kind == "metric"] == [
+        "gross revenue",
+        "net revenue",
+    ]
+
+
 def test_an_invented_company_is_refused():
     reply = _reply(
         elements=[

@@ -77,6 +77,43 @@ mapper with the phrase intact and comes back
 which is the curated refusal doing its job. Without the gate the same question
 returns a number.
 
+## 2a. A colon list that shares its heading
+
+Added 2026-09-26. "What is Apple's cash flow: operating, investing, financing"
+asks for three figures, and none of their names appears whole in the question.
+Each item names one only together with the heading. The substring gate refused
+the right reading ("operating cash flow"), so the model found wrong ones that
+pass: q051 became one "cash flow" metric with three qualifiers, and q044's
+"gross revenue" was refused outright. Bare items are no safer — "gross" alone
+reaches embedding search and lands on `GrossProfit` at 0.71.
+
+`_SharedHead` recovers the structure from the grammar, never from vocabulary:
+the colon, the heading back to the last possessive, the items after the colon
+(split on commas, `;`, `&`, "and", "or"). Each item gets **exactly one**
+reading, `"<item> <heading>"`, and those readings join the haystack a *metric*
+span may come from — behind the same seam as a clarification answer, so no
+span can straddle one.
+
+* **One reading, not every suffix.** "yearly revenue: gross, net" reads as
+  "gross revenue", never "gross yearly revenue": the time word belongs to the
+  period. Measured, the longer spelling misses the curated alias and embedding
+  search puts `GrossProfit` on top at 0.751. `_TIME_WORDS` is a word list, but
+  of a small closed class, unlike metric vocabulary.
+* **One metric per item.** "gross" and "gross revenue" both pass the span
+  check, and would ask for one thing twice; `accept()` refuses the pair.
+* **The omission check sees the readings.** A bare "revenue" for
+  "revenue: gross, net" drops the word that says which line is meant, exactly as
+  it would for "gross revenue" written side by side.
+* **No list, no composition.** Composing from words that merely occur would
+  accept "net income" from "net revenue and operating income" — a real,
+  different figure. The structure is what makes a composed span faithful.
+
+A colon with nothing before it but a possessive ("Apple's: assets, …", q052)
+has no heading and gets no readings; its items are copied as written, as
+before. Limits, each a refusal rather than a wrong answer: a heading with no
+possessive before it ("Show me cash flow: …") gets no readings, and an item
+containing "and" ("research and development") is split and so has none.
+
 ## 3. Why company elements carry no `ticker` or `name`
 
 `_lookup_company` tries `element.ticker`, then `element.name`, then
