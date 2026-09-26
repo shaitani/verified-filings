@@ -204,3 +204,19 @@ def test_the_model_is_asked_for_the_figures_only() -> None:
     assert "computed AFTER your statement runs" in text
     assert "Decide which of these two" not in text
     assert "computed AFTER" not in build_prompt(_plan([_binding()], [_period(2025)], axes=()))
+
+
+def test_a_comparison_of_plain_figures_is_asked_for_the_figures_only() -> None:
+    """q008: "compare" pushed the model to compute, with nothing to follow. The
+    figures side by side are the comparison, so no choice is offered."""
+    single_period = [_period(2025)]
+    compare = build_prompt(_plan([_binding()], single_period, intent="compare", axes=()))
+    assert "side by side ARE the comparison" in compare
+    assert "Decide which of these two" not in compare
+
+    lookup = build_prompt(_plan([_binding()], single_period, intent="lookup", axes=()))
+    assert "side by side ARE the comparison" not in lookup
+    ratio = build_prompt(
+        _plan([_binding(unit="pure")], single_period, intent="compare", axes=())
+    )
+    assert "side by side ARE the comparison" not in ratio

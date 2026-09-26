@@ -366,7 +366,24 @@ def wants_period_changes(plan: QueryPlan) -> bool:
     """
     if "period" not in plan.result.axes or plan.intent in DERIVING_INTENTS:
         return False
+    return _plain_figures(plan)
+
+
+def _plain_figures(plan: QueryPlan) -> bool:
+    """Every binding a single concept, as filed, in a unit that is not ``pure``."""
     return all(len(b.concepts) == 1 and b.unit != "pure" for b in plan.bindings)
+
+
+def wants_side_by_side(plan: QueryPlan) -> bool:
+    """A comparison whose answer is the figures themselves, side by side.
+
+    q008 ("How does Tesla's R&D spending compare to Meta's?") and q036 were
+    both offered `_JOB_EITHER`; the word "compare" pushed the model toward
+    branch (b), where there is no DERIVATION example to follow. q008 put a
+    LAG in `derivation`; q036 renamed `value` to `apple_revenue`. Two
+    companies' filed figures next to each other already are the comparison.
+    """
+    return plan.intent == "compare" and _plain_figures(plan)
 
 
 #: The job for a plan whose period-to-period change is computed afterwards.
@@ -378,6 +395,13 @@ _JOB_FIGURES_ONLY = """Reply with the worked example above, unchanged.
 The change from one period to the next is computed AFTER your statement runs,
 from the rows it returns. Do not compute it, do not add LAG or any window
 function, and leave `derivation` NULL on every row."""
+
+#: The job for `wants_side_by_side`. Same reasoning as `_JOB_FIGURES_ONLY`.
+_JOB_SIDE_BY_SIDE = """Reply with the worked example above, unchanged.
+
+The figures side by side ARE the comparison: the reader sees each company's
+value next to the others. Do not compute a difference, a ratio, a rank or
+anything else, and leave `derivation` NULL on every row."""
 
 _JOB_EITHER = """Decide which of these two the question needs. Read the question again before
 choosing -- returning the figures when the question asked for a comparison
@@ -731,6 +755,8 @@ def build_prompt(plan: QueryPlan) -> str:
         job = _JOB_MUST_DERIVE
     elif wants_period_changes(plan):
         job = _JOB_FIGURES_ONLY
+    elif wants_side_by_side(plan):
+        job = _JOB_SIDE_BY_SIDE
     else:
         job = _JOB_EITHER
     if combining:

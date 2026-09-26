@@ -890,6 +890,14 @@ Rules it keeps:
 * **No percentage from a zero or negative figure** — a change from a loss has
   none that means anything — and a `narrower_than_asked` note says which.
 
+**The same for a plain comparison** (`prompt.wants_side_by_side`): intent
+`compare`, single-concept, not `pure`, and not a series. `_JOB_SIDE_BY_SIDE`
+tells the model the figures side by side are the comparison. q008 ("How does
+Tesla's R&D spending compare to Meta's?") had passed only by luck — it put a
+`LAG` in `derivation`, which came out NULL on one row per company — and q036
+renamed `value` for the same reason: "compare" pushed it to branch (b), where
+no example waits. Nothing is computed afterwards; there is nothing to compute.
+
 Not for ratios: a percentage change of a margin reads as a change in points
 and is not one. Those still go through `_JOB_EITHER`, and the missing
 DERIVATION example there (§4.3e) is still open.
