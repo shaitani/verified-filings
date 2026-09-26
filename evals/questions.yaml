@@ -421,6 +421,12 @@ questions:
     question: "What are <Company>'s: assets, liabilities, stockholders' equity, cash, goodwill, inventory"
     template: true
     expect: [answered, answered, answered, answered, answered, answered]  # assets, liabilities, equity, cash, goodwill, inventory
+    expect_by_company:
+      # Apple files no us-gaap:Goodwill anywhere in the loaded window -- the only
+      # one of the 20 filers without it (checked 2026-09-26 against both the
+      # view and data/xbrl/AAPL.json). Goodwill is refused with that reason and
+      # the other five are still answered.
+      Apple: [answered, answered, answered, answered, refused, answered]
     shape: table
     needs: [retrieval]
     exercises: [instant_fact]
@@ -456,6 +462,12 @@ questions:
     question: What is <Company>'s interest expense
     template: true
     expect: [answered]  # interest expense
+    expect_by_company:
+      # Apple's last interest figure of any kind (InterestExpense,
+      # InterestExpenseDebt, InterestCostsIncurred, InterestPaidNet) is FY2023,
+      # ended 2023-09-30 -- checked 2026-09-26 against the view. The most recent
+      # year is FY2025, so the refusal is correct for Apple.
+      Apple: [refused]
     needs: [retrieval]
     notes: >-
       Now aliased with an ordered fallback chain that resolves per filer: MSFT

@@ -16,6 +16,7 @@ from evals.run import (
     NOT_EXPECTED,
     TEMPLATE_COMPANY,
     Item,
+    expected_for,
     grade,
     pair,
     substitute,
@@ -108,6 +109,35 @@ def test_expect_is_a_list_of_known_values(questions) -> None:
         assert expect, f"{q['id']}: expect is empty"
         unknown = set(expect) - EXPECT
         assert not unknown, f"{q['id']} expects unwritable value(s): {sorted(unknown)}"
+
+
+def test_a_per_company_expectation_lines_up_with_the_default(questions) -> None:
+    """`expect_by_company` replaces `expect` for one template filer, item for
+    item -- the same asks, a different answer to one of them. A different
+    length would be a different question, and only a template has a filer to
+    vary."""
+    for q in questions:
+        overrides = q.get("expect_by_company")
+        if overrides is None:
+            continue
+        assert q.get("template"), f"{q['id']}: expect_by_company needs template: true"
+        assert isinstance(overrides, dict) and overrides, q["id"]
+        for company, expect in overrides.items():
+            assert isinstance(expect, list), f"{q['id']}/{company}: must be a list"
+            assert len(expect) == len(q["expect"]), f"{q['id']}/{company}: length differs"
+            unknown = set(expect) - EXPECT
+            assert not unknown, f"{q['id']}/{company}: unwritable value(s) {sorted(unknown)}"
+
+
+def test_the_template_company_s_own_expectation_is_used() -> None:
+    entry = {
+        "template": True,
+        "expect": ["answered", "answered"],
+        "expect_by_company": {TEMPLATE_COMPANY: ["answered", "refused"]},
+    }
+    assert expected_for(entry) == ["answered", "refused"]
+    assert expected_for({**entry, "template": False}) == ["answered", "answered"]
+    assert expected_for({"expect": ["refused"]}) == ["refused"]
 
 
 def test_nobody_expects_the_system_to_be_confused(questions) -> None:

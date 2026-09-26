@@ -337,7 +337,7 @@ async def test_no_candidate_with_coverage_is_reported_not_guessed(
 
     assert plan.bindings == []
     assert not plan.is_complete
-    assert "no concept with facts covering" in plan.unresolved[0].reason
+    assert "No filed figure for 'widget nothing'" in plan.unresolved[0].reason
 
 
 async def test_multi_slot_alias_binds_every_operand(
@@ -1352,6 +1352,55 @@ def test_one_sided_needs_a_named_comparison_with_under_two_left() -> None:
     assert not query_mapper._one_sided("rank", named=False, kept=1)
     for intent in ("lookup", "trend", "derive"):
         assert not query_mapper._one_sided(intent, named=True, kept=1)
+
+
+async def test_a_multi_part_question_is_answered_per_part(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """q052's shape: several metrics, one of which the filer does not report.
+    That one is refused with its reason; the rest are still answerable, and
+    the row-count promise counts only them."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m1", "text": "widget sales", "kind": "metric"},
+            {"id": "m2", "text": "widget nothing", "kind": "metric"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete, "one part is refused"
+    assert plan.has_answerable_part, "the other part still answers"
+    assert [b.element_id for b in plan.bindings] == ["m1"]
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m2" and not problem.blocks_question
+    assert plan.result.metrics == 1 and plan.result.row_count == 1
+
+
+async def test_a_refused_company_still_sinks_the_whole_question(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """Scope is not a part. Every figure depends on the company, so a
+    comparison with its other side missing answers nothing (§8d)."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c1", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "c2", "text": "Samsung", "kind": "company"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+            intent="compare",
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings, "the metric bound for the company that exists"
+    assert plan.unresolved[0].blocks_question
+    assert not plan.has_answerable_part
 
 
 async def test_when_no_named_company_resolves_the_scope_does_not_widen(

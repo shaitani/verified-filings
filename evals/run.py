@@ -170,6 +170,35 @@ def substitute(question: str, *, template: bool) -> str:
     return question.replace("<Company>", TEMPLATE_COMPANY) if template else question
 
 
+def expected_for(entry: dict) -> list[str]:
+    """The expectation for this run, per item.
+
+    A template question is asked about whichever filer ``TEMPLATE_COMPANY``
+    names, and filers differ: Apple reports no goodwill, so q052's fifth item
+    is a correct refusal for Apple and a correct answer for Microsoft.
+    ``expect_by_company`` records that difference as data, keyed by company,
+    with its reason in a comment -- so changing the template company changes
+    the expectation with it instead of turning a right answer into a fail.
+    """
+    overrides = entry.get("expect_by_company") or {}
+    if entry.get("template") and TEMPLATE_COMPANY in overrides:
+        return list(overrides[TEMPLATE_COMPANY])
+    return list(entry.get("expect", []))
+
+
+def crashed(query: QueryIn, plan: QueryPlan) -> list[tuple[str, Outcome]]:
+    """What each item got when retrieval raised.
+
+    Only the parts that were going to be answered failed. A part already
+    refused or asked back had its answer before any SQL was written, and
+    marking it ``error`` would hide a correct refusal behind a crash.
+    """
+    return [
+        (phrase, "error" if outcome == "answered" else outcome)
+        for phrase, outcome in observe(query, plan, None)
+    ]
+
+
 def observe(query: QueryIn, plan: QueryPlan, result: ResultSet | None) -> list[tuple[str, Outcome]]:
     """``(phrase, outcome)`` for everything the question asked for, in order.
 
@@ -296,7 +325,7 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
     """
     template = bool(entry.get("template", False))
     question = substitute(entry["question"], template=template)
-    expected = list(entry.get("expect", []))
+    expected = expected_for(entry)
     started = time.monotonic()
 
     def done(observed: list[tuple[str, Outcome]], detail: str = "", **fields) -> Run:
@@ -341,22 +370,18 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
         "notes": [note.kind for note in plan.notes],
     }
 
-    if stage == "map" or not plan.is_complete:
+    # Per part: SQL runs whenever any part can be answered, and the refused
+    # and asked-back parts keep their own outcomes alongside it.
+    if stage == "map" or not plan.has_answerable_part:
         return done(observe(query, plan, None), detail=_plan_detail(plan), **shared)
 
     try:
         result = await answer(plan)
     except (GenerationError, InvalidSQL, UnsupportedPlan) as exc:
-        return done(
-            [(e.text, "error") for e in query.elements if e.kind in ITEM_KINDS],
-            detail=f"{type(exc).__name__}: {exc}",
-            **shared,
-        )
+        return done(crashed(query, plan), detail=f"{type(exc).__name__}: {exc}", **shared)
     except Exception as exc:
         return done(
-            [(e.text, "error") for e in query.elements if e.kind in ITEM_KINDS],
-            detail=f"unexpected {type(exc).__name__}: {exc}",
-            **shared,
+            crashed(query, plan), detail=f"unexpected {type(exc).__name__}: {exc}", **shared
         )
 
     shared["notes"] = sorted({*shared["notes"], *(note.kind for note in result.notes)})

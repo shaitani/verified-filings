@@ -39,7 +39,16 @@ import yaml
 from app.parser import parse_question
 from app.retrieval import answer
 from app.semantic.query_mapper import map_query
-from evals.run import QUESTIONS, TEMPLATE_COMPANY, grade, observe, pair, substitute
+from evals.run import (
+    QUESTIONS,
+    TEMPLATE_COMPANY,
+    crashed,
+    expected_for,
+    grade,
+    observe,
+    pair,
+    substitute,
+)
 
 DEFAULT_OUT = Path("data/question-walkthrough.md")
 
@@ -145,7 +154,7 @@ async def one(entry: dict, out: list[str]) -> str:
     qid = entry["id"]
     template = bool(entry.get("template"))
     text = substitute(entry["question"], template=template)
-    expected = list(entry.get("expect", []))
+    expected = expected_for(entry)
 
     if entry.get("known_gap"):
         out += [
@@ -165,6 +174,8 @@ async def one(entry: dict, out: list[str]) -> str:
     out += [f"## {qid}", "", "**Question asked**", "", f"> {text}", ""]
     if template:
         out += [f"*Template question — `<Company>` substituted with {TEMPLATE_COMPANY}.*", ""]
+        if TEMPLATE_COMPANY in (entry.get("expect_by_company") or {}):
+            out += [f"*Expectation specific to {TEMPLATE_COMPANY} (`expect_by_company`).*", ""]
 
     try:
         query = await parse_question(text)
@@ -181,14 +192,14 @@ async def one(entry: dict, out: list[str]) -> str:
 
     plan = await map_query(query)
     result, crash = None, ""
-    if plan.is_complete:
+    if plan.has_answerable_part:
         try:
             result = await answer(plan)
         except Exception as exc:
             crash = f"{type(exc).__name__}: {exc}"
 
     if crash:
-        observed = [(e.text, "error") for e in query.elements if e.kind == "metric"]
+        observed = crashed(query, plan)
     else:
         observed = observe(query, plan, result)
     items = pair(expected, observed)

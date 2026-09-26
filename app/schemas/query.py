@@ -741,6 +741,18 @@ class Unresolved(_Base):
     element_id: str = Field(min_length=1, max_length=32)
     reason: str = Field(min_length=1, max_length=512)
 
+    #: Whether this refusal sinks the whole question, or only its own part.
+    #:
+    #: A question is answered **per part**: "assets, liabilities, goodwill" for
+    #: a filer with no goodwill answers the first two and refuses the third,
+    #: with this reason. What cannot be answered in part is a problem with the
+    #: question's *scope* -- a company or a period that does not resolve, a
+    #: comparison left with one side (semantic DESIGN §8d) -- because every
+    #: figure depends on it. The mapper sets ``False`` for metric and narrative
+    #: elements, from the element's kind; the default is ``True`` so a refusal
+    #: nobody classified errs toward refusing rather than toward answering.
+    blocks_question: bool = True
+
 
 class ResolvedPeriod(_Base):
     """One company's concrete date window for one ``(fiscal_year,
@@ -853,6 +865,19 @@ class QueryPlan(_Base):
         """True when every element bound cleanly. The caller's signal to go
         ahead and generate SQL rather than escalate back to the user."""
         return not self.ambiguous and not self.unresolved and not self.clarifications
+
+    @property
+    def has_answerable_part(self) -> bool:
+        """True when some of the question can be answered now.
+
+        At least one binding, and no refusal that sinks the whole question.
+        The rest -- a metric refused, a metric needing a clarifying question,
+        a metric too ambiguous to bind -- is per part: those parts go back to
+        the asker alongside the figures, not instead of them. ``Ambiguity``
+        and ``Clarification`` only ever arise for metrics, so they never block.
+        ``is_complete`` still says whether *everything* bound.
+        """
+        return bool(self.bindings) and not any(u.blocks_question for u in self.unresolved)
 
     @property
     def needs_input(self) -> bool:

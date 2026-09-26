@@ -317,13 +317,42 @@ still ranks the other four, with the §8c note and its subset warning.
 `lookup`, `trend` and `derive` keep §8c unchanged — "revenue for Apple and
 Samsung" is two lookups, and Apple's figure stays true on its own.
 
-Counted per metric. "Compare Apple and JPMorgan on revenue and gross profit"
-refuses the whole question, because gross profit has one side, and an
-unresolved element makes the plan incomplete — the same as any other
-unresolvable metric. Answering revenue alone would be half the question.
+Counted per metric, and answered per part. "Compare Apple and JPMorgan on
+revenue and gross profit" compares revenue and refuses gross profit, naming
+JPMorgan as the missing side: the refusal sits on the gross-profit element, and
+a metric's refusal is its own part's answer (`Unresolved.blocks_question`,
+§8e). Only a *company* that is not loaded sinks the whole comparison, because
+every metric depends on it.
 
 The rule rests on `intent`, which the parser's model sets. A comparison tagged
 `lookup` falls back to §8c: half an answer with a note, never a wrong number.
+
+## 8e. A question is answered per part
+
+Added 2026-09-26. "What are Apple's: assets, liabilities, stockholders' equity,
+cash, goodwill, inventory" asks six things. Apple files no goodwill, so that
+part is refused — and before this, the refusal made the plan incomplete and the
+other five went unanswered too. The asker got nothing for five figures the
+store holds.
+
+Now every `Unresolved` carries `blocks_question`, set at the end of `map_query`
+from the element's kind:
+
+* **metric or narrative element → `False`**, a per-part refusal. The other
+  parts are answered, and this one goes back with its reason.
+* **anything else → `True`** (the default): a company, a company group or a
+  period. Every figure depends on scope, so there is no part left to answer.
+
+`QueryPlan.has_answerable_part` — some binding, and no blocking refusal — is
+what the caller checks before running SQL. `is_complete` keeps its meaning,
+"everything bound". A clarification or an ambiguity only ever arises for a
+metric, so it is always per part: the reply can hold the figures, the refusals
+and the clarifying question together.
+
+`ResultSpec` counts only the metrics that bound (`_answering_metrics`), for the
+same reason it counts only the companies that did (§8c): `row_count` is a
+promise, and six promised against five fetched would report a shortfall the
+plan had already explained.
 
 ## 8a. Declining, for terms the dataset simply does not hold
 

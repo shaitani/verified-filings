@@ -124,6 +124,21 @@ Set `true` when the question uses a `<Company>` placeholder rather than naming
 a filer. These measure coverage of a common ask rather than one concrete query,
 and a runner has to substitute before executing them.
 
+Filers differ, so a correct answer for one can be a correct refusal for
+another. `expect_by_company` records that per filer, item for item, and the
+runner uses the entry for `TEMPLATE_COMPANY` when there is one:
+
+```yaml
+    expect: [answered, answered, answered, answered, answered, answered]
+    expect_by_company:
+      # Apple files no us-gaap:Goodwill in the loaded window.
+      Apple: [answered, answered, answered, answered, refused, answered]
+```
+
+Always with a comment saying why, checked against the data. It exists so that
+changing the template company moves the expectation with it; it is not a way
+to make a failing grade pass.
+
 ## `needs` — what answering takes, beyond fetching facts
 
 | tag | meaning |

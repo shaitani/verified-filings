@@ -179,11 +179,10 @@ async def map_query(
         metric_problems += qualifier_problems
 
     # Deliberately does NOT drop the metric's bindings or its clarification,
-    # unlike an unsatisfiable qualifier. The refusal already makes the plan
-    # incomplete, so nothing is answered -- and leaving the rest standing is
-    # what lets one reply say both halves: "I cannot tell you why, and which
-    # margin did you mean?" A reader who has to re-type the question to get the
-    # second half has been told less than the system knew.
+    # unlike an unsatisfiable qualifier. The question is answered per part, so
+    # one reply says all of it: the figures, "I cannot tell you why", and
+    # "which margin did you mean?" A reader who has to re-type the question to
+    # get the other parts has been told less than the system knew.
     narrative_problems = [
         Unresolved(element_id=element.id, reason=_narrative_refusal(element))
         for element in query.elements
@@ -211,8 +210,22 @@ async def map_query(
         query,
         ciks=_answering_ciks(ciks, bindings),
         periods=resolved_periods,
-        metrics=len(metrics),
+        metrics=_answering_metrics(metrics, bindings),
     )
+
+    # Per part, not all or nothing. A refused metric or narrative span is that
+    # part's answer; a refused company or period is every part's, because every
+    # figure depends on it. Decided here from the element's kind, once, rather
+    # than at each of the dozen places an Unresolved is made.
+    per_part = {e.id for e in metrics} | {
+        e.id for e in query.elements if isinstance(e, NarrativeElementIn)
+    }
+    unresolved = [
+        problem.model_copy(update={"blocks_question": False})
+        if problem.element_id in per_part
+        else problem
+        for problem in company_problems + period_problems + metric_problems + narrative_problems
+    ]
     return QueryPlan(
         question=query.question,
         intent=query.intent,
@@ -220,10 +233,7 @@ async def map_query(
         filters=PlanFilters(ciks=ciks, periods=resolved_periods),
         bindings=bindings,
         ambiguous=ambiguous,
-        unresolved=company_problems
-        + period_problems
-        + metric_problems
-        + narrative_problems,
+        unresolved=unresolved,
         clarifications=clarifications,
         thresholds=thresholds,
         notes=company_notes
@@ -351,6 +361,18 @@ def _answering_ciks(ciks: list[int], bindings: list[Binding]) -> list[int]:
         return ciks
     bound = {binding.company_cik for binding in bindings}
     return [cik for cik in ciks if cik in bound]
+
+
+def _answering_metrics(metrics: list[MetricElementIn], bindings: list[Binding]) -> int:
+    """How many metrics the result will carry rows for.
+
+    The metric half of ``_answering_ciks``: a question asking for six figures
+    of which one is refused is answered with five, and ``row_count`` promising
+    six would report a shortfall the plan already explained. Falls back to
+    every metric asked for when none bound, since nothing will run then.
+    """
+    bound = {binding.element_id for binding in bindings}
+    return sum(1 for metric in metrics if metric.id in bound) or len(metrics)
 
 
 def _describe_result(
@@ -1222,8 +1244,9 @@ async def _resolve_metrics(
                 problems.append(
                     Unresolved(
                         element_id=element.id,
-                        reason=f"{element.text!r} has no concept with facts covering any "
-                        f"requested period for {dropped}",
+                        reason=f"No filed figure for {element.text!r} covers the periods "
+                        f"asked about, for {dropped}: the filings in this dataset do not "
+                        f"report it",
                     )
                 )
 
