@@ -153,6 +153,11 @@ dropping a company can change the answer rather than just shorten it. Full
 rules, including what this deliberately does not fix:
 [`app/semantic/DESIGN.md`](app/semantic/DESIGN.md) §8c.
 
+The exception: a `compare` or `rank` over **named** companies that is left
+with fewer than two refuses, naming what is missing — "Apple vs Samsung" has
+no Samsung data, and half a comparison is a different answer. Five named with
+one missing still ranks the other four. §8d.
+
 Coverage is the load-bearing idea: a candidate with no facts for the requested
 windows is never bound, whatever its similarity score. Zero rows from a
 well-formed query is indistinguishable from "the company reported nothing", so
@@ -323,6 +328,11 @@ In rough order of how much they matter.
   arithmetic. Selecting the job text on `combining` rather than `intent` looks
   like the fix and is not: it was tried and reverted, because it broke a
   question that had been passing. See `app/retrieval/DESIGN.md` §4.3e.
+  Narrowed 2026-09-25: a series along `period` of plain figures no longer
+  reaches `_JOB_EITHER` — it is asked for the figures only, and the change
+  between periods is computed in Python (`app/retrieval/changes.py`, retrieval
+  DESIGN §4.7). That fixed q010. Ratios and non-series comparisons still take
+  this path.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the

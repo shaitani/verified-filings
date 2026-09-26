@@ -356,6 +356,29 @@ def _coordinate_table(cells: list[PlanCell]) -> str:
 #: branch is not offered at all.
 DERIVING_INTENTS = frozenset({"rank", "derive"})
 
+def wants_period_changes(plan: QueryPlan) -> bool:
+    """Whether the change from each period to the next is computed in Python.
+
+    A series along ``period``, single-concept and not ``pure``: a percentage
+    change of a margin reads as a change in points and is not one. Not for
+    ``rank`` / ``derive``, where the model is asked to compute and its rows
+    are already derived. See ``app/retrieval/changes.py``.
+    """
+    if "period" not in plan.result.axes or plan.intent in DERIVING_INTENTS:
+        return False
+    return all(len(b.concepts) == 1 and b.unit != "pure" for b in plan.bindings)
+
+
+#: The job for a plan whose period-to-period change is computed afterwards.
+#: One option, not two: q010 ("how fast has NVIDIA's revenue grown") was
+#: offered the choice, took (b) with no DERIVATION example in the prompt, and
+#: put the growth rate in `derivation`. Nothing is left for it to compute.
+_JOB_FIGURES_ONLY = """Reply with the worked example above, unchanged.
+
+The change from one period to the next is computed AFTER your statement runs,
+from the rows it returns. Do not compute it, do not add LAG or any window
+function, and leave `derivation` NULL on every row."""
+
 _JOB_EITHER = """Decide which of these two the question needs. Read the question again before
 choosing -- returning the figures when the question asked for a comparison
 between them answers a different question.
@@ -704,7 +727,12 @@ def build_prompt(plan: QueryPlan) -> str:
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
     combining = any(cell.operands > 1 for cell in cells)
-    job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
+    if plan.intent in DERIVING_INTENTS:
+        job = _JOB_MUST_DERIVE
+    elif wants_period_changes(plan):
+        job = _JOB_FIGURES_ONLY
+    else:
+        job = _JOB_EITHER
     if combining:
         first = next(cell for cell in cells if cell.operands > 1)
         worked_example = _example_combining(first.expression, first.result_unit)

@@ -33,6 +33,7 @@ output directly is the mistake this package exists to prevent.
 See ``app/retrieval/DESIGN.md``.
 """
 
+from app.retrieval.changes import add_period_changes
 from app.retrieval.executor import execute
 from app.retrieval.generator import GENERATION_MODEL, GenerationError, generate
 from app.retrieval.prompt import UnsupportedPlan, build_prompt, plan_cells
@@ -54,6 +55,7 @@ __all__ = [
     "InvalidSQL",
     "OutOfRole",
     "UnsupportedPlan",
+    "add_period_changes",
     "answer",
     "build_prompt",
     "execute",
@@ -73,4 +75,5 @@ async def answer(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> ResultSet
     check ``is_answerable`` -- because that is a judgement about the *data*,
     not about whether the machinery worked.
     """
-    return await execute(validate(await generate(plan, model=model)), plan)
+    result = await execute(validate(await generate(plan, model=model)), plan)
+    return add_period_changes(result, plan)

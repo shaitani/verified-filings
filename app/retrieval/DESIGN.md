@@ -860,6 +860,40 @@ None of this is required for correctness today; it is where to spend effort
 when effort is available, and it shrinks the prompt every time, which is its
 own reward on a 1080 Ti.
 
+### 4.7 The change between periods is computed in Python
+
+Added 2026-09-25, the §4.6 move applied to the arithmetic. q010 ("How fast has
+NVIDIA's revenue grown over the past five years?") is intent `trend`, so it was
+offered `_JOB_EITHER`, took branch (b), found no DERIVATION example in the
+prompt (it is attached only for `rank` / `derive`), and put the growth rate
+itself in `derivation`. The fetch was right; the arithmetic above it was not.
+
+Now, for a plan that **varies along `period`**, is **single-concept**, is **not
+`pure`**, and is not `rank` / `derive` (`prompt.wants_period_changes`):
+
+* the model is given `_JOB_FIGURES_ONLY` — the as-filed example, unchanged, no
+  choice offered;
+* `answer()` runs `add_period_changes` after `execute()`, adding one row per
+  adjacent pair: `(current - prior) / prior`, unit `pure`, derivation
+  `change_from_prior`, labelled with the later period.
+
+Rules it keeps:
+
+* **After the verdict, on top of it.** The row-count equality is judged on the
+  filed rows exactly as before; the change rows are added to both
+  `expected_rows` and `returned_rows`. A result the verdict refuses gets none.
+* **Adjacency comes from the plan**, per element, company and granularity, in
+  `period_end` order. A missing figure leaves both of its steps empty rather
+  than producing a two-period step; annual and quarterly are never compared.
+* **Cites both ends.** Across a tag change the step spans two bindings, and
+  `binding_keys` names both.
+* **No percentage from a zero or negative figure** — a change from a loss has
+  none that means anything — and a `narrower_than_asked` note says which.
+
+Not for ratios: a percentage change of a margin reads as a change in points
+and is not one. Those still go through `_JOB_EITHER`, and the missing
+DERIVATION example there (§4.3e) is still open.
+
 ## 9. Open
 
 - **`ResultShape` is not enforced.** The verdict checks cardinality; nothing
