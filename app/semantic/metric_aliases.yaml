@@ -251,7 +251,8 @@ metrics:
   # --- cash flow ------------------------------------------------------------
   operating_cash_flow:
     label: Net cash from operating activities
-    synonyms: [cash from operations, operating cash flow, cash flow from operations, ocf]
+    synonyms: [cash from operations, operating cash flow, cash flow from operations, ocf, 
+               operating cash flows]
     terms:
       - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
 
@@ -277,7 +278,7 @@ metrics:
   # really did post negative gross profit in FY2023.
   gross_margin:
     label: Gross margin
-    synonyms: [gross profit margin, gross margin percentage]
+    synonyms: [gross profit margin, gross margin percentage, gross margins]
     expression: c0 / c1
     terms:
       # Numerator stays signed: a negative gross margin is a real answer.
@@ -290,7 +291,7 @@ metrics:
 
   free_cash_flow:
     label: Free cash flow
-    synonyms: [fcf, free cash]
+    synonyms: [fcf, free cash, free cash flows]
     expression: c0 - c1
     terms:
       # Operating cash flow is signed -- 7 of 20 filers post negative quarters.
@@ -310,13 +311,15 @@ metrics:
   # --- added to close the gaps the eval questions exposed ------------------
   investing_cash_flow:
     label: Net cash from investing activities
-    synonyms: [cash from investing, investing activities, cash used in investing]
+    synonyms: [cash from investing, investing activities, cash used in investing, 
+               investing cash flows]
     terms:
       - [us-gaap:NetCashProvidedByUsedInInvestingActivities]
 
   financing_cash_flow:
     label: Net cash from financing activities
-    synonyms: [cash from financing, financing activities, cash used in financing]
+    synonyms: [cash from financing, financing activities, cash used in financing, 
+               financing cash flows]
     terms:
       - [us-gaap:NetCashProvidedByUsedInFinancingActivities]
 
@@ -337,7 +340,7 @@ metrics:
     # The filer's own reported rate, not one derived here. Filed under two
     # units across the corpus ("pure" and "Rate"), so the multi-unit guard
     # picks one and coverage may exclude filers using the other. PITFALLS 1.14.
-    synonyms: [tax rate, effective rate, etr]
+    synonyms: [tax rate, effective rate, etr, effective tax rates]
     terms:
       - [us-gaap:EffectiveIncomeTaxRateContinuingOperations]
 
@@ -393,7 +396,7 @@ metrics:
   # --- ratios: numerator stays signed, denominator is a magnitude ----------
   operating_margin:
     label: Operating margin
-    synonyms: [operating profit margin, operating margin percentage]
+    synonyms: [operating profit margin, operating margin percentage, operating margins]
     expression: c0 / c1
     terms:
       - [us-gaap:OperatingIncomeLoss]
@@ -429,7 +432,7 @@ metrics:
 
   net_margin:
     label: Net profit margin
-    synonyms: [net profit margin, net margin percentage, bottom line margin]
+    synonyms: [net profit margin, net margin percentage, bottom line margin, net margins]
     expression: c0 / c1
     terms:
       - - us-gaap:NetIncomeLoss
@@ -441,7 +444,7 @@ metrics:
 
   free_cash_flow_margin:
     label: Free cash flow margin
-    synonyms: [fcf margin, cash flow margin]
+    synonyms: [fcf margin, cash flow margin, free cash flow margins]
     expression: (c0 - c1) / c2
     terms:
       - [us-gaap:NetCashProvidedByUsedInOperatingActivities]
@@ -456,7 +459,7 @@ metrics:
 
   current_ratio:
     label: Current ratio
-    synonyms: [working capital ratio, liquidity ratio]
+    synonyms: [working capital ratio, liquidity ratio, current ratios]
     expression: c0 / c1
     terms:
       - [us-gaap:AssetsCurrent]
@@ -473,7 +476,8 @@ metrics:
   # held back only by a second candidate happening to survive alongside it.
   stock_price:
     label: Share price
-    synonyms: [share price, stock quote, share value, market price, price per share, quote]
+    synonyms: [share price, stock quote, share value, market price, price per share, quote, 
+               stock prices]
     unavailable: >-
       Share prices are set by the market, not reported in a filing, so no XBRL
       concept carries one and this store has no price data at all. The nearest
@@ -502,7 +506,8 @@ metrics:
 
   market_cap:
     label: Market capitalisation
-    synonyms: [market capitalization, market capitalisation, market value, mkt cap]
+    synonyms: [market capitalization, market capitalisation, market value, mkt cap, 
+               market caps]
     unavailable: >-
       Market capitalisation is share price times shares outstanding, and share
       prices are not in XBRL. dei:EntityPublicFloat is filed by all 20 companies
@@ -556,7 +561,7 @@ metrics:
     # one company gross and net routinely differ by twenty points, so a silent
     # default is a wrong answer with no signal. All three specific names
     # resolve directly; only the bare term asks.
-    synonyms: [margin, margins, profitability]
+    synonyms: [margin, margins, profitability, profit margins]
     clarify:
       question: Which profit margin do you mean? They can differ by twenty points or more on the same company.
       options:
@@ -600,7 +605,7 @@ metrics:
 
   cash_flow:
     label: Cash flow
-    synonyms: [cashflow]
+    synonyms: [cashflow, cash flows]
     clarify:
       question: Which cash flow do you mean?
       options:

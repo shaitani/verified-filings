@@ -151,6 +151,22 @@ def _wrong_unit(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int]:
 
     Only as-reported rows are checked. A derived row's unit is whatever the
     model computed and the plan has no opinion on it.
+
+    **TODO -- this is a hole, and it has been exploited.** A non-null
+    ``derivation`` is supplied by the model, so the model can switch off the
+    one structural check on its own arithmetic just by naming its row.
+    Measured on q007 ("Compare gross margins for Intel and AMD"): from
+    2026-09-23 the model wrote ``GrossProfit - Revenue`` with ``'USD' AS
+    unit`` and ``derivation = 'Gross Margin'``, and four consecutive runs came
+    back ``complete`` and answerable with values of about -12.2 billion where
+    a margin of 0.46 was wanted. It was caught only on 2026-09-26, when an
+    unrelated prompt change happened to make the model write a NULL
+    derivation and the check ran again.
+
+    The fix is not to trust the flag: a binding whose result unit is ``pure``
+    cannot have rows in ``USD`` whatever the row calls itself, because
+    dividing like by like is dimensionless. Deliberately not done here -- it
+    is a change to what the verdict refuses, and it wants its own measurement.
     """
     wrong = []
     for index, annotated in enumerate(rows):

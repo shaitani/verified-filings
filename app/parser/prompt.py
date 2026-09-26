@@ -349,6 +349,22 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e2","kind":"metric","text":"current ratio"},
   {"id":"e3","kind":"period","text":"most recent year","last_n_years":1}],"wants_chart":false}""",
     ),
+    # Rule 5b again, on a question ending in a colon list. Measured 2026-09-25:
+    # q044, q045 and q051 all read "<noun>: a, b, c" and came back with NO period
+    # element at all, which `accept()` refuses outright -- so three questions
+    # died in the parser without reaching the mapper. Rule 5b already says every
+    # question needs one; none of the sixteen examples showed this shape, and on
+    # an unfamiliar shape the model follows what it has been shown over what it
+    # has been told. One element per item, the head noun dropped when the items
+    # are themselves metrics, and the period still there.
+    (
+        "What are Oracle's results: revenue, net income",
+        """{"intent":"lookup","elements":[
+  {"id":"e1","kind":"company","text":"Oracle"},
+  {"id":"e2","kind":"metric","text":"revenue"},
+  {"id":"e3","kind":"metric","text":"net income"},
+  {"id":"e4","kind":"period","text":"most recent year","last_n_years":1}],"wants_chart":false}""",
+    ),
     # Rule 5e's bare quarter. Measured: "Q4" alone came back with no year,
     # which means Q4 of every year on file -- five times the rows for a
     # question comparing three companies in one quarter.

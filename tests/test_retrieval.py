@@ -295,15 +295,38 @@ def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
     assert "2021-06-01" not in cte
 
 
-def test_the_combining_example_shows_both_operators() -> None:
-    """It used to show only a division, and a `c0 - c1` metric came back
-    divided: Apple's FY2024 free cash flow as 12.5 rather than 108.8 billion,
-    in the right unit, attributable, verdict `complete`. Same-unit arithmetic
-    has no structural check behind it, so the prompt is the whole defence."""
-    from app.retrieval.prompt import _EXAMPLE_COMBINING
+def test_the_combining_example_uses_the_plan_s_own_operator() -> None:
+    """It used to hard-code `c0 / c1` and correct itself in prose, and a
+    `c0 - c1` metric came back divided: Apple's FY2024 free cash flow as 12.5
+    rather than 108.8 billion, in the right unit, attributable, verdict
+    `complete`. Same-unit arithmetic has no structural check behind it, so the
+    prompt is the whole defence -- and this model follows what it is shown over
+    what it is told, so it is shown the operator it must produce.
+    """
+    from app.retrieval.prompt import _example_combining
 
-    assert "Had the expression been `c0 - c1`" in _EXAMPLE_COMBINING
-    assert "do not copy the operator from this example" in _EXAMPLE_COMBINING
+    minus = " ".join(_example_combining("c0 - c1", "USD").split())
+    assert "FILTER (WHERE w.operand = 0) - max(v.value)" in minus
+    assert "NULLIF" not in minus, "nothing is divided, so nothing needs a NULLIF"
+    assert "'USD' AS unit" in minus
+
+    ratio = " ".join(_example_combining("c0 / c1", "pure").split())
+    assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in ratio
+    assert "'pure' AS unit" in ratio
+
+
+def test_the_combining_example_begins_at_select() -> None:
+    """The CTE is written in Python now, and rule 1 forbids the model a `WITH`
+    of its own. This example still opened with `WITH wanted(...) AS (VALUES` --
+    written before that move and missed when the other two examples were
+    rewritten -- so a multi-operand plan was shown the one thing its own rules
+    forbid. Measured on q024: `max(v.value)` with no FILTER at all.
+    """
+    from app.retrieval.prompt import _EXAMPLE_DERIVED, _EXAMPLE_PLAIN, _example_combining
+
+    for example in (_EXAMPLE_PLAIN, _EXAMPLE_DERIVED, _example_combining("c0 - c1", "USD")):
+        assert "WITH " not in example
+        assert "VALUES" not in example
 
 
 # --------------------------------------------------------------------------- #

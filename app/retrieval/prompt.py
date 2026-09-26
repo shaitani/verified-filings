@@ -20,6 +20,7 @@ the two windows a Q4 has to be computed from.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -137,6 +138,34 @@ NEWLINE = chr(10)
 
 #: The name of the CTE this module writes and the model selects from.
 CTE_NAME = "wanted"
+
+#: How much rendered CTE to inline before falling back to describing it.
+#:
+#: Moving the CTE out of the prompt (2026-09-24) shrank it to a constant ~6,200
+#: characters and fixed q038. It also broke q001, q004, q005, q007 and q008,
+#: and the mechanism took a day to find: **a model that cannot see the CTE
+#: invents a filter to narrow it.** Told only "1 row(s) of coordinates", it
+#: wrote ``WHERE w.fiscal_year = '2024' AND w.fiscal_period = 'Q2'`` -- lifting
+#: `Q2` from the OUTPUT section, the one place in the whole prompt where a
+#: fiscal_period value appears. The join then matched nothing and a question
+#: that had worked for four days returned `empty`.
+#:
+#: Eight wordings were measured against it and only one held: show the rows.
+#: Telling it "add no other filter", or "your statement has NO WHERE clause at
+#: all", or making that a numbered RULE, each fixed some questions and broke
+#: others -- and q005 answered every prohibition with a *different* invented
+#: filter (`v.concept_id`, then `v.concept_name`). Showing it the two bad
+#: clauses as things not to write taught it to write them, which is
+#: DESIGN.md §4.3's recurring lesson arriving again.
+#:
+#: So the CTE is inlined while it is small, and described when it is not. The
+#: gate is characters rather than rows because a multi-operand plan carries two
+#: rows per cell: what has to stay bounded is the prompt. At 4,000 the whole
+#: eval set inlines except q038 (378 rows, 34,664 characters, which would put
+#: the prompt at 43,542 -- roughly 11k tokens against an 8,192 context, and it
+#: would truncate). q038 is also the question the optimisation was made for,
+#: and it passes without seeing the CTE.
+MAX_INLINE_CTE_CHARS = 4000
 
 #: Column names for the coordinate CTE. One constant so the worked example, the
 #: CTE's own declaration and the prose describing it can never drift apart -- a
@@ -483,35 +512,48 @@ answer must be left out entirely, never returned unsubtracted.
 #: exactly the failure that would predict -- ten values per row against nine
 #: declared column names, so `unit` received a concept id and `is_instant`
 #: received 'USD', failing as `boolean = text`.
-_EXAMPLE_COMBINING = f"""WORKED EXAMPLE (different company and dates -- copy the
-FORM, not the values)
+def _operand_terms(expression: str) -> str:
+    """``c0 - c1`` -> the two aggregate terms, with a NULLIF around any divisor.
 
-If the filter table were:
+    The example used to hard-code ``c0 / c1`` and then spend two paragraphs
+    correcting itself -- "Had the expression been `c0 - c1` instead..." and
+    "do not copy the operator from this example". Rendering the plan's own
+    operator removes the mismatch instead of apologising for it. The ids in the
+    example stay invented; an operator is structure, not data.
+    """
+    term = "max(v.value) FILTER (WHERE w.operand = {n})"
+    rendered = re.sub(r"/\s*c(\d+)", lambda m: "/ NULLIF(" + term.format(n=m.group(1)) + ", 0)",
+                      expression)
+    return re.sub(r"c(\d+)", lambda m: term.format(n=m.group(1)), rendered)
 
-{_TABLE_HEADER_OPERANDS}
-{_table_row("e9", 11111, 2019, "FY", 77, "USD", False, "2018-01-01", "2018-12-31", operand=0)}
-{_table_row("e9", 11111, 2019, "FY", 88, "USD", False, "2018-01-01", "2018-12-31", operand=1)}
 
-and the expressions were:
+def _example_combining(expression: str, unit: str) -> str:
+    """The combined-answer example, in this plan's own operator.
 
-  e9: value = c0 / c1, and its unit is 'pure'
+    Begins at ``SELECT``. It used to open with ``WITH wanted(...) AS (VALUES``
+    -- written before the CTE moved into Python, and missed when
+    ``_EXAMPLE_PLAIN`` and ``_EXAMPLE_DERIVED`` were rewritten. So the one
+    worked example a multi-operand plan had contradicted rule 1 of the same
+    prompt, which says to write no ``WITH`` and no ``VALUES``. Measured
+    2026-09-25 on q024 (free cash flow, ``c0 - c1``): the model wrote
+    ``max(v.value)`` with no ``FILTER`` at all -- neither operator, a maximum
+    where a subtraction belonged -- and left ``v.unit`` out of ``GROUP BY``,
+    which is the only reason it crashed rather than returning NVIDIA's
+    operating cash flow wearing free cash flow's label.
+    """
+    return f"""WORKED EXAMPLE OF A COMBINED ANSWER (invented ids -- copy the FORM)
 
-then -- note `c0` became operand 0 and `c1` became operand 1:
+`{CTE_NAME}` holds TWO rows for one answer row, `operand` 0 and `operand` 1.
+This plan's expression is `{expression}` and its unit is '{unit}':
 
-  WITH wanted(element_id, company_cik, fiscal_year, fiscal_period, operand,
-              concept_id, unit, is_instant, window_start, window_end) AS (
-    VALUES ('e9', 11111, 2019, 'FY', 0, 77, 'USD', false, DATE '2018-01-01', DATE '2018-12-31'),
-           ('e9', 11111, 2019, 'FY', 1, 88, 'USD', false, DATE '2018-01-01', DATE '2018-12-31')
-  )
   SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
          w.fiscal_year, w.fiscal_period,
          v.period_start, v.period_end, v.is_instant,
-         max(v.value) FILTER (WHERE w.operand = 0)
-           / NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0) AS value,
-         'pure' AS unit,
+         {_operand_terms(expression)} AS value,
+         '{unit}' AS unit,
          NULL::text AS derivation
-  FROM wanted w
-  JOIN xbrl.reported_fact v
+  FROM {CTE_NAME} w
+  JOIN {VIEW} v
     ON  v.company_cik = w.company_cik
     AND v.concept_id  = w.concept_id
     AND v.unit        = w.unit
@@ -521,22 +563,18 @@ then -- note `c0` became operand 0 and `c1` became operand 1:
   GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,
            w.fiscal_year, w.fiscal_period,
            v.period_start, v.period_end, v.is_instant
-  LIMIT 500
+  LIMIT {MAX_ROWS}
 
-Had the expression been `c0 - c1` instead, the ONLY change would be the
-operator:
+Three things that gets right and are easy to get wrong:
 
-         max(v.value) FILTER (WHERE w.operand = 0)
-           - max(v.value) FILTER (WHERE w.operand = 1) AS value,
+  - Each `cN` becomes its own `max(v.value) FILTER (WHERE w.operand = N)`.
+    One bare `max(v.value)` over both operands returns the LARGER of them,
+    which is not the expression and is not the answer.
+  - `unit` is the literal '{unit}' -- the unit of the ANSWER, given above.
+    `v.unit` is the operands' unit and is never projected; projecting it
+    without adding it to GROUP BY is a grouping error.
+  - Every projected column that is not aggregated appears in GROUP BY."""
 
-with no NULLIF (nothing is divided) and the unit as given for that element.
-Read the expression; do not copy the operator from this example.
-
-The CTE declares TEN column names because the filter table has ten columns.
-`is_instant` is written `false`, not `'false'` -- the column is a boolean.
-`value`, `ticker` and `entity_name` appear ONLY as v.<column>; they are never
-written as literals, because they are what you are querying FOR.
-"""
 
 
 #: Shown only when some metric is arithmetic over more than one concept.
@@ -665,9 +703,13 @@ def build_prompt(plan: QueryPlan) -> str:
     spec = plan.result
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
-    job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
     combining = any(cell.operands > 1 for cell in cells)
-    worked_example = _EXAMPLE_COMBINING if combining else _EXAMPLE_PLAIN
+    job = _JOB_MUST_DERIVE if plan.intent in DERIVING_INTENTS else _JOB_EITHER
+    if combining:
+        first = next(cell for cell in cells if cell.operands > 1)
+        worked_example = _example_combining(first.expression, first.result_unit)
+    else:
+        worked_example = _EXAMPLE_PLAIN
     # Shown only for a single-operand deriving plan, and the `not combining` half
     # is not tidiness. Measured 2026-09-24: shown alongside _EXAMPLE_COMBINING on
     # q009 ("highest operating margin", a `c0 / c1` ratio), the model took three
@@ -683,6 +725,16 @@ def build_prompt(plan: QueryPlan) -> str:
     combine_help = _combine_help(cells)
     declared = ", ".join(_cte_columns(cells))
     threshold_help = _threshold_help(plan)
+    rendered = emit_cte(cells)
+    if len(rendered) <= MAX_INLINE_CTE_CHARS:
+        indented = chr(10).join("  " + line for line in rendered.splitlines())
+        cte_body = (
+            "This is it in full -- it is already written, do not repeat it:"
+            + chr(10) * 2
+            + indented
+        )
+    else:
+        cte_body = f"  {CTE_NAME}({declared})"
 
     prompt = f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
@@ -713,7 +765,7 @@ Do NOT write `WITH`. Do NOT write a `VALUES` list. Begin your reply at
 `SELECT`. A CTE named `{CTE_NAME}` is already defined above whatever you write,
 holding {len(cells)} row(s) of coordinates across {spec.companies} compan(ies):
 
-  {CTE_NAME}({declared})
+{cte_body}
 
 Every coordinate you need is in it, already correct. **Never write a date, a
 cik or a concept_id as a literal** -- there is nothing to copy and nothing to
