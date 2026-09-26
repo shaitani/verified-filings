@@ -306,6 +306,38 @@ In rough order of how much they matter.
   outcome this project prefers; that one is the failure it exists to prevent,
   so it is counted apart from `fail` and printed last.
 
+  **A question's grade depends on Ollama's prompt cache. Do not re-run a
+  question N times to measure "non-determinism" — it has been done, and
+  repeats measure the cache, not the model.** Measured 2026-09-26:
+
+  - Temperature is 0 and Qwen is deterministic **for a given cache state**:
+    41 calls of q048's parser prompt were byte-identical — cold, back to back,
+    and after another question's prompt, an SQL call or an embedding call.
+  - The cache state changes the reply. Once Ollama has cached a longer request
+    that *begins with* a prompt, that prompt gets a different (equally stable)
+    reply. The parser's retry prompt is exactly that — the first prompt plus
+    the rejected reply and the error — so **a question's first attempt behaves
+    differently after its own retry has run once.** Unloading the model
+    (`keep_alive=0`) resets it. The retry's content does not leak; only the
+    arithmetic path changes.
+  - So re-running a question you just ran is optimistic: q048 **fails every
+    time from a cold model** (invents `fiscal_year 2024`) and passes every time
+    once its retry is cached — 9/10 "passes" in a 10× loop were all warm.
+  - A full walkthrough runs each question once, so it is the closer measure,
+    but a question can still inherit cache state from the ones before it
+    (q034 failed in a full run and passes cold and warm in isolation;
+    unexplained).
+
+  To see a question as a first-time asker would: unload Qwen, then run it
+  once. To compare before/after a change, do that for both.
+
+  ```
+  docker exec verified-filings-ollama-1 ollama stop qwen2.5-coder:7b
+  ```
+ Not yet done: the
+  runner does not unload between questions, so full-run grades are not fully
+  reproducible. Scripts from the measurement are not kept.
+
 - **The unit guard can be switched off by the model, and has been.**
   `_wrong_unit` is the one structural check on derived arithmetic: a binding
   whose result unit is `pure` cannot have rows in `USD`, because dividing like
