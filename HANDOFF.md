@@ -284,8 +284,8 @@ In rough order of how much they matter.
   it records every element the parser produced, expected against observed item
   by item, the rows with their units and windows, the provenance, every caveat
   raised, and any exception verbatim. It writes after each question, so the
-  file is readable while the run is still going. Budget 25-30 minutes for the
-  whole set; a handful of questions take a minute each.
+  file is readable while the run is still going. Budget about 10 minutes for
+  the whole set; a handful of questions take a minute each.
 
   Both need the database and Ollama up (`BOOTSTRAP.md`). `--stage parse` needs
   neither.

@@ -19,7 +19,7 @@ which is what you want for a number; this writes, for each question:
 * the exception, verbatim, when a stage raised one
 
 That is what you read when a count moves and you need to know *why*. Budget
-25-30 minutes for the whole set; it writes after every question, so the file is
+about 10 minutes for the whole set; it writes after every question, so the file is
 readable while the run is still going.
 
 **A grade here means the chain made the right call about whether to answer.**

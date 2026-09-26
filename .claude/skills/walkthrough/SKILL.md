@@ -6,7 +6,7 @@ description: Run evals/walkthrough.py over every eval question and leave a fresh
 # Walk through every eval question
 
 Invoking this skill **is** the explicit request for a whole-set run (the usual
-"no full eval runs unasked" rule is satisfied). The last full run (2026-09-25) took 9m27s for 55 questions.
+"no full eval runs unasked" rule is satisfied). It takes about 10 minutes.
 
 ## Ground rules
 
