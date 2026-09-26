@@ -780,6 +780,10 @@ refused:
    column needs an explicit alias or to be a bare column reference — an
    unnamed `NULL::text` is a column called `text`, and guessing that name is
    how a projection goes silently wrong.
+   `derivation`, at every level, must be a label or NULL — a string literal,
+   `NULL`, either cast to text, a `CASE` of those, or an outer reference to an
+   inner `derivation`. q010 put the growth rate itself there and crashed
+   building `ResultRow` after the statement ran; the name check passed it.
 7. A `LIMIT` at or under `max_rows`, appended on its own line when absent and
    **re-parsed to confirm it took**. `FETCH ... WITH TIES` is refused: it
    returns however many rows tie at the cut-off, so its own count is not a cap.

@@ -156,6 +156,7 @@ class _Inspector(Visitor):
         self.functions: list[str] = []
         self.relations: list[tuple[str | None, str]] = []
         self.cte_names: set[str] = set()
+        self.derivations: list[ast.Node] = []
 
     def visit(self, ancestors, node) -> None:  # noqa: ARG002 - visitor protocol
         name = type(node).__name__
@@ -175,6 +176,12 @@ class _Inspector(Visitor):
 
     def visit_CommonTableExpr(self, ancestors, node) -> None:  # noqa: ARG002
         self.cte_names.add(node.ctename)
+
+    def visit_ResTarget(self, ancestors, node) -> None:  # noqa: ARG002
+        # Every level, not just the top: a subquery's `derivation` is what an
+        # outer `s.derivation` passes through.
+        if _target_name(node) == "derivation":
+            self.derivations.append(node.val)
 
 
 def _target_name(target: ast.ResTarget) -> str | None:
@@ -241,6 +248,53 @@ def _check_projection(statement: ast.SelectStmt) -> None:
         raise ContractViolation(
             f"the projection must be exactly {list(RESULT_COLUMNS)}, in any order: "
             + "; ".join(detail)
+        )
+
+
+#: Type names a label may be cast to. ``NULL::text`` is the as-filed form.
+_LABEL_TYPES = frozenset({"text", "varchar", "bpchar"})
+
+
+def _is_label(node: ast.Node | None) -> bool:
+    """Whether an expression can only ever produce a text label or NULL.
+
+    A string literal, NULL, either cast to text, a CASE whose every branch is
+    one of those, or a bare reference to an inner level's ``derivation``
+    (checked where it is defined). Everything else is refused, including a
+    number cast to text -- a label names what was computed, it is not the
+    computation.
+    """
+    if isinstance(node, ast.A_Const):
+        return node.isnull or isinstance(node.val, ast.String)
+    if isinstance(node, ast.TypeCast):
+        names = [n.sval for n in node.typeName.names if isinstance(n, ast.String)]
+        return bool(names) and names[-1] in _LABEL_TYPES and _is_label(node.arg)
+    if isinstance(node, ast.CaseExpr):
+        results = [when.result for when in node.args or ()]
+        if node.defresult is not None:
+            results.append(node.defresult)
+        return bool(results) and all(_is_label(r) for r in results)
+    if isinstance(node, ast.ColumnRef) and node.fields:
+        last = node.fields[-1]
+        return isinstance(last, ast.String) and last.sval == "derivation"
+    return False
+
+
+def _check_derivation_is_a_label(inspector: _Inspector) -> None:
+    """``derivation`` holds a name for what was computed, never the number.
+
+    Measured on q010 ("how fast has NVIDIA's revenue grown"), 2026-09-25: the
+    model put the growth rate itself in ``derivation`` and the as-filed figure
+    in ``value``. The column names were all right, so the projection check
+    passed, and the statement crashed building ``ResultRow`` after it ran.
+    That is decidable from the text, so it is refused here instead.
+    """
+    if not all(_is_label(node) for node in inspector.derivations):
+        raise ContractViolation(
+            "`derivation` must be a short text label naming what was computed "
+            "(for example 'yoy_growth'), or NULL::text on an as-filed row -- never "
+            "a computed value. Put the computed number in `value` and name it in "
+            "`derivation`"
         )
 
 
@@ -396,6 +450,7 @@ def validate(sql: str, *, max_rows: int = MAX_ROWS) -> str:
     _check_relations(inspector)
     _check_reads_the_view(inspector)
     _check_projection(statement)
+    _check_derivation_is_a_label(inspector)
 
     limit = _limit_value(statement)
     if limit is None:

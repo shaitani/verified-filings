@@ -93,6 +93,49 @@ def test_aggregates_and_window_functions_are_accepted() -> None:
     assert validate(sql)
 
 
+@pytest.mark.parametrize(
+    "derivation",
+    [
+        "'yoy_growth' AS derivation",
+        "'yoy_growth'::text AS derivation",
+        "CASE WHEN v.value IS NULL THEN NULL ELSE 'yoy_growth' END AS derivation",
+    ],
+)
+def test_a_label_or_null_is_accepted_as_derivation(derivation: str) -> None:
+    assert validate(_without_derivation(PLAN_JOIN, derivation))
+
+
+@pytest.mark.parametrize(
+    "derivation",
+    [
+        # q010, verbatim shape: the growth rate itself, in the label column.
+        "(v.value - LAG(v.value) OVER (ORDER BY v.period_end))"
+        " / LAG(v.value) OVER (ORDER BY v.period_end) AS derivation",
+        "v.value AS derivation",
+        "(v.value / 2)::text AS derivation",
+        "CASE WHEN v.value IS NULL THEN 'none' ELSE v.value::text END AS derivation",
+    ],
+)
+def test_a_computed_value_in_derivation_is_refused(derivation: str) -> None:
+    """The label names what was computed; the number belongs in `value`."""
+    with pytest.raises(InvalidSQL, match="derivation. must be a short text label"):
+        validate(_without_derivation(PLAN_JOIN, derivation))
+
+
+def test_a_subquery_derivation_is_checked_where_it_is_defined() -> None:
+    """An outer `s.derivation` passes through; the inner definition is judged."""
+    inner = _without_derivation(PLAN_JOIN_UNCAPPED, "v.value AS derivation")
+    outer = (
+        "SELECT s.element_id, s.company_cik, s.ticker, s.entity_name, s.fiscal_year, "
+        "s.fiscal_period, s.period_start, s.period_end, s.is_instant, s.value, s.unit, "
+        f"s.derivation FROM ({inner}) s LIMIT 10"
+    )
+    with pytest.raises(InvalidSQL, match="derivation. must be a short text label"):
+        validate(outer)
+    ok = outer.replace("v.value AS derivation", "'yoy_growth' AS derivation")
+    assert validate(ok) == ok
+
+
 def test_a_statement_under_the_cap_keeps_its_own_limit() -> None:
     sql = PLAN_JOIN_UNCAPPED + "LIMIT 36"
     assert validate(sql) == sql

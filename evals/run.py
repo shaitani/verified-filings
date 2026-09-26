@@ -188,6 +188,18 @@ def observe(query: QueryIn, plan: QueryPlan, result: ResultSet | None) -> list[t
     # was going to be answered actually was.
     spoiled = result is not None and not result.is_answerable
 
+    # A refusal on something that is not an item -- a company, a period --
+    # blocks the whole question, so a metric that bound was still not
+    # answered. q036: Samsung refused, Apple's revenue bound, nothing ran.
+    # Kept to non-items on purpose: q044 expects "gross" refused and "net"
+    # answered in one incomplete plan, and that per-item reading must stand.
+    items = {e.id for e in query.elements if e.kind in ITEM_KINDS}
+    blocked: Outcome | None = None
+    for ids, outcome in ((unresolved, "refused"), (clarified, "asked"), (ambiguous, "confused")):
+        if ids - items:
+            blocked = outcome
+            break
+
     observed: list[tuple[str, Outcome]] = []
     for element in query.elements:
         # Metrics and narrative spans only. A `narrative` span -- the "Why" in
@@ -203,6 +215,8 @@ def observe(query: QueryIn, plan: QueryPlan, result: ResultSet | None) -> list[t
             state = "confused"
         elif element.id in unresolved:
             state = "refused"
+        elif blocked is not None:
+            state = blocked
         elif element.id in bound:
             state = "error" if spoiled else "answered"
         else:
