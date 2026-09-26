@@ -256,6 +256,35 @@ In rough order of how much they matter.
   scores the *decision* — did it answer, and was answering the right call. It
   does not check the figure.
 
+  **Two ways to run it.**
+
+  ```
+  uv run python evals/run.py                     # one line per question
+  uv run python evals/walkthrough.py             # a markdown breakdown
+  ```
+
+  `run.py` gives a tally and a terse line each — use it for a number. Both
+  take an id range and share the same scorer, so they never disagree on a
+  grade:
+
+  ```
+  uv run python evals/run.py --id q007 q009      # run.py takes ids
+  uv run python evals/walkthrough.py q020 q029   # walkthrough takes a range
+  uv run python evals/run.py --stage map         # no Qwen; plans only
+  uv run python evals/run.py --include-known-gaps
+  ```
+
+  `walkthrough.py` writes `data/question-walkthrough.md` (gitignored) and is
+  what to reach for when a count moves and you need to know why: per question
+  it records every element the parser produced, expected against observed item
+  by item, the rows with their units and windows, the provenance, every caveat
+  raised, and any exception verbatim. It writes after each question, so the
+  file is readable while the run is still going. Budget 25-30 minutes for the
+  whole set; a handful of questions take a minute each.
+
+  Both need the database and Ollama up (`BOOTSTRAP.md`). `--stage parse` needs
+  neither.
+
   **No current number is recorded here, on purpose.** Earlier runs were
   deleted along with their artefacts: they were taken across a week of prompt
   changes, several were stale in both directions, and a stale pass rate is
@@ -414,4 +443,6 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 | [`LOADER.md`](LOADER.md) | the load step |
 | [`ALEMBIC.md`](ALEMBIC.md) | migrations — note step 5, the test database is NOT migrated automatically |
 | [`evals/README.md`](evals/README.md) | eval tag vocabulary, how to add questions, how to run the set |
+| [`evals/run.py`](evals/run.py) | the runner — a tally and one line per question |
+| [`evals/walkthrough.py`](evals/walkthrough.py) | the same run, written out per question in full |
 | [`sec-retriever.md`](sec-retriever.md) | the original project brief |
