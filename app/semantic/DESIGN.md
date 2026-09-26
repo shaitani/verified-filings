@@ -274,8 +274,9 @@ a company with no binding makes the verdict report a shortfall the plan had
 already disclosed.
 
 The same split applies to **companies that do not resolve at all**. A name
-matching *nothing* is droppable — "how does Apple compare to Samsung" is a real
-question about Apple — and produces the same note. A name matching *several*
+matching *nothing* is droppable — "revenue for Apple and Samsung" is a real
+question about Apple — and produces the same note, unless it leaves a
+comparison with one side (§8d). A name matching *several*
 loaded companies is not: picking one would be a guess between real
 alternatives, so that stays a refusal. And when no named company resolves, the
 scope must **not** widen to every loaded filer; `map_query` widens only when
@@ -287,6 +288,42 @@ A period that resolves to nothing. "What was Apple's revenue in 2019?" names
 one year, no window exists for it, and there is no surviving fraction to
 answer — so it stays a refusal. Whether to answer such a question from the
 comparative columns a later 10-K carries is a separate decision, still open.
+
+## 8d. A comparison left with one side is refused
+
+Added 2026-09-25, reversing part of §8c at the user's call. "How does Apple
+compare to Samsung on revenue?" used to answer with Apple's revenue and a
+`partial_coverage` note. Half a comparison is not a smaller version of the
+answer, it is a different one — and the SQL step, handed a `compare` plan with
+one company, improvised (q036 renamed `value` to `apple_revenue`).
+
+The rule, in `_one_sided`: refuse when **all** of
+
+* the intent is `compare` or `rank`,
+* the question **named** its companies (company elements — the implicit
+  every-filer scope never refuses here), and
+* fewer than two companies can take part.
+
+Two paths reach it, and both refuse the same way:
+
+* **a named company is not loaded** (Samsung) → an `Unresolved` on that company
+  element: "There is no data for 'Samsung' at this time …";
+* **a named company is loaded but reports nothing for the metric** (JPMorgan and
+  gross profit) → an `Unresolved` on the metric element, and that element's
+  bindings are dropped with it.
+
+Above the threshold nothing changes: five named companies with one missing
+still ranks the other four, with the §8c note and its subset warning.
+`lookup`, `trend` and `derive` keep §8c unchanged — "revenue for Apple and
+Samsung" is two lookups, and Apple's figure stays true on its own.
+
+Counted per metric. "Compare Apple and JPMorgan on revenue and gross profit"
+refuses the whole question, because gross profit has one side, and an
+unresolved element makes the plan incomplete — the same as any other
+unresolvable metric. Answering revenue alone would be half the question.
+
+The rule rests on `intent`, which the parser's model sets. A comparison tagged
+`lookup` falls back to §8c: half an answer with a note, never a wrong number.
 
 ## 8a. Declining, for terms the dataset simply does not hold
 

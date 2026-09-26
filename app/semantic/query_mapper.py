@@ -113,10 +113,25 @@ async def map_query(
         company_notes: list[Note] = []
         if missing_companies:
             named = ", ".join(repr(name) for name in missing_companies)
-            if ciks:
+            if ciks and _one_sided(query.intent, named=True, kept=len(ciks)):
+                # A comparison or ranking left with one side is not a smaller
+                # version of the answer, it is a different one. Refuse, naming
+                # what is missing. DESIGN.md §8d.
+                scope = await _describe_scope(ciks, session)
+                company_problems += [
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"There is no data for {element.text!r} at this time: it is "
+                        f"not one of the companies loaded in this dataset, so there is "
+                        f"nothing to {query.intent} {scope} against",
+                    )
+                    for element in companies
+                    if element.text in missing_companies
+                ]
+            elif ciks:
                 # Something else resolved, so there is an answer to give. Note
-                # it rather than refuse: "how does Apple compare to Samsung"
-                # is a real question about Apple, and a flat refusal tells the
+                # it rather than refuse: "revenue for Apple and Samsung" is a
+                # real question about Apple, and a flat refusal tells the
                 # asker less than half an answer plus this sentence does.
                 company_notes.append(
                     Note(
@@ -150,7 +165,12 @@ async def map_query(
             clarifications,
             coverage_notes,
         ) = await _resolve_metrics(
-            metrics, session, ciks=ciks, periods=resolved_periods, intent=query.intent
+            metrics,
+            session,
+            ciks=ciks,
+            periods=resolved_periods,
+            intent=query.intent,
+            named=bool(companies),
         )
 
     qualifiers = [e for e in query.elements if isinstance(e, MetricQualifierElementIn)]
@@ -536,10 +556,11 @@ async def _resolve_companies(
     """``(ciks, refusals, names that matched nothing)``.
 
     The third return is separated from the second because the two failures are
-    not the same failure. A name that matches **nothing** is droppable: "how
-    does Apple compare to Samsung" is answerable about Apple, as long as the
-    reader is told Samsung is missing, and the caller makes that call because
-    only it knows whether anything else resolved.
+    not the same failure. A name that matches **nothing** is droppable: "revenue
+    for Apple and Samsung" is answerable about Apple, as long as the reader is
+    told Samsung is missing, and the caller makes that call because only it
+    knows whether anything else resolved -- and whether a comparison is left
+    with one side, which it refuses (DESIGN.md §8d).
 
     A name that matches **several** loaded companies is not droppable. Picking
     one would be a guess between real alternatives, and dropping it would
@@ -1033,6 +1054,7 @@ async def _resolve_metrics(
     ciks: list[int],
     periods: list[ResolvedPeriod],
     intent: Intent,
+    named: bool = False,
 ) -> tuple[list[Binding], list[Ambiguity], list[Unresolved], list[Clarification], list[Note]]:
     """Bind every metric element to concepts that provably have the facts.
 
@@ -1168,7 +1190,21 @@ async def _resolve_metrics(
         )
         if uncovered:
             dropped = await _describe_companies(uncovered, session)
-            if len(bindings) > bound_before:
+            kept = sorted({b.company_cik for b in bindings[bound_before:]})
+            if kept and _one_sided(intent, named=named, kept=len(kept)):
+                # Same rule as a company that is not loaded at all: one side
+                # left of a comparison is refused, and the element's bindings
+                # go with it so nothing stands for a refused metric.
+                del bindings[bound_before:]
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"{dropped} report no {element.text!r} for the periods asked "
+                        f"about, so there is nothing to {intent} "
+                        f"{await _describe_companies(kept, session)} against",
+                    )
+                )
+            elif len(bindings) > bound_before:
                 notes.append(
                     Note(
                         kind="partial_coverage",
@@ -1192,6 +1228,17 @@ async def _resolve_metrics(
                 )
 
     return bindings, ambiguous, problems, clarifications, notes
+
+
+def _one_sided(intent: Intent, *, named: bool, kept: int) -> bool:
+    """Whether dropping companies has left a comparison with nothing to compare.
+
+    Only for ``compare`` and ``rank``, only when the question named its
+    companies, and only once fewer than two can take part. Five named and one
+    missing still ranks the other four, with a ``partial_coverage`` note; the
+    implicit every-filer scope never refuses here. DESIGN.md §8d.
+    """
+    return named and intent in ("compare", "rank") and kept < 2
 
 
 def _subset_warning(intent: Intent, *, kept: int) -> str:

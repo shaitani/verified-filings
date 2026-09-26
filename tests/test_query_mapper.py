@@ -1316,6 +1316,44 @@ async def test_an_unknown_company_alongside_a_known_one_is_noted_not_refused(
     assert FIXTURE_TICKER in note.message or FIXTURE_NAME_FRAGMENT in note.message
 
 
+async def test_a_comparison_left_with_one_side_is_refused(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """"How does Apple compare to Samsung" with no Samsung data has nothing to
+    compare. Half a comparison is a different answer, so it refuses, naming
+    the missing company -- and does not widen or answer the other half."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric"},
+            {"id": "c1", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "c2", "text": "Samsung", "kind": "company"},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+            intent="compare",
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert not plan.is_complete
+    (problem,) = plan.unresolved
+    assert problem.element_id == "c2"
+    assert "Samsung" in problem.reason and "no data" in problem.reason
+    assert not [n for n in plan.notes if n.kind == "partial_coverage"]
+
+
+def test_one_sided_needs_a_named_comparison_with_under_two_left() -> None:
+    """Five named, one missing, still ranks the other four; the implicit
+    every-filer scope and the non-comparing intents never refuse here."""
+    assert query_mapper._one_sided("compare", named=True, kept=1)
+    assert query_mapper._one_sided("rank", named=True, kept=1)
+    assert not query_mapper._one_sided("rank", named=True, kept=4)
+    assert not query_mapper._one_sided("compare", named=True, kept=2)
+    assert not query_mapper._one_sided("rank", named=False, kept=1)
+    for intent in ("lookup", "trend", "derive"):
+        assert not query_mapper._one_sided(intent, named=True, kept=1)
+
+
 async def test_when_no_named_company_resolves_the_scope_does_not_widen(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:

@@ -261,9 +261,11 @@ questions:
 
   - id: q036
     question: How does Apple compare to Samsung on revenue?
-    expect: [answered]  # revenue; Samsung is scope, and rides on a partial_coverage note
+    expect: [refused]  # revenue; a comparison with one side left refuses (semantic DESIGN §8d)
     blocked_by: [company_not_loaded]
-    notes: Apple resolves, Samsung does not. Should answer half and say so.
+    notes: >-
+      Apple resolves, Samsung does not. Half a comparison is a different
+      answer, so it refuses and says there is no Samsung data.
 
   - id: q037
     question: What is Tesla's stock price today?
