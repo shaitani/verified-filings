@@ -49,6 +49,7 @@ from app.schemas.query import (
     PeriodElementIn,
     QueryIn,
 )
+from app.semantic.metric_aliases import alias_index
 
 
 class UnacceptableProposal(Exception):
@@ -208,7 +209,7 @@ _YEAR = re.compile(r"\b\d{4}\b")
 #: Which optional wire fields each kind may carry. Anything outside its set
 #: is a confusion, not a spare field -- see gate 3.
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
-    "metric": frozenset(),
+    "metric": frozenset({"clarify_as"}),
     "company": frozenset(),
     "period": frozenset(
         {"fiscal_year", "fiscal_period", "last_n_years", "last_n_quarters"}
@@ -365,13 +366,19 @@ def _refuse_dropped_modifier(
     preceded by "net" is a different line of the income statement. See
     ``_METRIC_MODIFIERS``.
     """
+    # Compared without time words, the way a colon list's readings are built:
+    # "yearly revenue" for "yearly revenue: gross, net" drops the list as
+    # surely as "revenue" does, and "gross yearly revenue" is nowhere to be
+    # found. Measured 2026-09-26: accepted, it was refused downstream and the
+    # two figures asked for were lost.
+    core = " ".join(word for word in span.split() if word not in _TIME_WORDS) or span
     for modifier in _METRIC_MODIFIERS:
-        if span.startswith(f"{modifier} "):
+        if core.startswith(f"{modifier} "):
             continue  # already carries it
-        if f"{modifier} {span}" in question:
+        if f"{modifier} {core}" in question:
             raise UnfaithfulSpan(
                 f"element {element.id!r} has text {element.text!r}, but the "
-                f"question says {modifier + ' ' + span!r}. Copy the whole "
+                f"question says {modifier + ' ' + core!r}. Copy the whole "
                 f"phrase: {modifier!r} changes which figure is meant."
             )
 
@@ -400,6 +407,25 @@ def _refuse_a_list_item_used_twice(elements: list[ElementIn], question: str) -> 
                 "element for it."
             )
         used[item] = element.id
+
+
+def _check_clarify_as(element: WireElement) -> None:
+    """``clarify_as`` names a curated question, or is absent.
+
+    The grammar already confines it to the curated names; this is the same
+    check for a reply that reached here some other way, with the names spelled
+    out so a repair has something to choose from.
+    """
+    if element.clarify_as is None:
+        return
+    entries = alias_index().clarify_entries()
+    if element.clarify_as not in {hit.metric for hit in entries}:
+        raise MalformedProposal(
+            f"metric {element.id!r} has clarify_as {element.clarify_as!r}, which is "
+            f"not one of the curated questions: "
+            f"{', '.join(hit.metric for hit in entries)}. Use one of those, or leave "
+            "clarify_as out."
+        )
 
 
 def _check_period(element: WireElement, span: str, question: str) -> None:
@@ -480,7 +506,8 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
 
     try:
         if element.kind == "metric":
-            return MetricElementIn(id=element.id, text=span)
+            _check_clarify_as(element)
+            return MetricElementIn(id=element.id, text=span, clarify_as=element.clarify_as)
         if element.kind == "company":
             # No ticker, no name: see wire.py. The span alone reaches the
             # mapper's lexicon, and a hint the model invented would outrank

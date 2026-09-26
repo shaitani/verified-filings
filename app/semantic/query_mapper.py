@@ -1133,21 +1133,16 @@ async def _resolve_metrics(
         if hit is not None and hit.clarify is not None:
             # Curated: the term really is several things, and someone wrote the
             # choices. Ask rather than pick a convention and be quietly wrong.
-            clarifications.append(
-                Clarification(
-                    element_id=element.id,
-                    element_text=element.text,
-                    question=hit.clarify.question,
-                    options=[
-                        ClarifyOption(
-                            metric=option.metric, label=label, description=option.description
-                        )
-                        for option, label in zip(
-                            hit.clarify.options, hit.option_labels, strict=True
-                        )
-                    ],
-                )
-            )
+            clarifications.append(_clarification(element, hit))
+            continue
+        asked_as = index.clarify_entry(element.clarify_as) if element.clarify_as else None
+        if hit is None and asked_as is not None:
+            # The file does not list this phrase, but the parser judged it vague
+            # and named the curated question that fits ("bring in" -> money
+            # made). Before the embedding search, because a phrase judged vague
+            # should be asked about, not bound on similarity -- and this path
+            # can only ask: the reader's answer binds through the aliases.
+            clarifications.append(_clarification(element, asked_as))
             continue
         if hit is not None:
             slots = await _slots_from_alias(session, hit)
@@ -1262,6 +1257,20 @@ def _one_sided(intent: Intent, *, named: bool, kept: int) -> bool:
     implicit every-filer scope never refuses here. DESIGN.md §8d.
     """
     return named and intent in ("compare", "rank") and kept < 2
+
+
+def _clarification(element: MetricElementIn, hit: AliasHit) -> Clarification:
+    """A curated ``clarify`` entry, put to the reader about this element."""
+    assert hit.clarify is not None
+    return Clarification(
+        element_id=element.id,
+        element_text=element.text,
+        question=hit.clarify.question,
+        options=[
+            ClarifyOption(metric=option.metric, label=label, description=option.description)
+            for option, label in zip(hit.clarify.options, hit.option_labels, strict=True)
+        ],
+    )
 
 
 def _subset_warning(intent: Intent, *, kept: int) -> str:

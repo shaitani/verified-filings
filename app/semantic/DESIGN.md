@@ -193,6 +193,24 @@ Either way it replaced the worst case in the eval set: "total debt" across the
 corpus produced nineteen ambiguity records offering, among other things,
 `DebtInstrumentCarryingAmount`, a per-instrument footnote line.
 
+**Two ways in** (added 2026-09-26). A clarify entry is reached by a listed
+phrase, as above, or by name through `MetricElementIn.clarify_as` — the parser
+naming the curated question that fits a vague phrase the file does not list.
+`_resolve_metrics` takes them in this order:
+
+1. the curated lookup of `text` — a listed phrase resolves, asks or declines,
+   whatever `clarify_as` says;
+2. `clarify_as`, when it names a `clarify` entry (`AliasIndex.clarify_entry`)
+   — the entry's question is asked;
+3. the embedding search.
+
+`clarify_as` is consulted before the embedding search because a phrase judged
+vague should be asked about, not bound on similarity; and it is safe to trust
+because it can only produce a question. A name that is not a `clarify` entry
+answers `None` and the element falls through as if the field were absent. Six
+entries ask today: `profit_margin`, `profit`, `debt`, `cash_flow`,
+`money_made`, `performance`. See `app/parser/DESIGN.md` §10a.
+
 ## 8b. Answering with a narrower figure, and saying so
 
 `caveats` maps a concept reference to a sentence that becomes a

@@ -57,3 +57,16 @@ metrics:
     terms:
       - [us-gaap:ZzzTestRevenues]
       - [us-gaap:ZzzTestNetLoss]
+
+  # A curated question, for `clarify_as`: the parser names it for a vague phrase
+  # this file does not list.
+  widget_vague:
+    label: Widget vague
+    synonyms: [widget stuff]
+    clarify:
+      question: Which widget figure do you mean?
+      options:
+        - metric: widget_revenue
+          description: What widgets sold for.
+        - metric: widget_margin
+          description: What was left of it.

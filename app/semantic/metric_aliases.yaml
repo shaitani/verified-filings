@@ -618,6 +618,35 @@ metrics:
         - metric: free_cash_flow
           description: Operating cash flow minus capital expenditure.
 
+  money_made:
+    label: Money made
+    # "How much money was made" is revenue or net income, and only the asker
+    # knows which: the money that came in, or the money that was left. Left
+    # uncurated it fell to the embedding search, which found nothing within
+    # reach (best: IncomeTaxesPaidNet at 0.58) and refused -- q043, 2026-09-26.
+    #
+    # Deliberately NOT listed: bare "money", which is as often cash on hand
+    # (see cash_and_equivalents' caveat) as anything earned.
+    synonyms:
+      [
+        money made, money was made, money is made, money were made,
+        money has been made, money had been made, money being made,
+        how much money was made, how much money is made, how much money made,
+        how much money has been made, money they made, money it made,
+        how much money they made, how much money it made,
+        made money, make money, makes money, making money,
+        money earned, money was earned, money is earned, earned money,
+        how much money was earned, how much money they earned,
+        make, made, earn, earned,
+      ]
+    clarify:
+      question: Which do you mean by money made -- the money that came in, or the money that was left?
+      options:
+        - metric: revenue
+          description: Everything customers paid. The top line, before any cost is taken out.
+        - metric: net_income
+          description: What was left after every cost, interest and tax. The bottom line.
+
   # --- terms that name no figure at all --------------------------------------
   performance:
     label: Performance

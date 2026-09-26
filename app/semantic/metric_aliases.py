@@ -349,6 +349,7 @@ class AliasIndex:
 
     def __init__(self, document: AliasFile) -> None:
         self._by_form: dict[str, AliasHit] = {}
+        self._clarify: dict[str, AliasHit] = {}
 
         for metric, alias in document.metrics.items():
             slots = alias.slots
@@ -371,6 +372,8 @@ class AliasIndex:
                 if alias.clarify
                 else (),
             )
+            if alias.clarify is not None:
+                self._clarify[metric] = hit
             for form in (metric, *alias.synonyms):
                 keys = lookup_keys(form)
                 if not keys[0]:
@@ -395,6 +398,22 @@ class AliasIndex:
             if hit is not None:
                 return hit
         return None
+
+    def clarify_entry(self, name: str) -> AliasHit | None:
+        """The curated question named ``name``, or ``None`` if there is no
+        such ``clarify`` entry.
+
+        By the entry's *name*, not a surface form: this is how the parser
+        points at a question it judged fits a vague phrase the file does not
+        list (``MetricElementIn.clarify_as``). A name that is not a clarify
+        entry answers ``None`` rather than something close, so a wrong name
+        costs the question, never a binding.
+        """
+        return self._clarify.get(name)
+
+    def clarify_entries(self) -> list[AliasHit]:
+        """Every curated question, in file order -- what the parser is shown."""
+        return list(self._clarify.values())
 
     def __len__(self) -> int:
         return len(self._by_form)

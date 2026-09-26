@@ -34,7 +34,7 @@ from app.parser import (
 from app.parser.acceptor import _FIELDS_BY_KIND, _OPTIONAL_FIELDS
 from app.parser.prompt import _EXAMPLES
 from app.parser.proposer import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT
-from app.parser.wire import WireElement, WireQuery
+from app.parser.wire import WIRE_SCHEMA, WireElement, WireQuery
 
 QUESTION = "How much revenue did Apple and Microsoft make in the last 3 years?"
 
@@ -279,6 +279,80 @@ def test_a_list_reads_as_one_metric_per_item():
         "gross revenue",
         "net revenue",
     ]
+
+
+# --------------------------------------------------------------------------- #
+# clarify_as -- a vague metric names its curated question
+# --------------------------------------------------------------------------- #
+
+
+def _vague_reply(**metric) -> str:
+    return _reply(
+        intent="lookup",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple"},
+            {"id": "e2", "kind": "metric", "text": "fare", **metric},
+            {"id": "e3", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+    )
+
+
+def test_clarify_as_is_carried_to_the_metric():
+    query = accept(_vague_reply(clarify_as="performance"), "How did Apple fare in 2024?")
+    (metric,) = [e for e in query.elements if e.kind == "metric"]
+    assert metric.text == "fare" and metric.clarify_as == "performance"
+
+
+def test_clarify_as_must_name_a_curated_question():
+    """Named rather than guessed at: a near miss is refused with the real names
+    listed, and a metric that resolves to figures is not a question."""
+    for name in ("money", "revenue"):
+        with pytest.raises(MalformedProposal, match="not one of the curated questions"):
+            accept(_vague_reply(clarify_as=name), "How did Apple fare in 2024?")
+
+
+def test_clarify_as_belongs_to_metrics_only():
+    reply = _reply(
+        intent="lookup",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple", "clarify_as": "performance"},
+            {"id": "e2", "kind": "metric", "text": "fare"},
+            {"id": "e3", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+    )
+    with pytest.raises(MalformedProposal, match="only a metric"):
+        accept(reply, "How did Apple fare in 2024?")
+
+
+def test_the_grammar_offers_only_the_curated_names():
+    from app.semantic.metric_aliases import alias_index
+
+    allowed = WIRE_SCHEMA["$defs"]["WireElement"]["properties"]["clarify_as"]["anyOf"][0]["enum"]
+    assert allowed == [hit.metric for hit in alias_index().clarify_entries()]
+    assert "money_made" in allowed and "revenue" not in allowed
+
+
+def test_the_prompt_teaches_clarify_as_by_example_only():
+    """No rule lists the curated questions -- measured, one made colon-list
+    questions collapse into a vague metric. The examples show the field, and
+    each names a real curated question."""
+    from app.semantic.metric_aliases import alias_index
+
+    shown = {
+        e["clarify_as"]
+        for _, reply in _EXAMPLES
+        for e in json.loads(reply)["elements"]
+        if e.get("clarify_as")
+    }
+    assert shown == {"money_made", "profit_margin", "performance"}
+    assert all(alias_index().clarify_entry(name) for name in shown)
+
+
+def test_a_list_heading_with_a_time_word_still_drops_the_list():
+    """ "yearly revenue" for "yearly revenue: gross, net" loses both figures
+    asked for; the time word must not hide that."""
+    with pytest.raises(UnfaithfulSpan, match="the question says 'gross revenue'"):
+        check_span(_element(text="yearly revenue"), "What is Apple's yearly revenue: gross, net")
 
 
 def test_an_invented_company_is_refused():

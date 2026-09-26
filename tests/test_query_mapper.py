@@ -1403,6 +1403,57 @@ async def test_a_refused_company_still_sinks_the_whole_question(
     assert not plan.has_answerable_part
 
 
+async def test_clarify_as_asks_the_curated_question_for_an_unlisted_phrase(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The file does not list "widget haul", but the parser judged it vague and
+    named the question. It is asked -- nothing is bound on similarity."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget haul", "kind": "metric", "clarify_as": "widget_vague"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.bindings == [] and plan.unresolved == [] and plan.ambiguous == []
+    (clarification,) = plan.clarifications
+    assert clarification.element_id == "m"
+    assert clarification.question == "Which widget figure do you mean?"
+    assert [o.metric for o in clarification.options] == ["widget_revenue", "widget_margin"]
+
+
+async def test_a_listed_phrase_outranks_clarify_as(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """`clarify_as` is consulted only when the curated lookup finds nothing.
+    A phrase the file resolves binds, whatever the parser thought of it."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric", "clarify_as": "widget_vague"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.is_complete and plan.clarifications == []
+    assert [b.element_id for b in plan.bindings] == ["m"]
+
+
+def test_clarify_entry_answers_only_for_a_curated_question(fake_aliases) -> None:
+    """A name that resolves to figures, or to nothing, is not a question. The
+    mapper then falls through as if `clarify_as` were absent."""
+    assert fake_aliases.clarify_entry("widget_vague") is not None
+    assert fake_aliases.clarify_entry("widget_revenue") is None
+    assert fake_aliases.clarify_entry("no_such_entry") is None
+
+
 async def test_when_no_named_company_resolves_the_scope_does_not_widen(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:

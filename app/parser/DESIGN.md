@@ -386,6 +386,76 @@ that plan `complete` — nothing was unresolved because nothing had been asked
 for. `accept()` now requires a metric element, the mirror of the period gate,
 and rule 1b tells the model that the vague word *is* the metric.
 
+### 10a. `clarify_as` — the parser names the question
+
+Added 2026-09-26, from q043: "how much money was made" is revenue or net
+income, the alias file did not list the phrase, and the embedding search found
+nothing within reach (best 0.58) — so a question that should have been *asked*
+was *refused*. Listing phrases fixes one wording at a time; the vague words
+people use are open-ended ("fare", "bring in", "rake in").
+
+**What it is.** An optional field on a metric element — `MetricElementIn.
+clarify_as`, `WireElement.clarify_as` — holding the *name* of a curated
+`clarify` entry in `metric_aliases.yaml`. The metric's `text` is still copied
+exactly; `clarify_as` is extra. The model learns it from three worked
+examples, not from a rule — see "Taught by example" below.
+
+**Why the model, and why it is safe.** Judging what a vague phrase is vague
+*about* is language understanding, which the model does and similarity does
+not — measured, embedding scores for phrases that deserve a question
+(0.48–0.68) and phrases that deserve a refusal (0.49–0.61, "price to earnings
+ratio" at 0.605) overlap completely. And the field is safe to trust because
+its only output is a *question*: the mapper consults it only when the curated
+lookup of `text` finds nothing, the reader answers, and the answer binds by
+alias on the second pass. A wrong `clarify_as` costs a misdirected question,
+never a figure.
+
+**Where it is enforced.**
+
+* The grammar (`wire._wire_schema`) narrows it to the curated names, so the
+  model cannot spell one that does not exist.
+* `acceptor._check_clarify_as` checks again, naming the valid entries for a
+  repair; `_FIELDS_BY_KIND` allows it on metrics only.
+* The mapper (`_resolve_metrics`) takes: curated lookup of `text` → then
+  `clarify_as` → then the embedding search. A listed phrase outranks it.
+
+**One source of truth.** The grammar's enum and the mapper both read
+`AliasIndex.clarify_entries()`, so adding a `clarify` entry to the YAML makes
+it a legal `clarify_as` value and an askable question with no code change.
+Tests pin both, and that every name an example shows is a real entry.
+
+**Taught by example, not by rule.** The first version added rule 1c: a
+numbered rule listing every curated question. Measured cold, it broke q045 —
+"profit: net, gross" came back as one vague metric "profit" with
+`clarify_as: profit` — and a follow-up sentence meant to prevent that made the
+model copy "profit: net, gross" as a span and put `clarify_as` on "stock
+price". With the rule removed and only the three examples carrying the field,
+the vague questions still asked through it and nothing specific picked it up.
+At this model size a rule naming "profit" is a magnet for every "profit" in a
+question; an example is not. Do not reintroduce the list without measuring
+the colon-list questions (q044, q045, q048, q051) cold.
+
+**The colon lists sit on a knife edge.** Every prompt variant tried flipped at
+least one of q044 / q045 / q048 cold — which one depended on the variant. The
+structural backstop is in the acceptor: the dropped-modifier check compares
+spans with time words removed, so "yearly revenue" for "yearly revenue: gross,
+net" is refused with the readings named rather than accepted as a single
+metric that silently drops the list.
+
+**Using it when fixing a question that should ask.** Pick the `clarify` entry
+whose question fits, or add one (an accounting-judgment edit, collaborative —
+HANDOFF §4). Add the common wordings as synonyms, so the answer does not rest
+on the model. Then check, from a cold model (HANDOFF §6), that the question
+now comes back `asked` and that questions naming a *specific* figure did not
+start carrying `clarify_as` — a stock price or a headcount is specific, not
+vague, and should get none. If the model needs a new example to reach a new
+entry, add one and re-measure the colon-list questions: every prompt change
+here has moved them.
+
+**Examples in the prompt.** "how much money was made" → `money_made`, "margins"
+→ `profit_margin`, and "fare" → `performance`, the last a word the file does
+not list, so the model sees the field is for unlisted words too.
+
 ### The round trip could not close
 
 Found by testing it rather than assuming it. Asked "measured by what?" and

@@ -183,6 +183,19 @@ class MetricElementIn(_ElementBase):
 
     kind: Literal["metric"] = "metric"
 
+    #: The curated question to ask when ``text`` names no specific figure --
+    #: the *name* of a ``clarify`` entry in ``metric_aliases.yaml`` ("profit",
+    #: "money_made"). Set by the parser, which judges what a vague phrase is
+    #: vague *about* far better than similarity does: measured 2026-09-26,
+    #: embedding scores for phrases that deserve a question (0.48-0.68) and
+    #: phrases that deserve a refusal (0.49-0.61) overlap completely.
+    #:
+    #: It can only ever produce a question. The mapper consults it only when
+    #: the curated lookup of ``text`` finds nothing, and the answer the reader
+    #: picks comes back through the ordinary round trip and binds by alias. A
+    #: wrong name costs a misdirected question, never a figure.
+    clarify_as: str | None = Field(default=None, max_length=64)
+
 
 class CompanyElementIn(_ElementBase):
     """A filer. Resolved by deterministic lookup, never by embedding.

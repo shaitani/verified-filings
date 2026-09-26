@@ -33,6 +33,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.query import Comparison, Intent, QueryFiscalPeriod
+from app.semantic.metric_aliases import alias_index
 
 #: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
 #: ``acceptor._FIELDS_BY_KIND`` by a test, so a kind added here without a
@@ -86,6 +87,11 @@ class WireElement(BaseModel):
     comparison: Comparison | None = None
     threshold: float | None = None
 
+    # Metric only: the curated question a vague metric is vague about. A
+    # plain string here; the grammar below narrows it to the curated names, so
+    # the model cannot spell one that does not exist.
+    clarify_as: str | None = None
+
 
 class WireQuery(BaseModel):
     """The whole reply. Mirrors ``QueryIn`` minus ``version`` and ``question``,
@@ -122,4 +128,21 @@ class WireQuery(BaseModel):
 #: Handed to Ollama as ``format=``. Derived, never hand-written: a grammar
 #: that has drifted from the model it parses into is a silent source of
 #: rejected replies.
-WIRE_SCHEMA = WireQuery.model_json_schema()
+def _wire_schema() -> dict:
+    """``WireQuery``'s JSON schema, with ``clarify_as`` narrowed to the names of
+    the curated ``clarify`` entries.
+
+    Narrowed in the grammar rather than only checked afterwards, because a
+    near-miss name ("money") is the likely mistake and it is cheaper never to
+    be able to write it. ``accept()`` checks again all the same.
+    """
+    schema = WireQuery.model_json_schema()
+    names = [hit.metric for hit in alias_index().clarify_entries()]
+    schema["$defs"]["WireElement"]["properties"]["clarify_as"] = {
+        "anyOf": [{"enum": names}, {"type": "null"}],
+        "default": None,
+    }
+    return schema
+
+
+WIRE_SCHEMA = _wire_schema()

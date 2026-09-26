@@ -168,15 +168,39 @@ cannot bind something retrieval cannot fetch.
 ### The alias layer
 
 [`app/semantic/metric_aliases.yaml`](app/semantic/metric_aliases.yaml) is
-curated accounting judgment as **data, not code**: 47 metrics, 143 synonyms.
+curated accounting judgment as **data, not code**: 51 metrics, 235 synonyms.
 Each operand slot lists *alternatives in preference order* and coverage picks
 per company, which is how filer divergence resolves without per-company
 tables: Apple binds `RevenueFromContractWithCustomerExcludingAssessedTax`,
 NVIDIA binds `Revenues`, from one entry.
 
-An entry does exactly one of three things: **39 resolve**, **4 ask**
-(`clarify`), **4 decline** (`unavailable`). An entry may also attach a
+An entry does exactly one of three things: **40 resolve**, **6 ask**
+(`clarify`), **5 decline** (`unavailable`). An entry may also attach a
 per-concept `caveat`, which becomes a `narrower_than_asked` note.
+
+**A vague term reaches a curated question by one of two routes** — use them
+when a question should come back `asked` and instead comes back `refused` or
+`confused`:
+
+1. **Its phrase is listed** as a synonym of a `clarify` entry. Exact phrase
+   after normalization, so list the wordings people actually use ("money made",
+   "money was made", "money is made", …). Checked first.
+2. **The parser names the entry**, in the metric element's `clarify_as` field,
+   for a vague phrase the file does not list ("How did Apple *fare*" →
+   `performance`). Used only when route 1 finds nothing, and before the
+   embedding search. It can only ever produce a question, never a figure: the
+   reader's answer comes back through `parse_question(answers=...)` and binds
+   by alias.
+
+So the fix for a vague phrase is: pick (or add) the `clarify` entry whose
+question fits, add the common wordings as synonyms, and let `clarify_as` catch
+the rest. A new `clarify` entry needs no code — the grammar's enum and the
+mapper both read it from the file. The model learns the field from three
+worked examples; a rule listing the questions was tried and broke colon-list
+questions, so do not add one without measuring them cold. Do **not** route
+vague phrases by similarity: measured, phrases that deserve a question
+(0.48–0.68) and phrases that deserve a refusal (0.49–0.61) overlap completely.
+Full write-up: `app/parser/DESIGN.md` §10a.
 
 Two lessons, both in `app/semantic/DESIGN.md` §8a–§8b:
 

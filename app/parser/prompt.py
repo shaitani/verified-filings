@@ -279,6 +279,21 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e5","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q3"},
   {"id":"e6","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q4"}],"wants_chart":true}""",
     ),
+    # `clarify_as` on a word the alias file does not list: "fare" matches
+    # nothing there, so without it the metric would fall to the embedding
+    # search and be refused. The model judges what a vague word is vague about;
+    # the curated question does the asking. Taught by the three examples that
+    # carry the field, NOT by a rule: measured 2026-09-26, a numbered rule
+    # listing the curated questions made q045 read "profit: net, gross" as one
+    # vague "profit", and put clarify_as on "stock price"
+    # (app/parser/DESIGN.md §10a).
+    (
+        "How did Apple fare in 2024?",
+        """{"intent":"lookup","elements":[
+  {"id":"e1","kind":"company","text":"Apple"},
+  {"id":"e2","kind":"metric","text":"fare","clarify_as":"performance"},
+  {"id":"e3","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
+    ),
     # Rule 3. No company element at all, because naming none means all.
     (
         "Which company had the highest operating income in 2024?",
@@ -295,7 +310,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "Show me visually how much money was made by Apple in 2024",
         """{"intent":"trend","elements":[
-  {"id":"e1","kind":"metric","text":"how much money was made"},
+  {"id":"e1","kind":"metric","text":"how much money was made","clarify_as":"money_made"},
   {"id":"e2","kind":"company","text":"Apple"},
   {"id":"e3","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":true}""",
     ),
@@ -463,7 +478,7 @@ _EXAMPLES: list[tuple[str, str]] = [
         """{"intent":"trend","elements":[
   {"id":"e1","kind":"narrative","text":"Why"},
   {"id":"e2","kind":"company","text":"Intel"},
-  {"id":"e3","kind":"metric","text":"margins"},
+  {"id":"e3","kind":"metric","text":"margins","clarify_as":"profit_margin"},
   {"id":"e4","kind":"period","text":"2023","fiscal_year":2023}],"wants_chart":false}""",
     ),
     # Rule 4b again, for the filing-text half. The refusal it earns is a
