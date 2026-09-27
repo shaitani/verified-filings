@@ -51,8 +51,9 @@ Invoking this skill **is** the explicit request for a whole-set run (the usual
      (grade it as a crash). Never let one question block the rest.
 
 4. **Verify**: every id in `evals/questions.yaml` has a section in
-   `data/question-walkthrough.md`, and the file's timestamp is from this run. The log's last lines carry a `TALLY` summary; report run time as log file creation to last write.
+   `data/question-walkthrough.md`, and the file's timestamp is from this run. The log's last lines carry `TOTAL TIME` and a `TALLY` summary. Each question's
+   section ends with `**Time:**`, and the log has a `qNNN <grade> in N.Ns` line per question.
 
 5. **Report** (briefly): tally by grade as printed on the TALLY line (pass / fail / unsafe / gap),
    the ids graded `unsafe` and `fail`, any questions that crashed, and any
-   recovery steps taken. Link the file. `unsafe` is the grade to lead with.
+   recovery steps taken. Give the total time and the five slowest questions. Link the file. `unsafe` is the grade to lead with.

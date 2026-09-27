@@ -17,6 +17,7 @@ which is what you want for a number; this writes, for each question:
   embedding
 * every caveat raised, plan-level and per binding
 * the exception, verbatim, when a stage raised one
+* how long the question took, end to end
 
 That is what you read when a count moves and you need to know *why*. Budget
 about 10 minutes for the whole set; it writes after every question, so the file is
@@ -30,6 +31,7 @@ question can be graded ``pass`` while returning a wrong number, and has been.
 from __future__ import annotations
 
 import argparse
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -301,19 +303,25 @@ async def main() -> None:
 
     sections: list[str] = []
     tally: dict[str, list[str]] = {}
+    run_started = time.perf_counter()
     for index, entry in enumerate(todo, 1):
         print(f"[{index}/{len(todo)}] {entry['id']}", flush=True)
+        started = time.perf_counter()
         try:
             g = await one(entry, sections)
         except Exception as exc:  # a harness fault is a data point, not a reason to stop
             sections += [f"**Harness error:** `{type(exc).__name__}: {exc}`", ""]
             g = "error"
+        elapsed = time.perf_counter() - started
+        print(f"    {entry['id']} {g} in {elapsed:.1f}s", flush=True)
         tally.setdefault(g, []).append(entry["id"])
-        sections += ["---", ""]
+        sections += [f"**Time:** {elapsed:.1f}s", "", "---", ""]
         args.out.write_text(
             "\n".join(_header(tally, scope) + sections), encoding="utf-8", newline="\n"
         )
 
+    minutes, seconds = divmod(time.perf_counter() - run_started, 60)
+    print(f"TOTAL TIME {int(minutes)}m{seconds:04.1f}s", flush=True)
     print("TALLY " + repr({k: len(v) for k, v in tally.items()}), flush=True)
     for key, values in sorted(tally.items()):
         print(f"  {key}: {', '.join(values)}", flush=True)
