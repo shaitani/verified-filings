@@ -390,6 +390,7 @@ async def execute(sql: str, plan: QueryPlan) -> ResultSet:
 
     return ResultSet(
         question=plan.question,
+        result=plan.result,
         rows=rows,
         verdict=verdict,
         citations=_citations(plan),

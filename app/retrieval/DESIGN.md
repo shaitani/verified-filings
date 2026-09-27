@@ -670,11 +670,18 @@ class ResultVerdict(_Base):
 class ResultSet(_Base):
     version: Literal["1"] = "1"
     question: str
+    result: ResultSpec         # copied from the plan
     rows: list[AnnotatedRow]
     verdict: ResultVerdict
     citations: dict[str, Citation]
     notes: list[Note]
 ```
+
+`result` is the plan's `ResultSpec`, copied across by `execute()` (added
+2026-09-27). The presenter never sees a plan, and what it draws — a figure, a
+series, a ranking, a table — and along which axes is decided by the plan, not
+by the rows. Copying the one piece it needs keeps the rule intact
+(`app/api/DESIGN.md` §2, §5).
 
 **The rule: answer only when the shortfall was already disclosed.**
 

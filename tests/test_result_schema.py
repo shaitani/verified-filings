@@ -317,6 +317,7 @@ def test_status_and_counts_must_agree() -> None:
 def _set(**overrides) -> ResultSet:
     kwargs = {
         "question": "q",
+        "result": ResultSpec(shape="scalar", companies=1, periods=1, metrics=1),
         "rows": [AnnotatedRow(row=_row(), binding_keys=["b0"])],
         "verdict": ResultVerdict(status="complete", expected_rows=1, returned_rows=1),
         "citations": {"b0": _citation()},

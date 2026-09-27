@@ -42,6 +42,7 @@ from app.schemas.query import (
     Note,
     QueryFiscalPeriod,
     ResolvedBy,
+    ResultSpec,
     _Base,
 )
 
@@ -285,6 +286,11 @@ class ResultSet(_Base):
 
     version: Literal["1"] = "1"
     question: str = Field(min_length=1, max_length=2000)
+
+    #: The plan's ``ResultSpec``, copied across: the shape and axes the
+    #: presenter draws from. It never sees the plan, so what it needs of one
+    #: travels here.
+    result: ResultSpec
 
     rows: list[AnnotatedRow] = Field(default_factory=list)
     verdict: ResultVerdict

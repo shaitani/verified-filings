@@ -539,7 +539,7 @@ def test_a_threshold_makes_fewer_rows_correct_rather_than_a_shortfall() -> None:
     assert verdict.returned_rows == 1 and verdict.expected_rows == 2
     assert verdict.missing == []
     assert ResultSet(
-        question="q", rows=[_annotated("101")], verdict=verdict,
+        question="q", result=plan.result, rows=[_annotated("101")], verdict=verdict,
         citations={"b0": _citation()},
     ).is_answerable
 

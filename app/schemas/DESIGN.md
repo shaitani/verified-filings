@@ -491,6 +491,9 @@ for the same reason: *what to compute* and *what to return* are different
 questions, and folding them together is how the dimension got missed in the
 first place.
 
+`ResultSet.result` carries a copy (2026-09-27), because the presenter chooses
+the view from it and never sees the plan (retrieval DESIGN §5).
+
 ### 8.14a `unit` and `operand_unit` are different questions
 
 `Binding.unit` is the unit of the **result** — what a reader is shown. For
