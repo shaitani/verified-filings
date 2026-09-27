@@ -45,9 +45,10 @@ QueryPlan                concrete coordinates, caveats, cardinality
        execute(sql, plan) → ResultSet   reads xbrl.reported_fact as
                                         vf_retrieval_role
    ↓  app/schemas/result.py
-ResultSet                rows + citations + verdict + notes
-   ↓
-[F] Presenter            renders, cites, discloses caveats   NOT BUILT
+ResultSet                rows + citations + verdict + notes + ResultSpec
+   ↓  app/presenter/     [F] Presenter        ResultSet → AnswerView   NOT BUILT
+   ↓  app/api/           [B] Web Server       FastAPI                  NOT BUILT
+   ↓  web/               [A] Web Client       Angular                  NOT BUILT
 ```
 
 Everything from a question string to a `ResultSet` is built and works end to
@@ -62,20 +63,26 @@ and that is known, not an oversight.
 
 | # | Name | Status | Where |
 |---|---|---|---|
-| [A] | Ask UI | not built | browser; no logic, no credentials |
-| [B] | Web Display | not built | `app/web/` — the only thing that replies to [A] |
+| [A] | Web Client | not built | `web/` — Angular + ngrx/signals; renders, decides nothing |
+| [B] | Web Server | not built | `app/api/` — FastAPI; runs the chain, the only thing that talks to [A] |
 | [C] | Query Parser | **built** | `app/parser/` |
 | [D] | Query Mapper | built | `app/semantic/query_mapper.py` |
 | [E] | Executor | built | `app/retrieval/` |
-| [F] | Presenter | not built | `app/presenter/` |
+| [F] | Presenter | not built | `app/presenter/` — `ResultSet → AnswerView`, no model |
 | [G] | Store | built | `app/db/` |
 | [H] | Ingest | built | `app/ingest/` |
 
-[B] owns the three-way branch on the plan — answer / clarify / refuse — and is
-the only block that talks to the user. Clarifications and refusals skip [E]
-and [F] entirely: a curated clarification is already plain business language,
-and an LLM asked to soften a refusal writes something that reads like an
-answer.
+[A], [B] and [F] are designed, not built: read
+[`app/api/DESIGN.md`](app/api/DESIGN.md). [A] and [B] were renamed on
+2026-09-27 from Ask UI and Web Display.
+
+There is **no three-way branch** — answer / clarify / refuse. A question is
+answered per part (semantic DESIGN §8e), so one reply can hold figures,
+refusals and questions back together, and they can come from the parser, the
+mapper or the executor. [B] is still the only block that talks to the user,
+and refusals and questions still never pass through a model on the way out: a
+curated clarification is already plain business language, and an LLM asked to
+soften a refusal writes something that reads like an answer.
 
 Two Docker Postgres containers, `db` and `db-test`; Ollama serves the
 embedding model and Qwen. See [`BOOTSTRAP.md`](BOOTSTRAP.md) to bring it all
@@ -102,9 +109,12 @@ The rule that still stands: **do not build a stand-in for either end.** A
 surrogate gets measured and tuned, and then the real thing behaves
 differently, which is worse than no measurement.
 
-**[F] Presenter is not built.** `ResultSet` → prose, and nothing else: it
-never sees a plan, and it must carry `Note`s through rather than summarizing
-them away.
+**[F] Presenter is not built, and is no longer prose.** `ResultSet →
+AnswerView`, a typed structure the Web Client renders as a chart, a table or a
+figure, written in Python with no model — a model retyping figures is a new
+place for a plausible wrong number. It never sees a plan (the `ResultSpec` it
+needs travels on the `ResultSet`), and it must carry `Note`s through verbatim.
+[`app/api/DESIGN.md`](app/api/DESIGN.md) §2.
 
 Two burdens the parser does *not* carry: company names resolve through
 `company_aliases.json` (derived from SEC data, refreshed on every
@@ -520,6 +530,7 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 |---|---|
 | [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
+| [`app/api/DESIGN.md`](app/api/DESIGN.md) | [A] [B] [F], the web end — designed, not built: the reply's parts, jobs and conversations, what to draw, logging |
 | [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, the validator, and §4.3's catalogue of prompt failures |
 | [`app/parser/DESIGN.md`](app/parser/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
