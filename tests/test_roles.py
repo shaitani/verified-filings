@@ -115,6 +115,8 @@ async def test_the_mapper_role_can_search_embeddings(provisioned) -> None:
     [
         ("embedding column", "SELECT embedding FROM concept LIMIT 1"),
         ("vector operator", f"SELECT '{VECTOR}'::vector"),
+        # Named in full, so search_path is no defence: only the schema grant is.
+        ("qualified vector type", f"SELECT '{VECTOR}'::public.vector"),
     ],
 )
 async def test_the_retrieval_role_cannot_reach_embeddings(

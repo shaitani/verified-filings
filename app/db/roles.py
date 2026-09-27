@@ -383,6 +383,11 @@ async def provision(url: str, passwords: dict[str, str]) -> list[str]:
             await connection.execute(
                 text(f'REVOKE ALL ON DATABASE "{database}" FROM PUBLIC')
             )
+            # PostgreSQL grants every role USAGE on `public` through PUBLIC, so the
+            # per-role `REVOKE ALL ON SCHEMA public` above cannot take on its own.
+            # A role that needs `public` (the mapper, for pgvector) is granted it
+            # by name.
+            await connection.execute(text("REVOKE USAGE ON SCHEMA public FROM PUBLIC"))
     finally:
         await engine.dispose()
     return provisioned

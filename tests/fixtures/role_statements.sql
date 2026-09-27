@@ -95,3 +95,5 @@ ALTER ROLE vf_retrieval_role SET idle_in_transaction_session_timeout = '30s'
         
 -- ---------------------------------------------------------------
 REVOKE ALL ON DATABASE "verified_filings" FROM PUBLIC
+-- ---------------------------------------------------------------
+REVOKE USAGE ON SCHEMA public FROM PUBLIC

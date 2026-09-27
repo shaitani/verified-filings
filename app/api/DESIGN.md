@@ -548,11 +548,13 @@ across both schemas, `DATABASE_URL_WEB`. The readers' statements are pinned in
 statement about `web` is removed; the web role's are pinned apart, and only
 the web file is rewritten by `UPDATE_PINNED=1`.
 
-**Found by the new `--check`, not caused by it:** `public` grants `USAGE` to
-`PUBLIC`, so the per-role `REVOKE ALL ON SCHEMA public` does not take — the
-retrieval role can cast to `public.vector`, though it can read no table there.
-Closing it is `REVOKE USAGE ON SCHEMA public FROM PUBLIC`, a database-wide
-change to the readers' pinned statements, so it waits for the user's call.
+**Found by the new `--check`, not caused by it, and closed:** `public` granted
+`USAGE` to `PUBLIC`, so the per-role `REVOKE ALL ON SCHEMA public` did not
+take — the retrieval role could cast to `public.vector`, though it could read
+no table there. `provision()` now ends with `REVOKE USAGE ON SCHEMA public FROM
+PUBLIC` (one line added to the readers' pinned file, on the user's call); the
+mapper keeps its explicit grant. It is database-wide: a login added later that
+needs `public` must be granted it by name.
 
 ### Alembic
 
