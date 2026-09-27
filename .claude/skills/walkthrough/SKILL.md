@@ -56,4 +56,4 @@ Invoking this skill **is** the explicit request for a whole-set run (the usual
 
 5. **Report** (briefly): tally by grade as printed on the TALLY line (pass / fail / unsafe / gap),
    the ids graded `unsafe` and `fail`, any questions that crashed, and any
-   recovery steps taken. Give the total time and the five slowest questions. Link the file. `unsafe` is the grade to lead with.
+   recovery steps taken. Give the total time and the five slowest questions, with their parse / map / answer split. Link the file. `unsafe` is the grade to lead with.

@@ -17,7 +17,7 @@ which is what you want for a number; this writes, for each question:
   embedding
 * every caveat raised, plan-level and per binding
 * the exception, verbatim, when a stage raised one
-* how long the question took, end to end
+* how long the question took, end to end and per stage (parse / map / answer)
 
 That is what you read when a count moves and you need to know *why*. Budget
 about 10 minutes for the whole set; it writes after every question, so the file is
@@ -151,8 +151,12 @@ def _caveats(plan, result) -> list[str]:
     return ["**Caveats raised**", "", *lines] if lines else []
 
 
-async def one(entry: dict, out: list[str]) -> str:
-    """Append one question's section to ``out``; return its grade."""
+async def one(entry: dict, out: list[str], stages: dict[str, float]) -> str:
+    """Append one question's section to ``out``; return its grade.
+
+    Records the seconds each stage took in ``stages`` -- ``parse``, ``map``,
+    ``answer`` -- as far as the question got.
+    """
     qid = entry["id"]
     template = bool(entry.get("template"))
     text = substitute(entry["question"], template=template)
@@ -179,9 +183,11 @@ async def one(entry: dict, out: list[str]) -> str:
         if TEMPLATE_COMPANY in (entry.get("expect_by_company") or {}):
             out += [f"*Expectation specific to {TEMPLATE_COMPANY} (`expect_by_company`).*", ""]
 
+    started = time.perf_counter()
     try:
         query = await parse_question(text)
     except Exception as exc:
+        stages["parse"] = time.perf_counter() - started
         out += [f"**The parser refused it.** `{type(exc).__name__}: {exc}`", ""]
         items = pair(expected, [("(did not parse)", "confused")] * max(len(expected), 1))
         g = grade(items, expected_count=len(expected), stage="answer")
@@ -190,15 +196,20 @@ async def one(entry: dict, out: list[str]) -> str:
 
     shape = f", shape `{query.shape}`" if query.shape else ""
     understood = f"**How it was understood** — intent `{query.intent}`{shape}"
+    stages["parse"] = time.perf_counter() - started
     out += [understood, "", *_elements(query), ""]
 
+    started = time.perf_counter()
     plan = await map_query(query)
+    stages["map"] = time.perf_counter() - started
     result, crash = None, ""
     if plan.has_answerable_part:
+        started = time.perf_counter()
         try:
             result = await answer(plan)
         except Exception as exc:
             crash = f"{type(exc).__name__}: {exc}"
+        stages["answer"] = time.perf_counter() - started
 
     if crash:
         observed = crashed(query, plan)
@@ -307,15 +318,18 @@ async def main() -> None:
     for index, entry in enumerate(todo, 1):
         print(f"[{index}/{len(todo)}] {entry['id']}", flush=True)
         started = time.perf_counter()
+        stages: dict[str, float] = {}
         try:
-            g = await one(entry, sections)
+            g = await one(entry, sections, stages)
         except Exception as exc:  # a harness fault is a data point, not a reason to stop
             sections += [f"**Harness error:** `{type(exc).__name__}: {exc}`", ""]
             g = "error"
         elapsed = time.perf_counter() - started
-        print(f"    {entry['id']} {g} in {elapsed:.1f}s", flush=True)
+        split = ", ".join(f"{name} {seconds:.1f}s" for name, seconds in stages.items())
+        split = f" ({split})" if split else ""
+        print(f"    {entry['id']} {g} in {elapsed:.1f}s{split}", flush=True)
         tally.setdefault(g, []).append(entry["id"])
-        sections += [f"**Time:** {elapsed:.1f}s", "", "---", ""]
+        sections += [f"**Time:** {elapsed:.1f}s{split}", "", "---", ""]
         args.out.write_text(
             "\n".join(_header(tally, scope) + sections), encoding="utf-8", newline="\n"
         )
