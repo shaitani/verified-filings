@@ -300,6 +300,14 @@ questions:
     question: Has anyone's total debt more than doubled since 2021?
     expect: [answered]  # total debt
     needs: [retrieval, growth, ranking, multi_step]
+    notes: >-
+      ANSWERED WRONG, and graded pass (found 2026-09-27). The parser turns
+      "more than doubled" into a metric_threshold of total debt > 2 -- an
+      absolute $2 -- so every debt figure qualifies and nothing checks for
+      doubling; the SQL is `WHERE value > 2.0`, 85 rows. Already so before the
+      threshold moved into Python (identical SQL from the model on 2026-09-26).
+      Needs a threshold on growth against a base year (2021), which a
+      PlanThreshold cannot express today.
 
   # --- user provided -------------------------------------------------------
   - id: q043

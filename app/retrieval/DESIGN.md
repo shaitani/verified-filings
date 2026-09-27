@@ -589,10 +589,11 @@ belonged -- and left `v.unit` out of `GROUP BY`, which is the only reason it
 crashed rather than returning NVIDIA's operating cash flow wearing free cash
 flow's label.
 
-It is now `_example_combining(expression, unit)`: begins at `SELECT`, renders
-the plan's own operator, and states that `v.unit` is never projected. A test
-asserts none of the three examples contains `WITH` or `VALUES`, which would
-have caught the staleness when the CTE moved.
+It became `_example_combining(expression, unit)`: began at `SELECT`, rendered
+the plan's own operator, and stated that `v.unit` is never projected. It is
+now gone (2026-09-26): metric arithmetic is written in Python (`figures`,
+§4.6), and no prompt shows the model an operand. A test asserts no remaining
+example contains `WITH` or `VALUES`.
 
 **What was tried and reverted.** q007 and q009 have the identical `c0 / c1`
 binding and reach opposite outcomes, because `rank` is in `DERIVING_INTENTS`
@@ -845,16 +846,23 @@ in the prompt and could be structure instead:
   rule 4 and the `NULL::text` alias trap with it.
 - **`LIMIT`.** Rule 3 exists only because nothing adds one; §4.3c is two words
   in that rule costing fifteen rows.
-- **The operand expression — done for plans that compute nothing.**
-  `max(v.value) FILTER (WHERE operand = N)` per `cN` is mechanical
-  substitution into `Binding.expression`, and `prompt.plain_select` now does
-  it: a plan that is not `rank` / `derive`, has no threshold, and has a
-  multi-operand metric gets its whole SELECT written in Python and the model
-  is not asked (2026-09-26). Measured cold: q007's gross margins went from
-  `c0 - c1` in USD (refused) to the six margins, and q024's NVIDIA free cash
-  flow from 64.1 billion — operating cash flow, the subtraction dropped, graded
-  `pass` — to 60.9. A ranking or derivation over such a metric is still
-  written by the model, and still defended by a prompt line alone.
+- **The operand expression and the threshold — done.** Both are fully in the
+  plan (`Binding.expression` / `unit`, `PlanThreshold`), so both are written
+  in Python, in a second CTE, `figures` (`prompt.emit_figures`): one row per
+  cell, the value computed with `max(v.value) FILTER (WHERE operand = N)` per
+  `cN` (NULLIF around a divisor), the threshold applied as `WHERE` / `HAVING`.
+  A plan that computes nothing above its cells reads `figures` as it is and
+  the model is not asked; a `rank` / `derive` plan gets a short prompt
+  showing only `figures` — no relation, no join, no operand — and the model
+  writes the ordering or derivation over `value`. A plan `figures` cannot hold
+  (one element with two expressions) is refused, never handed to the model.
+  Measured cold, 2026-09-26: q007's gross margins went from `c0 - c1` in USD
+  (refused) to the six margins; q024's NVIDIA free cash flow from 64.1 billion
+  (operating cash flow, the subtraction dropped, graded `pass`) to 60.9; q009
+  from ranking operating income *minus* revenue in USD (graded `pass`, the
+  label `derivation = 'operating_margin'` having switched off the unit check)
+  to ranking the margins themselves. Single-concept plans without a threshold
+  are unchanged, their prompts byte-identical.
 
 The pattern to keep in mind: a prompt rule exists because the model can get
 something wrong, so every rule names a candidate for deterministic emission.

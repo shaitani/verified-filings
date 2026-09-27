@@ -172,9 +172,10 @@ def test_a_ratio_is_one_cell_with_two_operands() -> None:
     assert cell.result_unit == "pure", "the answer is dimensionless"
 
 
-def test_the_filter_table_gains_an_operand_column_only_when_needed() -> None:
-    """41 of 47 curated metrics are a single concept, and every sentence in
-    the prompt is one the model can act on when it should not."""
+def test_a_multi_operand_metric_never_reaches_the_model_as_operands() -> None:
+    """Metric arithmetic is Python's (``figures``): the model is never shown an
+    operand, a combining example or the per-element expression -- only the
+    computed value. A single-concept plan still gets the ordinary prompt."""
     ratio = _plan(
         [
             _binding(
@@ -185,12 +186,14 @@ def test_the_filter_table_gains_an_operand_column_only_when_needed() -> None:
             )
         ],
         [_annual()],
+        intent="rank",
     )
     plain = _plan([_binding()], [_annual()])
-    assert "operand" in build_prompt(ratio)
-    assert "SOME ROWS COMBINE" in build_prompt(ratio)
+    text = build_prompt(ratio)
+    assert "EVERYTHING YOU NEED IS IN ONE CTE: `figures`" in text
+    for leak in ("operand", "SOME ROWS COMBINE", "COMBINED ANSWER", "c0 / c1", "NULLIF"):
+        assert leak not in text, leak
     assert "operand" not in build_prompt(plain)
-    assert "SOME ROWS COMBINE" not in build_prompt(plain)
 
 
 def test_a_cell_joins_on_the_operand_unit_not_the_result_unit() -> None:
@@ -295,36 +298,16 @@ def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
     assert "2021-06-01" not in cte
 
 
-def test_the_combining_example_uses_the_plan_s_own_operator() -> None:
-    """It used to hard-code `c0 / c1` and correct itself in prose, and a
-    `c0 - c1` metric came back divided: Apple's FY2024 free cash flow as 12.5
-    rather than 108.8 billion, in the right unit, attributable, verdict
-    `complete`. Same-unit arithmetic has no structural check behind it, so the
-    prompt is the whole defence -- and this model follows what it is shown over
-    what it is told, so it is shown the operator it must produce.
-    """
-    from app.retrieval.prompt import _example_combining
-
-    minus = " ".join(_example_combining("c0 - c1", "USD").split())
-    assert "FILTER (WHERE w.operand = 0) - max(v.value)" in minus
-    assert "NULLIF" not in minus, "nothing is divided, so nothing needs a NULLIF"
-    assert "'USD' AS unit" in minus
-
-    ratio = " ".join(_example_combining("c0 / c1", "pure").split())
-    assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in ratio
-    assert "'pure' AS unit" in ratio
-
-
-def test_the_combining_example_begins_at_select() -> None:
+def test_every_example_begins_at_select() -> None:
     """The CTE is written in Python now, and rule 1 forbids the model a `WITH`
     of its own. This example still opened with `WITH wanted(...) AS (VALUES` --
     written before that move and missed when the other two examples were
     rewritten -- so a multi-operand plan was shown the one thing its own rules
     forbid. Measured on q024: `max(v.value)` with no FILTER at all.
     """
-    from app.retrieval.prompt import _EXAMPLE_DERIVED, _EXAMPLE_PLAIN, _example_combining
+    from app.retrieval.prompt import _EXAMPLE_DERIVED, _EXAMPLE_PLAIN
 
-    for example in (_EXAMPLE_PLAIN, _EXAMPLE_DERIVED, _example_combining("c0 - c1", "USD")):
+    for example in (_EXAMPLE_PLAIN, _EXAMPLE_DERIVED):
         assert "WITH " not in example
         assert "VALUES" not in example
 
@@ -574,16 +557,19 @@ def test_a_threshold_makes_fewer_rows_correct_rather_than_a_shortfall() -> None:
     ).is_answerable
 
 
-def test_the_prompt_states_the_comparison_when_the_plan_carries_one() -> None:
-    """Stated apart from the row-count promise, because the two would otherwise
-    contradict each other -- which is the shape of §4.3c."""
-    plan = _plan([_binding()], [_annual()]).model_copy(
+def test_a_threshold_is_applied_in_the_statement_not_by_the_model() -> None:
+    """The comparison is written into `figures`; a ranking over it is told the
+    filter is already applied and must not be repeated."""
+    from app.retrieval.prompt import emit_figures
+
+    plan = _plan([_binding()], [_annual()], intent="rank").model_copy(
         update={"thresholds": [_threshold()]}
     )
+    figures = emit_figures(plan)
+    assert "WHERE (w.element_id <> 'e1' OR (v.value) > 100)" in figures
     text = build_prompt(plan)
-    assert "value > 100" in text
-    assert "FEWER rows than the count above is correct" in text
-    assert "more than a hundred" in text
+    assert "Only rows meeting the question's condition are in `figures`" in text
+    assert "more than a hundred" in text and "Do not filter again" in text
 
 
 def test_the_prompt_says_nothing_about_thresholds_when_there_are_none() -> None:
@@ -591,7 +577,7 @@ def test_the_prompt_says_nothing_about_thresholds_when_there_are_none() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# plain_select -- the SELECT for a multi-operand plan, written without the model
+# figures -- metric arithmetic and thresholds, written without the model
 # --------------------------------------------------------------------------- #
 
 
@@ -617,27 +603,66 @@ def _margin_plan(intent: str = "compare") -> QueryPlan:
     )
 
 
-def test_a_margin_plan_gets_its_select_written_from_the_plan() -> None:
-    """q007: the plan says `c0 / c1` in `pure`, so the statement says exactly
-    that -- the model is never asked to type the operator."""
-    from app.retrieval.prompt import plain_select
+def test_a_margin_plan_is_answered_from_figures_without_the_model() -> None:
+    """q007: the plan says `c0 / c1` in `pure`, so `figures` says exactly that,
+    and a plan that computes nothing above its cells reads it as it is."""
+    from app.retrieval.prompt import FIGURES_SELECT, emit_figures, uses_figures
     from app.retrieval.validator import validate
 
-    select = plain_select(_margin_plan())
-    assert select is not None
-    assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in select
-    assert "THEN 'pure'" in select and " - " not in select.split("AS value")[0]
-    sql = prompt_module.emit_cte(plan_cells(_margin_plan())) + chr(10) + select
+    plan = _margin_plan()
+    assert uses_figures(plan)
+    figures = emit_figures(plan)
+    assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in figures
+    assert "THEN 'pure'" in figures and "GROUP BY" in figures
+    head = prompt_module.emit_cte(plan_cells(plan)) + "," + chr(10) + figures
+    sql = head + chr(10) + FIGURES_SELECT
     assert validate(sql) == sql
 
 
-def test_plain_select_leaves_the_model_what_the_model_is_for() -> None:
-    from app.retrieval.prompt import plain_select
+def test_a_threshold_on_a_margin_is_a_having_on_the_computed_value() -> None:
+    from app.retrieval.prompt import emit_figures
 
-    assert plain_select(_margin_plan(intent="rank")) is None, "a ranking computes"
-    assert plain_select(_margin_plan(intent="derive")) is None
-    single = _plan([_binding()], [_annual()], intent="compare")
-    assert plain_select(single) is None, "single-operand plans are out of scope"
+    plan = _margin_plan(intent="lookup").model_copy(
+        update={"thresholds": [_threshold("0.4")]}
+    )
+    figures = emit_figures(plan)
+    assert "HAVING (w.element_id <> 'e1' OR (max(v.value) FILTER (WHERE w.operand = 0)" in figures
+    assert ") > 0.4)" in figures
+
+
+def test_figures_is_only_for_arithmetic_or_a_threshold() -> None:
+    from app.retrieval.prompt import uses_figures
+
+    assert uses_figures(_margin_plan(intent="rank")), "rank reads figures too"
+    assert uses_figures(_margin_plan(intent="derive"))
+    assert not uses_figures(_plan([_binding()], [_annual()], intent="rank"))
+
+
+async def test_a_ranking_over_a_margin_is_written_over_figures(monkeypatch) -> None:
+    """The model writes only the ordering; the statement it lands in computes
+    the margin itself, and validates."""
+    from app.retrieval.validator import validate
+
+    class Model:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def generate(self, **kwargs):
+            assert "operand" not in kwargs["prompt"]
+            return {
+                "done_reason": "stop",
+                "response": (
+                    "SELECT f.element_id, f.company_cik, f.ticker, f.entity_name, "
+                    "f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, "
+                    "f.is_instant, f.value, f.unit, NULL::text AS derivation "
+                    "FROM figures f ORDER BY f.value DESC LIMIT 500"
+                ),
+            }
+
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", Model)
+    sql = await generate(_margin_plan(intent="rank"))
+    assert "figures AS (" in sql and "FROM figures f ORDER BY f.value DESC" in sql
+    assert validate(sql) == sql
 
 
 async def test_generate_does_not_ask_the_model_for_a_margin_plan(monkeypatch) -> None:
@@ -648,3 +673,20 @@ async def test_generate_does_not_ask_the_model_for_a_margin_plan(monkeypatch) ->
     monkeypatch.setattr("app.retrieval.generator.AsyncClient", NoModel)
     sql = await generate(_margin_plan())
     assert sql.startswith("WITH wanted(") and "AS value" in sql
+
+
+def test_arithmetic_or_a_threshold_is_never_handed_to_the_model() -> None:
+    """If `figures` cannot hold a plan -- one element with two expressions --
+    it is refused, never sent to the model with operands to combine."""
+    mixed = _plan(
+        [
+            _margin_binding(APPLE),
+            _binding(company_cik=NVIDIA, concepts=[_concept(435), _concept(252)],
+                     expression="c0 - c1", unit="USD", operand_unit="USD"),
+        ],
+        [_annual(APPLE), _annual(NVIDIA)],
+        intent="rank",
+        companies=2,
+    )
+    with pytest.raises(UnsupportedPlan, match="never handed to the model"):
+        build_prompt(mixed)

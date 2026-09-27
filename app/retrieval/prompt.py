@@ -249,100 +249,6 @@ def emit_cte(cells: list[PlanCell]) -> str:
     return opener + ("," + NEWLINE).join(rows) + NEWLINE + ")"
 
 
-#: Superseded by ``emit_cte``: the model is no longer shown a table to copy.
-#: Kept only as the header the prose and worked example quote.
-#: Every column here is named either exactly as the contract wants it
-#: projected, or after the view column it joins to. Nothing needs renaming on
-#: the way through, which is the point: a model copies what it is shown.
-#:
-#: Two measured failures produced this. Short names `fy`/`fp` came back
-#: projected as `fy` and `fp`, and the contract refused them. Before that, a
-#: single combined "Q12023" label -- which had to be split -- came back as
-#: `fiscal_period = 'Q12023'`. Handing over values already in the shape the
-#: answer needs removes the step instead of explaining it.
-_TABLE_HEADER = (
-    "  element_id | company_cik | fiscal_year | fiscal_period | concept_id | "
-    "unit  | is_instant | window_start | window_end"
-)
-
-#: The same, plus `operand`, used only when some metric is arithmetic over
-#: more than one concept. Two shapes rather than one column that is always 0,
-#: because the single-operand prompt is the one that took five measured
-#: failures to get right and it is not worth disturbing for the 13% of
-#: curated metrics that are ratios.
-_TABLE_HEADER_OPERANDS = (
-    "  element_id | company_cik | fiscal_year | fiscal_period | operand | "
-    "concept_id | unit  | is_instant | window_start | window_end"
-)
-
-
-def _table_row(
-    element_id: str,
-    company_cik: int,
-    fiscal_year: int,
-    fiscal_period: str,
-    concept_id: int,
-    unit: str,
-    is_instant: bool,
-    window_start: str,
-    window_end: str,
-    operand: int | None = None,
-) -> str:
-    """One line of the filter table, for the real one and the worked example
-    alike. Shared so the two cannot drift: a model shown two different shapes
-    has been given a reason to invent a third.
-
-    ``is_instant`` renders as the literal the column actually holds. Rendering
-    it "yes"/"no" once produced ``is_instant = 'no'`` -- boolean compared with
-    text, failing at execution.
-    """
-    operand_cell = "" if operand is None else f"{operand:<7} | "
-    return (
-        "  {:<10} | {:<11} | {:<11} | {:<13} | {}{:<10} | {:<5} | {:<10} | "
-        "{:<12} | {}".format(
-            element_id,
-            company_cik,
-            fiscal_year,
-            fiscal_period,
-            operand_cell,
-            concept_id,
-            unit,
-            "true" if is_instant else "false",
-            window_start,
-            window_end,
-        )
-    )
-
-
-def _coordinate_table(cells: list[PlanCell]) -> str:
-    """The plan as data: one row per value the answer needs.
-
-    Deliberately not a ``VALUES`` list. That would be SQL, and writing SQL is
-    the model's job, not this one's -- handing it a half-written statement is
-    how the line between the two blurs.
-    """
-    combining = any(cell.operands > 1 for cell in cells)
-    header = _TABLE_HEADER_OPERANDS if combining else _TABLE_HEADER
-    rule = "  " + "-" * (len(header) - 2)
-    rows = [
-        _table_row(
-            cell.element_id,
-            cell.company_cik,
-            cell.fiscal_year,
-            cell.fiscal_period,
-            concept_id,
-            cell.unit,
-            cell.is_instant,
-            cell.period_start.isoformat(),
-            cell.period_end.isoformat(),
-            operand=operand if combining else None,
-        )
-        for cell in cells
-        for operand, concept_id in enumerate(cell.concept_ids)
-    ]
-    return chr(10).join([header, rule, *rows])
-
-
 #: ``QueryIn.intent`` is the parser saying what kind of answer is wanted, and
 #: it is the only signal available here that separates "give me the figures"
 #: from "compute something from them".
@@ -574,210 +480,222 @@ def _operand_terms(expression: str) -> str:
     return re.sub(r"c(\d+)", lambda m: term.format(n=m.group(1)), rendered)
 
 
-def _sql_literal(text: str) -> str:
-    return "'" + text.replace("'", "''") + "'"
+#: The second CTE, written by ``emit_figures``: one row per answer cell with
+#: every metric's value already computed and any threshold already applied.
+FIGURES_NAME = "figures"
 
 
-def plain_select(plan: QueryPlan) -> str | None:
-    """The SELECT for a plan whose answer is exactly its own cells, written
-    here rather than by the model -- or ``None`` when the model is needed.
+def uses_figures(plan: QueryPlan) -> bool:
+    """Whether Python computes the values, so the model never sees an operand.
 
-    Written here when every one of these holds:
+    True when the plan has a metric that is arithmetic over several concepts --
+    a margin, a ratio, free cash flow -- or a threshold. Both are fully written
+    down in the plan (``Binding.expression`` / ``unit``, ``PlanThreshold``), and
+    both failed when the model was asked to write them: q007 turned ``c0 / c1``
+    into ``c0 - c1``, q024 dropped the subtraction in free cash flow and was
+    graded ``pass`` at 64.1 billion, q009 ranked operating income *minus*
+    revenue. Written here, the operator cannot change.
 
-    * the intent is not ``rank`` / ``derive`` (nothing to compute above the
-      cells) and there is no threshold (nothing to filter);
-    * at least one metric is arithmetic over several concepts -- a margin, a
-      ratio, free cash flow -- because that is where the model has changed the
-      operator: q007, 2026-09-26, "gross margin" is ``c0 / c1`` and came back
-      as ``c0 - c1`` in USD, with this very expression in the worked example
-      it was shown. HANDOFF §6 and ``app/retrieval/DESIGN.md`` §4.6;
-    * each metric has one expression and one unit across its companies, so the
-      statement can say both per element.
-
-    Every term comes from the plan: ``Binding.expression`` through
-    ``_operand_terms`` (the helper the worked example already uses, with its
-    NULLIF around a divisor), and ``Binding.unit``. It is the combining example
-    with the plan's own values in it, and it still goes through ``validate()``
-    and ``execute()`` like anything the model writes.
+    Needs one expression and one unit per element across its companies, which
+    one curated entry always gives; otherwise the old path stands.
     """
-    if plan.intent in DERIVING_INTENTS or plan.thresholds:
-        return None
+    if not plan.bindings:
+        return False
     cells = plan_cells(plan)
-    if not any(cell.operands > 1 for cell in cells):
-        return None
+    if not (plan.thresholds or any(cell.operands > 1 for cell in cells)):
+        return False
     shape_of: dict[str, tuple[str, str]] = {}
     for cell in cells:
         shape = (cell.expression, cell.result_unit)
         if shape_of.setdefault(cell.element_id, shape) != shape:
-            return None
+            return False
+    return True
 
-    def per_element(render) -> str:
+
+def _sql_literal(text: str) -> str:
+    return "'" + text.replace("'", "''") + "'"
+
+
+def emit_figures(plan: QueryPlan) -> str:
+    """``figures AS (...)``: the value of every cell, computed from ``wanted``.
+
+    Multi-operand: the combining form -- one ``max(v.value) FILTER (WHERE
+    w.operand = N)`` per ``cN`` via ``_operand_terms`` (NULLIF around a
+    divisor), grouped to one row per cell. Single-operand: the plain join.
+
+    A threshold is applied here, in the statement, so a ranking or derivation
+    written above it only ever sees the rows that qualify -- "rank the
+    companies with a margin above 40%" filters first, then ranks. The executor
+    still re-checks every row against it (``_threshold_violations``).
+    """
+    cells = plan_cells(plan)
+    combining = any(cell.operands > 1 for cell in cells)
+    shape_of = {cell.element_id: (cell.expression, cell.result_unit) for cell in cells}
+
+    def per_element(pick) -> str:
         whens = "".join(
-            f" WHEN {_sql_literal(element)} THEN {render(expression, unit)}"
-            for element, (expression, unit) in shape_of.items()
+            f" WHEN {_sql_literal(element)} THEN {pick(element)}" for element in shape_of
         )
         return f"CASE w.element_id{whens} END"
 
-    value = per_element(lambda expression, _: _operand_terms(expression))
-    unit = per_element(lambda _, unit: _sql_literal(unit))
-    return f"""SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
-       w.fiscal_year, w.fiscal_period,
-       v.period_start, v.period_end, v.is_instant,
-       {value} AS value,
-       {unit} AS unit,
-       NULL::text AS derivation
-FROM {CTE_NAME} w
-JOIN {VIEW} v
-  ON  v.company_cik = w.company_cik
-  AND v.concept_id  = w.concept_id
-  AND v.unit        = w.unit
-  AND v.is_instant  = w.is_instant
-  AND v.period_end  = w.window_end
-  AND (w.is_instant OR v.period_start = w.window_start)
-GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,
-         w.fiscal_year, w.fiscal_period,
-         v.period_start, v.period_end, v.is_instant
+    if combining:
+        term = {element: _operand_terms(shape_of[element][0]) for element in shape_of}
+        value = per_element(lambda element: term[element])
+        unit = per_element(lambda element: _sql_literal(shape_of[element][1]))
+    else:
+        term = {element: "v.value" for element in shape_of}
+        value, unit = "v.value", "v.unit"
+    conditions = [
+        f"(w.element_id <> {_sql_literal(t.element_id)} OR ({term[t.element_id]}) "
+        f"{t.operator} {t.value:f})"
+        for t in plan.thresholds
+        if t.element_id in term
+    ]
+    lines = [
+        f"{FIGURES_NAME} AS (",
+        "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
+        "         w.fiscal_year, w.fiscal_period,",
+        "         v.period_start, v.period_end, v.is_instant,",
+        f"         {value} AS value,",
+        f"         {unit} AS unit",
+        f"  FROM {CTE_NAME} w",
+        f"  JOIN {VIEW} v",
+        "    ON  v.company_cik = w.company_cik",
+        "    AND v.concept_id  = w.concept_id",
+        "    AND v.unit        = w.unit",
+        "    AND v.is_instant  = w.is_instant",
+        "    AND v.period_end  = w.window_end",
+        "    AND (w.is_instant OR v.period_start = w.window_start)",
+    ]
+    if combining:
+        lines += [
+            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "           w.fiscal_year, w.fiscal_period,",
+            "           v.period_start, v.period_end, v.is_instant",
+        ]
+    if conditions:
+        keyword = "HAVING" if combining else "WHERE"
+        lines.append(f"  {keyword} " + (chr(10) + "    AND ").join(conditions))
+    lines.append(")")
+    return chr(10).join(lines)
+
+
+#: The whole SELECT for a plan that computes nothing above its cells: the
+#: figures, as they are. The model is not asked.
+FIGURES_SELECT = f"""SELECT element_id, company_cik, ticker, entity_name,
+       fiscal_year, fiscal_period, period_start, period_end, is_instant,
+       value, unit, NULL::text AS derivation
+FROM {FIGURES_NAME}
 LIMIT {MAX_ROWS}"""
 
 
-def _example_combining(expression: str, unit: str) -> str:
-    """The combined-answer example, in this plan's own operator.
+_FIGURES_JOB_RANK = """This question asks for an ORDERING of the figures -- which is highest,
+lowest, largest, smallest. Return EVERY row of `figures` with `value` and
+`unit` unchanged and `derivation` NULL, ordered the way the question asks:
+DESC for highest / largest / most, ASC for lowest / smallest / least.
+No LIMIT 1 and no WHERE: the reader has to see the whole ordering, and every
+row of `figures` is part of the answer."""
 
-    Begins at ``SELECT``. It used to open with ``WITH wanted(...) AS (VALUES``
-    -- written before the CTE moved into Python, and missed when
-    ``_EXAMPLE_PLAIN`` and ``_EXAMPLE_DERIVED`` were rewritten. So the one
-    worked example a multi-operand plan had contradicted rule 1 of the same
-    prompt, which says to write no ``WITH`` and no ``VALUES``. Measured
-    2026-09-25 on q024 (free cash flow, ``c0 - c1``): the model wrote
-    ``max(v.value)`` with no ``FILTER`` at all -- neither operator, a maximum
-    where a subtraction belonged -- and left ``v.unit`` out of ``GROUP BY``,
-    which is the only reason it crashed rather than returning NVIDIA's
-    operating cash flow wearing free cash flow's label.
+_FIGURES_EXAMPLE_RANK = f"""WORKED EXAMPLE (copy the FORM)
+
+  SELECT f.element_id, f.company_cik, f.ticker, f.entity_name,
+         f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, f.is_instant,
+         f.value, f.unit, NULL::text AS derivation
+  FROM {FIGURES_NAME} f
+  ORDER BY f.value DESC
+  LIMIT {MAX_ROWS}"""
+
+_FIGURES_JOB_DERIVE = """This question asks for a value COMPUTED from the figures -- a change, a
+share of a total, a growth rate. Compute it from `f.value` with a window
+function over `figures`, alias the result `value`, set `unit` to what the
+result is ('pure' for a ratio or a growth rate, the figures' own unit for a
+difference) and `derivation` to a short name for what you computed.
+Keep every row: the first period of a series has nothing before it, so its
+result is NULL, which is expected. No LIMIT 1."""
+
+_FIGURES_EXAMPLE_DERIVE = f"""WORKED EXAMPLE (invented name -- copy the FORM)
+
+  SELECT f.element_id, f.company_cik, f.ticker, f.entity_name,
+         f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, f.is_instant,
+         f.value - LAG(f.value) OVER (
+           PARTITION BY f.element_id, f.company_cik ORDER BY f.period_end) AS value,
+         f.unit, 'change_from_prior' AS derivation
+  FROM {FIGURES_NAME} f
+  ORDER BY value ASC
+  LIMIT {MAX_ROWS}"""
+
+
+def _figures_prompt(plan: QueryPlan) -> str:
+    """The prompt for a ranking or derivation over ``figures``.
+
+    Short on purpose: no relation, no coordinates, no join and no operands --
+    ``figures`` already holds every value, computed. What is left is the layer
+    the model is for.
     """
-    return f"""WORKED EXAMPLE OF A COMBINED ANSWER (invented ids -- copy the FORM)
+    spec = plan.result
+    cells = plan_cells(plan)
+    notes = _plan_notes(plan)
+    units = sorted({(cell.element_id, cell.result_unit) for cell in cells})
+    unit_lines = chr(10).join(f"      {element}: unit '{unit}'" for element, unit in units)
+    threshold_line = ""
+    if plan.thresholds:
+        tests = "; ".join(
+            f"{t.element_id} {t.operator} {t.value:f} (from {t.element_text!r})"
+            for t in plan.thresholds
+        )
+        threshold_line = (
+            f"{chr(10)}  - Only rows meeting the question's condition are in `figures`: "
+            f"{tests}.{chr(10)}    It is already applied. Do not filter again."
+        )
+    ranking = plan.intent == "rank"
+    job = _FIGURES_JOB_RANK if ranking else _FIGURES_JOB_DERIVE
+    example = _FIGURES_EXAMPLE_RANK if ranking else _FIGURES_EXAMPLE_DERIVE
+    return f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
-`{CTE_NAME}` holds TWO rows for one answer row, `operand` 0 and `operand` 1.
-This plan's expression is `{expression}` and its unit is '{unit}':
+QUESTION
+{plan.question}
 
-  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
-         w.fiscal_year, w.fiscal_period,
-         v.period_start, v.period_end, v.is_instant,
-         {_operand_terms(expression)} AS value,
-         '{unit}' AS unit,
-         NULL::text AS derivation
-  FROM {CTE_NAME} w
-  JOIN {VIEW} v
-    ON  v.company_cik = w.company_cik
-    AND v.concept_id  = w.concept_id
-    AND v.unit        = w.unit
-    AND v.is_instant  = w.is_instant
-    AND v.period_end  = w.window_end
-    AND (w.is_instant OR v.period_start = w.window_start)
-  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,
-           w.fiscal_year, w.fiscal_period,
-           v.period_start, v.period_end, v.is_instant
-  LIMIT {MAX_ROWS}
+WHAT THE ANSWER MUST CONTAIN
+shape={spec.shape}, varies along {spec.axes or ["nothing"]}, {spec.row_count} row(s) of
+underlying data ({spec.companies} compan(ies) x {spec.periods} period(s) x
+{spec.metrics} metric(s)). Do not collapse an axis the answer varies along.
 
-Three things that gets right and are easy to get wrong:
+EVERYTHING YOU NEED IS IN ONE CTE: `{FIGURES_NAME}`
+It is already written above whatever you write. Do NOT write `WITH`. Begin
+your reply at `SELECT`, and read FROM `{FIGURES_NAME}`.
 
-  - Each `cN` becomes its own `max(v.value) FILTER (WHERE w.operand = N)`.
-    One bare `max(v.value)` over both operands returns the LARGER of them,
-    which is not the expression and is not the answer.
-  - `unit` is the literal '{unit}' -- the unit of the ANSWER, given above.
-    `v.unit` is the operands' unit and is never projected; projecting it
-    without adding it to GROUP BY is a grouping error.
-  - Every projected column that is not aggregated appears in GROUP BY."""
+  {FIGURES_NAME}(element_id, company_cik, ticker, entity_name, fiscal_year,
+          fiscal_period, period_start, period_end, is_instant, value, unit)
 
+  - One row per company, period and metric the question needs.
+  - `value` is each metric's figure ALREADY COMPUTED -- a margin is already
+    divided, free cash flow already subtracted -- in `unit`:
+{unit_lines}
+    Never recompute a metric from other figures, and never join anything to
+    get one. Read `value`.{threshold_line}
+  - `ticker` and `entity_name` are for display only. Never filter on them.
 
+{example}
 
-#: Shown only when some metric is arithmetic over more than one concept.
-#:
-#: The lesson from the Q4 subtraction applies here and cannot be applied the
-#: same way: that one moved into the view, because "the fourth quarter" is a
-#: property of the data. A ratio is not -- which concepts to divide is decided
-#: per question -- so no view can precompute it and the model has to do it.
-#:
-#: What can be done is to leave nothing to invent: the expression is given,
-#: the pivot is shown, and ``execute()`` refuses a row whose unit says the
-#: arithmetic did not happen (a gross margin that comes back "USD" is a gross
-#: profit wearing a margin's label).
-_COMBINE_HELP = """
-SOME ROWS COMBINE SEVERAL FACTS
-The filter table has an `operand` column. Rows sharing an element_id,
-company_cik, fiscal_year and fiscal_period are operands of ONE answer row --
-operand 0 is `c0`, operand 1 is `c1`, and so on -- combined like this:
+YOUR JOB
+{job}
 
-{expressions}
+OUTPUT
+Project exactly these column names, in any order:
+  {", ".join(RESULT_COLUMNS)}
 
-Build `value` by taking the expression above and replacing each `cN` with
+RULES (the statement is rejected if it breaks one)
+1. Begin at SELECT and read FROM `{FIGURES_NAME}`. No `WITH`, no `VALUES`.
+   SELECT only: no SET, no set_config(), no SELECT INTO, no locking clause.
+2. End with `LIMIT {MAX_ROWS}`.
+3. Give every projected column an explicit alias unless it is a bare column
+   reference. `NULL::text` without an alias is a column named "text".
+4. Never write a number, a date or a company name into the SQL as a literal.
 
-  max(v.value) FILTER (WHERE w.operand = N)
+CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
+{chr(10).join(notes) if notes else "- none"}
 
-keeping the operators and brackets exactly as written. `c0 - c1` subtracts;
-`(c0 - c1) / c2` subtracts and then divides. The worked example above happens
-to show a division -- that is the example's expression, not yours.
-
-Three things it is easy to get wrong:
-
-  - Use the operators in YOUR expression, not the example's.
-  - Put `NULLIF(..., 0)` around any divisor. A division by zero ends the
-    whole statement.
-  - `unit` is the unit of the ANSWER, given per element above, not the
-    operands' unit. Dividing USD by USD gives `pure`, and a row that comes
-    back `USD` says the division did not happen -- it is rejected.
-
-`derivation` stays NULL: this is the metric as the plan defines it, not
-something computed on top of it.
-"""
-
-
-def _combine_help(cells: list[PlanCell]) -> str:
-    """The combining section, or nothing at all when no metric is arithmetic.
-
-    Silence in the ordinary case is deliberate: 41 of the 47 curated metrics
-    are a single concept, and every sentence in this prompt is a sentence the
-    model can act on when it should not.
-    """
-    combining = {
-        (cell.element_id, cell.expression, cell.result_unit)
-        for cell in cells
-        if cell.operands > 1
-    }
-    if not combining:
-        return ""
-    lines = [
-        f"  {element_id}: value = {expression}, and its unit is '{unit}'"
-        for element_id, expression, unit in sorted(combining)
-    ]
-    return _COMBINE_HELP.format(expressions=chr(10).join(lines))
-
-
-#: Shown only when the plan carries one. A threshold is the one narrowing that
-#: is *meant* to return fewer rows than the grid, so it is stated apart from the
-#: row-count promise rather than folded into it -- the two would otherwise
-#: contradict each other, which is the shape of §4.3c.
-_THRESHOLD_HELP = """KEEP ONLY THE ROWS THAT SATISFY THIS
-The question asks for a subset. Compute the metric as usual, then keep only the
-rows where it holds:
-
-{tests}
-
-This is the one case where FEWER rows than the count above is correct -- that
-count is how many the grid holds, and the comparison cuts it down. Apply it to
-the metric's own value, at the outermost level, and to nothing else. Every row
-you return is checked against it, so a row that does not satisfy it is rejected.
-"""
-
-
-def _threshold_help(plan: QueryPlan) -> str:
-    if not plan.thresholds:
-        return ""
-    tests = chr(10).join(
-        f"  {threshold.element_id}: keep rows where value {threshold.operator} "
-        f"{threshold.value:f}   (from {threshold.element_text!r})"
-        for threshold in plan.thresholds
-    )
-    return _THRESHOLD_HELP.format(tests=tests) + chr(10)
+SQL:"""
 
 
 def _plan_notes(plan: QueryPlan) -> list[str]:
@@ -812,11 +730,22 @@ def build_prompt(plan: QueryPlan) -> str:
     Raises ``UnsupportedPlan`` when the rendered prompt cannot fit the model's
     context window. See ``_refuse_if_too_long``.
     """
+    if uses_figures(plan):
+        return _figures_prompt(plan)
     cells = plan_cells(plan)
+    if plan.thresholds or any(cell.operands > 1 for cell in cells):
+        # `uses_figures` declined a plan it should hold: one element with two
+        # expressions or units across its companies, which one curated entry
+        # cannot produce. Refused rather than handed to the model -- metric
+        # arithmetic and threshold filters are never the model's to write.
+        raise UnsupportedPlan(
+            "a metric's arithmetic or threshold could not be written in Python "
+            "(one element with more than one expression or unit), and it is "
+            "never handed to the model"
+        )
     spec = plan.result
     notes = _plan_notes(plan)
     columns = ", ".join(RESULT_COLUMNS)
-    combining = any(cell.operands > 1 for cell in cells)
     if plan.intent in DERIVING_INTENTS:
         job = _JOB_MUST_DERIVE
     elif wants_period_changes(plan):
@@ -825,26 +754,15 @@ def build_prompt(plan: QueryPlan) -> str:
         job = _JOB_SIDE_BY_SIDE
     else:
         job = _JOB_EITHER
-    if combining:
-        first = next(cell for cell in cells if cell.operands > 1)
-        worked_example = _example_combining(first.expression, first.result_unit)
-    else:
-        worked_example = _EXAMPLE_PLAIN
-    # Shown only for a single-operand deriving plan, and the `not combining` half
-    # is not tidiness. Measured 2026-09-24: shown alongside _EXAMPLE_COMBINING on
-    # q009 ("highest operating margin", a `c0 / c1` ratio), the model took three
-    # things from this one that belong to the other -- `v.unit` in the projection
-    # without adding it to GROUP BY, the invented name `qoq_change` on a margin,
-    # and the example's `-` where its own expression says `/`. A wrong operator
-    # in the right unit is the failure app/retrieval/DESIGN.md §6 calls out as
-    # having no structural check behind it, so the two examples are never shown
-    # together. An as-filed question is not helped by a window function either,
-    # and every line of prompt is a line that can be copied for the wrong reason.
-    if plan.intent in DERIVING_INTENTS and not combining:
+    worked_example = _EXAMPLE_PLAIN
+    # Shown for a deriving plan. Measured 2026-09-24: shown alongside the
+    # combining example on q009 ("highest operating margin"), the model took the
+    # example's `-` where its own expression said `/`. Metric arithmetic is now
+    # written in Python (`figures`), so no plan reaching this prompt combines
+    # operands and the two are never shown together.
+    if plan.intent in DERIVING_INTENTS:
         worked_example = worked_example + chr(10) + _EXAMPLE_DERIVED
-    combine_help = _combine_help(cells)
     declared = ", ".join(_cte_columns(cells))
-    threshold_help = _threshold_help(plan)
     rendered = emit_cte(cells)
     if len(rendered) <= MAX_INLINE_CTE_CHARS:
         indented = chr(10).join("  " + line for line in rendered.splitlines())
@@ -914,7 +832,7 @@ year, and a range returns both.
 Joining `{CTE_NAME}` to the relation also keeps `element_id` and the period
 labels attached to the right rows.
 {worked_example}
-{combine_help}{threshold_help}
+
 YOUR JOB
 {job}
 

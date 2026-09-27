@@ -30,7 +30,15 @@ import httpx
 from ollama import AsyncClient
 
 from app.config import settings
-from app.retrieval.prompt import build_prompt, emit_cte, plain_select, plan_cells
+from app.retrieval.prompt import (
+    DERIVING_INTENTS,
+    FIGURES_SELECT,
+    build_prompt,
+    emit_cte,
+    emit_figures,
+    plan_cells,
+    uses_figures,
+)
 from app.schemas.query import QueryPlan
 
 #: The model that writes the SQL. Mirrored in ``docker-compose.yml``'s pull
@@ -141,14 +149,21 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     violation, so it travels on the channel that already means the machinery
     failed rather than the one that means the model wrote something wrong.
     """
-    # A plan whose answer is its own cells, with a metric that is arithmetic
-    # over several concepts, gets its SELECT written in Python and the model is
-    # not asked: q007's model turned `c0 / c1` into `c0 - c1`. See
-    # ``prompt.plain_select``.
-    select = plain_select(plan)
-    if select is not None:
-        return emit_cte(plan_cells(plan)) + chr(10) + select
+    # Metric arithmetic and thresholds are written in Python, in a second CTE
+    # (`figures`), so the model never sees an operand. A plan that computes
+    # nothing above its cells is then complete and the model is not asked; a
+    # ranking or derivation is written by the model over `figures` alone. See
+    # ``prompt.uses_figures``.
+    if uses_figures(plan):
+        head = emit_cte(plan_cells(plan)) + "," + chr(10) + emit_figures(plan)
+        if plan.intent not in DERIVING_INTENTS:
+            return head + chr(10) + FIGURES_SELECT
+        return head + chr(10) + _begins_at_select(await _ask(plan, model))
+    return _splice(plan, await _ask(plan, model))
 
+
+async def _ask(plan: QueryPlan, model: str) -> str:
+    """The model's SELECT for ``plan``, extracted from its reply."""
     client = AsyncClient(host=settings.embedding_url, timeout=REQUEST_TIMEOUT)
     try:
         response = await client.generate(
@@ -175,7 +190,7 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     reply = response.get("response") or ""
     if not reply.strip():
         raise GenerationError(f"{model} returned an empty response")
-    return _splice(plan, extract_sql(reply))
+    return extract_sql(reply)
 
 
 def _splice(plan: QueryPlan, select: str) -> str:
@@ -187,6 +202,11 @@ def _splice(plan: QueryPlan, select: str) -> str:
     generation failure, reported as one rather than handed to ``validate()``
     as a mystery syntax error.
     """
+    return emit_cte(plan_cells(plan)) + chr(10) + _begins_at_select(select)
+
+
+def _begins_at_select(select: str) -> str:
+    """The reply, trimmed, having proved it begins at ``SELECT``."""
     body = select.strip().rstrip(";").strip()
     if body.upper().startswith("WITH"):
         raise GenerationError(
@@ -198,4 +218,4 @@ def _splice(plan: QueryPlan, select: str) -> str:
         raise GenerationError(
             f"the reply does not begin at SELECT: {body[:80]!r}"
         )
-    return emit_cte(plan_cells(plan)) + chr(10) + body
+    return body
