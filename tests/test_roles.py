@@ -66,7 +66,7 @@ async def test_provisioning_is_idempotent(test_db_url) -> None:
     await roles.provision(test_db_url, PASSWORDS)
 
     report = await roles.describe(test_db_url)
-    for spec in roles.ROLES:
+    for spec in (roles.QUERY_MAPPER, roles.RETRIEVAL):  # the web role waits for its migration
         state = report[spec.name]
         assert state["exists"], spec.name
         assert state["superuser"] is False
@@ -78,8 +78,10 @@ async def test_the_spec_is_authoritative(provisioned) -> None:
     """Provisioning revokes before it grants, so narrowing a spec narrows the
     role. Without that, a role could only ever accumulate privileges."""
     report = await roles.describe(provisioned)
-    granted = set(report[roles.RETRIEVAL.name]["grants"])
-    assert granted == set(roles.RETRIEVAL.tables) | set(roles.RETRIEVAL.columns)
+    grants = report[roles.RETRIEVAL.name]["grants"]
+    expected = {*roles.RETRIEVAL.tables, *roles.RETRIEVAL.columns}
+    assert set(grants) == {f"{roles.RETRIEVAL.schema}.{table}" for table in expected}
+    assert all(privileges == ["SELECT"] for privileges in grants.values())  # nothing else, anywhere
 
 
 async def test_the_superseded_single_role_is_gone(provisioned) -> None:
@@ -257,6 +259,55 @@ async def test_the_retrieval_role_has_a_connection_cap(provisioned) -> None:
     report = await roles.describe(provisioned)
     assert report[roles.RETRIEVAL.name]["connection_limit"] == roles.RETRIEVAL.connection_limit
     assert report[roles.QUERY_MAPPER.name]["connection_limit"] == -1
+
+
+# --------------------------------------------------------------------------- #
+# The spec's own guard rails -- no database needed
+# --------------------------------------------------------------------------- #
+
+
+def test_a_read_only_spec_cannot_name_a_write() -> None:
+    write = roles.WriteGrant("job", "INSERT")
+    with pytest.raises(ValueError, match="read-only and names a write"):
+        roles.RoleSpec(name="r", used_by="t", tables=(), schema="web", writes=(write,))
+
+
+def test_a_writer_never_inherits_future_tables() -> None:
+    write = roles.WriteGrant("job", "INSERT")
+    with pytest.raises(ValueError, match="never inherits"):
+        roles.RoleSpec(
+            name="r", used_by="t", tables=(), schema="web", writes=(write,),
+            read_only=False, inherit_future_tables=True,
+        )
+
+
+def test_a_delete_cannot_be_narrowed_to_columns() -> None:
+    with pytest.raises(ValueError, match="cannot be narrowed"):
+        roles.WriteGrant("job", "DELETE", ("status",))
+
+
+def test_a_role_lives_in_a_managed_schema() -> None:
+    with pytest.raises(ValueError, match="not managed"):
+        roles.RoleSpec(name="r", used_by="t", tables=(), schema="public")
+
+
+def test_the_readers_stay_read_only_in_xbrl() -> None:
+    for spec in (roles.QUERY_MAPPER, roles.RETRIEVAL):
+        assert spec.read_only and not spec.writes and spec.schema == "xbrl"
+
+
+def test_the_web_server_cannot_make_an_administrator() -> None:
+    """app/api/DESIGN.md §11: only the owner's credential sets is_superuser."""
+    for grant in roles.WEB.writes:
+        if grant.table == "user":
+            assert grant.columns, f"{grant.privilege} on user must be narrowed to columns"
+            assert "is_superuser" not in grant.columns
+
+
+def test_the_web_server_cannot_read_a_trace_or_make_an_invite() -> None:
+    """§8 and §10: traces are write-only, invites are spent, never created."""
+    assert "job_trace" not in roles.WEB.tables
+    assert not any(g.table == "invite" and g.privilege == "INSERT" for g in roles.WEB.writes)
 
 
 def test_password_literal_escapes_a_quote() -> None:

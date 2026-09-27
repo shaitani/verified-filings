@@ -1,4 +1,5 @@
-"""Provision the two read-only database roles.
+"""Provision the database roles: two read-only readers of ``xbrl``, and the Web
+Server's writer of ``web``.
 
     uv run python -m app.db.roles          # create/refresh against DATABASE_URL
     uv run python -m app.db.roles --check  # report, change nothing
@@ -28,6 +29,11 @@ Two roles, because two different things read and they are not equally trusted
 Neither gets ``load_run``, an append-only log of every load that ever ran.
 Nothing that answers a question has any business reading it.
 
+``vf_web_role``
+    ``app/api/``. The one role that writes, and only in ``web``: users,
+    sessions, conversations, jobs. Nothing in ``xbrl``, table by table grants
+    in ``web`` -- see ``app/api/DESIGN.md`` §11 for the grid.
+
 Which half of this is a real boundary
 -------------------------------------
 **The grants are.** A role cannot grant itself privileges. Verified with
@@ -53,19 +59,41 @@ import argparse
 import asyncio
 import sys
 from dataclasses import dataclass, field
+from typing import Literal
 from urllib.parse import urlsplit
 
 from sqlalchemy import text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import settings
 
-#: Schema holding the data. Both roles read from here and nowhere else.
+#: Schema holding the data. The two readers read from here and nowhere else.
 SCHEMA = "xbrl"
+
+#: Every schema a role is kept out of unless its spec names it. A role is
+#: revoked from each one it does not own, so no schema is reachable by accident.
+MANAGED_SCHEMAS = ("xbrl", "web")
+
+# Quotes only where PostgreSQL needs it: "user" is reserved, "company" is not.
+_quote = postgresql.dialect().identifier_preparer.quote
 
 #: Superseded by the two roles below. Dropped on provision so an unused login
 #: with SELECT on everything does not sit around.
 LEGACY_ROLE = "verified_filings_ro"
+
+
+@dataclass(frozen=True)
+class WriteGrant:
+    """One write privilege on one table, optionally narrowed to columns."""
+
+    table: str
+    privilege: Literal["INSERT", "UPDATE", "DELETE"]
+    columns: tuple[str, ...] = ()  # empty = the whole table
+
+    def __post_init__(self) -> None:
+        if self.privilege == "DELETE" and self.columns:
+            raise ValueError(f"DELETE on {self.table} cannot be narrowed to columns")
 
 
 @dataclass(frozen=True)
@@ -102,6 +130,21 @@ class RoleSpec:
 
     statement_timeout: str = "10s"
     idle_transaction_timeout: str = "30s"
+
+    #: The one schema this role is granted anything in. The defaults below are
+    #: the readers' behaviour, so a spec that names none of them is read-only.
+    schema: str = SCHEMA
+    writes: tuple[WriteGrant, ...] = ()
+    read_only: bool = True  # every transaction starts read-only
+
+    def __post_init__(self) -> None:
+        if self.schema not in MANAGED_SCHEMAS:
+            raise ValueError(f"{self.name}: schema {self.schema!r} is not managed")
+        if self.read_only and self.writes:
+            # "read-only" must keep meaning it: a write needs read_only=False said out loud.
+            raise ValueError(f"{self.name} is read-only and names a write")
+        if self.inherit_future_tables and self.writes:
+            raise ValueError(f"{self.name}: a writer never inherits future tables")
 
 
 QUERY_MAPPER = RoleSpec(
@@ -147,7 +190,39 @@ RETRIEVAL = RoleSpec(
     connection_limit=4,
 )
 
-ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL)
+#: Every column of web.user but is_superuser: only the owner's credential can
+#: make an administrator, whatever a bug in a route does.
+_USER_INSERTABLE = ("id", "email", "hashed_password", "is_active", "is_verified", "created_at")
+_USER_UPDATABLE = ("email", "hashed_password", "is_active", "is_verified")
+
+WEB = RoleSpec(
+    name="vf_web_role",
+    used_by="app/api/ (the Web Server)",
+    schema="web",
+    # SELECT. Absent on purpose: job_trace (write-only, so no route can leak a
+    # trace) and job_feedback (written, never read back).
+    tables=("user", "oauth_account", "access_token", "invite", "conversation", "job"),
+    writes=(
+        WriteGrant("user", "INSERT", _USER_INSERTABLE),
+        WriteGrant("user", "UPDATE", _USER_UPDATABLE),
+        WriteGrant("oauth_account", "INSERT"),
+        WriteGrant("oauth_account", "UPDATE"),  # GitHub tokens refresh on each sign-in
+        WriteGrant("access_token", "INSERT"),
+        WriteGrant("access_token", "DELETE"),  # sign-out, and expired-session cleanup
+        WriteGrant("invite", "UPDATE", ("used_at", "used_by")),  # spend one, never make one
+        WriteGrant("conversation", "INSERT"),
+        WriteGrant("job", "INSERT"),
+        WriteGrant("job", "UPDATE"),  # status, reply, finished_at as the job runs
+        WriteGrant("job_trace", "INSERT"),
+        WriteGrant("job_feedback", "INSERT"),
+    ),
+    read_only=False,
+    inherit_future_tables=False,
+    needs_vector_operators=False,
+    connection_limit=10,
+)
+
+ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL, WEB)
 
 
 def _database_name(url: str) -> str:
@@ -169,6 +244,7 @@ def _quote_literal(value: str) -> str:
 def _statements(spec: RoleSpec, database: str, password: str) -> list[str]:
     """Everything one role needs, in dependency order."""
     role = spec.name
+    schema = spec.schema
     statements = [
         f"""
         DO $$
@@ -185,46 +261,81 @@ def _statements(spec: RoleSpec, database: str, password: str) -> list[str]:
         # is off by default and this runs by hand.
         f"ALTER ROLE {role} PASSWORD {_quote_literal(password)}",
         f'GRANT CONNECT ON DATABASE "{database}" TO {role}',
-        f"GRANT USAGE ON SCHEMA {SCHEMA} TO {role}",
+        f"GRANT USAGE ON SCHEMA {schema} TO {role}",
         # Revoke first, so the spec is authoritative: dropping a table from
         # `tables` actually removes the privilege on the next run. This also
         # clears any column grants from a previous spec.
-        f"REVOKE ALL ON ALL TABLES IN SCHEMA {SCHEMA} FROM {role}",
-        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} REVOKE SELECT ON TABLES FROM {role}",
+        f"REVOKE ALL ON ALL TABLES IN SCHEMA {schema} FROM {role}",
+        # A reader was only ever given future SELECT; a writer could have been
+        # given more, so its revoke covers everything.
+        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} REVOKE "
+        f"{'SELECT' if spec.read_only else 'ALL'} ON TABLES FROM {role}",
     ]
+    statements += [_revoke_schema(other, role) for other in MANAGED_SCHEMAS if other != schema]
 
     for table in spec.tables:
-        statements.append(f"GRANT SELECT ON {SCHEMA}.{table} TO {role}")
+        statements.append(f"GRANT SELECT ON {schema}.{_quote(table)} TO {role}")
     for table, columns in spec.columns.items():
         statements.append(
-            f"GRANT SELECT ({', '.join(columns)}) ON {SCHEMA}.{table} TO {role}"
+            f"GRANT SELECT ({', '.join(map(_quote, columns))}) ON {schema}.{_quote(table)} "
+            f"TO {role}"
+        )
+    for grant in spec.writes:
+        narrowed = f" ({', '.join(map(_quote, grant.columns))})" if grant.columns else ""
+        statements.append(
+            f"GRANT {grant.privilege}{narrowed} ON {schema}.{_quote(grant.table)} TO {role}"
         )
     if spec.inherit_future_tables:
         statements.append(
-            f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT ON TABLES TO {role}"
+            f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT SELECT ON TABLES TO {role}"
         )
 
     if spec.needs_vector_operators:
         statements += [
             f"GRANT USAGE ON SCHEMA public TO {role}",
-            f"ALTER ROLE {role} SET search_path = {SCHEMA}, public",
+            f"ALTER ROLE {role} SET search_path = {schema}, public",
         ]
     else:
         statements += [
             f"REVOKE ALL ON SCHEMA public FROM {role}",
-            f"ALTER ROLE {role} SET search_path = {SCHEMA}",
+            f"ALTER ROLE {role} SET search_path = {schema}",
         ]
 
+    statements.append(f"REVOKE CREATE ON SCHEMA public FROM {role}")
+    if not spec.read_only:
+        # A writer may change rows, never the schema holding them.
+        statements.append(f"REVOKE CREATE ON SCHEMA {schema} FROM {role}")
+    # Belt and braces for a reader: even a mistakenly widened grant cannot
+    # become a write, because every transaction it opens starts read-only. A
+    # writer is narrowed by its grants alone, so it says so explicitly.
     statements += [
-        f"REVOKE CREATE ON SCHEMA public FROM {role}",
-        # Belt and braces: even a mistakenly widened grant cannot become a
-        # write, because every transaction this role opens starts read-only.
-        f"ALTER ROLE {role} SET default_transaction_read_only = on",
+        f"ALTER ROLE {role} SET default_transaction_read_only = "
+        f"{'on' if spec.read_only else 'off'}",
         f"ALTER ROLE {role} SET statement_timeout = '{spec.statement_timeout}'",
         f"ALTER ROLE {role} SET idle_in_transaction_session_timeout = "
         f"'{spec.idle_transaction_timeout}'",
     ]
     return statements
+
+
+def _revoke_schema(schema: str, role: str) -> str:
+    """Everything in a schema this role does not own, taken away.
+
+    Guarded, so provisioning still runs on a database whose ``web`` schema has
+    not been migrated in yet.
+    """
+    return f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '{schema}') THEN
+                EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA {schema} FROM {role}';
+                EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} '
+                     || 'REVOKE ALL ON TABLES FROM {role}';
+                EXECUTE 'REVOKE ALL ON SCHEMA {schema} FROM {role}';
+            END IF;
+        END
+        $$
+        """
 
 
 def _drop_legacy_statements(database: str) -> list[str]:
@@ -281,6 +392,7 @@ async def describe(url: str) -> dict[str, dict[str, object]]:
     """What the cluster currently says about each role, for ``--check``."""
     engine = create_async_engine(url)
     report: dict[str, dict[str, object]] = {}
+    schemas = [*MANAGED_SCHEMAS, "public"]
     try:
         async with engine.connect() as connection:
             for spec in ROLES:
@@ -296,17 +408,6 @@ async def describe(url: str) -> dict[str, dict[str, object]]:
                 if row is None:
                     report[spec.name] = {"exists": False}
                     continue
-                grants = (
-                    await connection.execute(
-                        text(
-                            "SELECT table_name, string_agg(DISTINCT column_name, ', ' "
-                            "ORDER BY column_name) FROM information_schema.column_privileges "
-                            "WHERE grantee = :role AND table_schema = :schema "
-                            "GROUP BY table_name ORDER BY table_name"
-                        ),
-                        {"role": spec.name, "schema": SCHEMA},
-                    )
-                ).all()
                 report[spec.name] = {
                     "exists": True,
                     "superuser": row[0],
@@ -314,7 +415,8 @@ async def describe(url: str) -> dict[str, dict[str, object]]:
                     "createrole": row[2],
                     "connection_limit": row[3],
                     "settings": list(row[4] or []),
-                    "grants": {table: columns for table, columns in grants},
+                    "grants": await _grants(connection, spec.name),
+                    "schemas": await _schema_privileges(connection, spec.name, schemas),
                 }
             legacy = (
                 await connection.execute(
@@ -328,6 +430,72 @@ async def describe(url: str) -> dict[str, dict[str, object]]:
     return report
 
 
+async def _grants(connection, role: str) -> dict[str, list[str]]:
+    """Every table privilege in every managed schema: ``{"web.job": ["INSERT",
+    "SELECT", "UPDATE(status)"]}``. Not just SELECT, and not just ``xbrl`` -- a
+    stray write, or anything in a schema the role should not see, must show."""
+    params = {"role": role, "schemas": list(MANAGED_SCHEMAS)}
+    whole = (
+        await connection.execute(
+            text(
+                "SELECT table_schema, table_name, privilege_type "
+                "FROM information_schema.table_privileges "
+                "WHERE grantee = :role AND table_schema = ANY(:schemas)"
+            ),
+            params,
+        )
+    ).all()
+    # column_privileges also lists every column of a whole-table grant, so
+    # only what is not already covered by one is a column grant.
+    narrowed = (
+        await connection.execute(
+            text(
+                "SELECT table_schema, table_name, privilege_type, "
+                "string_agg(column_name, ', ' ORDER BY column_name) "
+                "FROM information_schema.column_privileges "
+                "WHERE grantee = :role AND table_schema = ANY(:schemas) "
+                "GROUP BY table_schema, table_name, privilege_type"
+            ),
+            params,
+        )
+    ).all()
+    covered = {(schema, table, privilege) for schema, table, privilege in whole}
+    grants: dict[str, list[str]] = {}
+    for schema, table, privilege in whole:
+        grants.setdefault(f"{schema}.{table}", []).append(privilege)
+    for schema, table, privilege, columns in narrowed:
+        if (schema, table, privilege) not in covered:
+            grants.setdefault(f"{schema}.{table}", []).append(f"{privilege}({columns})")
+    return {table: sorted(privileges) for table, privileges in sorted(grants.items())}
+
+
+async def _schema_privileges(connection, role: str, schemas: list[str]) -> dict[str, list[str]]:
+    """USAGE and CREATE per schema that exists. A reader holding USAGE on
+    ``web``, or anyone holding CREATE, is a finding."""
+    rows = (
+        await connection.execute(
+            text(
+                "SELECT nspname, has_schema_privilege(:role, nspname, 'USAGE'), "
+                "has_schema_privilege(:role, nspname, 'CREATE') "
+                "FROM pg_namespace WHERE nspname = ANY(:schemas) ORDER BY nspname"
+            ),
+            {"role": role, "schemas": schemas},
+        )
+    ).all()
+    return {
+        name: [p for p, held in (("USAGE", usage), ("CREATE", create)) if held]
+        for name, usage, create in rows
+    }
+
+
+#: The setting each role's password is read from, and the variable it names.
+_URL_SETTINGS = {
+    QUERY_MAPPER.name: "database_url_query_mapper",
+    RETRIEVAL.name: "database_url_retrieval",
+    WEB.name: "database_url_web",
+}
+
+
 def passwords_from_settings() -> dict[str, str]:
     """Each role's password, taken from the URL the application connects with.
 
@@ -335,10 +503,7 @@ def passwords_from_settings() -> dict[str, str]:
     cannot drift -- provisioning a password nothing connects with is a failure
     that looks like success.
     """
-    urls = {
-        QUERY_MAPPER.name: settings.database_url_query_mapper,
-        RETRIEVAL.name: settings.database_url_retrieval,
-    }
+    urls = {role: getattr(settings, name) for role, name in _URL_SETTINGS.items()}
     return {
         role: urlsplit(url).password
         for role, url in urls.items()
@@ -347,7 +512,7 @@ def passwords_from_settings() -> dict[str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Provision the read-only database roles.")
+    parser = argparse.ArgumentParser(description="Provision the database roles.")
     parser.add_argument(
         "--url",
         default=settings.database_url,
@@ -357,6 +522,7 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true", help="report each role's state and change nothing"
     )
     args = parser.parse_args(argv)
+    configured = passwords_from_settings()
 
     if args.check:
         report = asyncio.run(describe(args.url))
@@ -364,14 +530,20 @@ def main(argv: list[str] | None = None) -> int:
         for spec in ROLES:
             state = report[spec.name]
             if not state["exists"]:
+                if spec.name not in configured:
+                    # Not set up here yet (the web role, before its migration): not a fault.
+                    print(f"{spec.name}: not configured ({_URL_SETTINGS[spec.name].upper()})")
+                    continue
                 print(f"{spec.name}: NOT PRESENT -- run `uv run python -m app.db.roles`")
                 missing = True
                 continue
             print(f"{spec.name}: present  ({spec.used_by})")
             print(f"  superuser={state['superuser']} createdb={state['createdb']} "
                   f"createrole={state['createrole']} connections={state['connection_limit']}")
-            for table, columns in sorted(state["grants"].items()):
-                print(f"  {table}: {columns}")
+            for schema, privileges in state["schemas"].items():
+                print(f"  schema {schema}: {', '.join(privileges) or 'none'}")
+            for table, privileges in state["grants"].items():
+                print(f"  {table}: {', '.join(privileges)}")
             for setting in state["settings"]:
                 print(f"  {setting}")
         if report[LEGACY_ROLE]["exists"]:
@@ -379,17 +551,16 @@ def main(argv: list[str] | None = None) -> int:
             missing = True
         return 1 if missing else 0
 
-    passwords = passwords_from_settings()
-    if not passwords:
+    if not configured:
+        names = ", ".join(name.upper() for name in _URL_SETTINGS.values())
         print(
-            "Neither DATABASE_URL_QUERY_MAPPER nor DATABASE_URL_RETRIEVAL is set (or "
-            "neither carries a password), so there is nothing to provision.\n"
-            "Add them to .env -- see .env.example -- then re-run.",
+            f"None of {names} is set with a password, so there is nothing to "
+            "provision. Add them to .env -- see .env.example -- then re-run.",
             file=sys.stderr,
         )
         return 2
 
-    provisioned = asyncio.run(provision(args.url, passwords))
+    provisioned = asyncio.run(provision(args.url, configured))
     for role in provisioned:
         print(f"{role}: provisioned against {_database_name(args.url)}")
     for spec in ROLES:

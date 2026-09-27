@@ -4,21 +4,27 @@
 proves that what provisioning *sends* has not changed. A dropped ``REVOKE``
 may not fail any behaviour test, and here it cannot slip by.
 
-A deliberate change regenerates the file and shows up as its diff:
+Two files. The readers' statements are pinned apart from everything about the
+``web`` schema, so adding the Web Server's role provably took nothing away
+from them. A deliberate change regenerates a file and shows up as its diff:
 
-    UPDATE_PINNED=1 uv run pytest tests/test_role_statements.py
+    UPDATE_PINNED=1 uv run pytest tests/test_role_statements.py          # web
+    UPDATE_PINNED_READERS=1 uv run pytest tests/test_role_statements.py  # readers
 """
 
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
 
 from app.db import roles
 
-PINNED = Path(__file__).parent / "fixtures" / "role_statements.sql"
+FIXTURES = Path(__file__).parent / "fixtures"
+PINNED_READERS = FIXTURES / "role_statements.sql"  # the readers, as before web existed
+PINNED_WEB = FIXTURES / "role_statements_web.sql"
 
 URL = "postgresql+asyncpg://owner:secret@host:5432/verified_filings"
 PASSWORDS = {spec.name: f"{spec.name}-pw" for spec in roles.ROLES}  # every role provisioned
@@ -59,13 +65,28 @@ async def _sent_by_provision(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return sent
 
 
-async def test_provisioning_sends_exactly_the_pinned_statements(monkeypatch) -> None:
-    sent = SEPARATOR.join(await _sent_by_provision(monkeypatch)) + "\n"
-    if os.environ.get("UPDATE_PINNED"):
-        PINNED.write_text(sent, encoding="utf-8", newline="\n")
-    assert PINNED.exists(), f"no pinned file; run with UPDATE_PINNED=1 to write {PINNED.name}"
-    assert sent == PINNED.read_text(encoding="utf-8"), (
-        "roles.provision() sends different SQL than the pinned file. If that is "
-        "deliberate, regenerate with UPDATE_PINNED=1 and review the file's diff."
+def _about_web(statement: str) -> bool:
+    return roles.WEB.name in statement or re.search(r"\bweb\b", statement) is not None
+
+
+def _check(statements: list[str], pinned: Path, update_flag: str) -> None:
+    sent = SEPARATOR.join(statements) + "\n"
+    if os.environ.get(update_flag):
+        pinned.write_text(sent, encoding="utf-8", newline="\n")
+    assert pinned.exists(), f"no pinned file; run with {update_flag}=1 to write {pinned.name}"
+    assert sent == pinned.read_text(encoding="utf-8"), (
+        f"roles.provision() sends different SQL than {pinned.name}. If that is "
+        f"deliberate, regenerate with {update_flag}=1 and review the file's diff."
     )
 
+
+async def test_the_readers_statements_are_unchanged(monkeypatch) -> None:
+    # Everything about web removed, what is left must be byte-identical to the
+    # file pinned before web existed: the readers lost nothing.
+    sent = await _sent_by_provision(monkeypatch)
+    _check([s for s in sent if not _about_web(s)], PINNED_READERS, "UPDATE_PINNED_READERS")
+
+
+async def test_the_web_statements_are_pinned(monkeypatch) -> None:
+    sent = await _sent_by_provision(monkeypatch)
+    _check([s for s in sent if _about_web(s)], PINNED_WEB, "UPDATE_PINNED")

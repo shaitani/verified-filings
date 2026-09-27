@@ -541,6 +541,19 @@ How the code changes without loosening anything:
 - **Migrate before provisioning.** The web role's grants name `web` tables, so
   `BOOTSTRAP.md` gains that ordering.
 
+**Built 2026-09-27**, except the live tests, which wait for the `web`
+migration: `RoleSpec` (`schema`, `writes`, `read_only`), `WEB`, `--check`
+across both schemas, `DATABASE_URL_WEB`. The readers' statements are pinned in
+`tests/fixtures/role_statements.sql` and must stay byte-identical once every
+statement about `web` is removed; the web role's are pinned apart, and only
+the web file is rewritten by `UPDATE_PINNED=1`.
+
+**Found by the new `--check`, not caused by it:** `public` grants `USAGE` to
+`PUBLIC`, so the per-role `REVOKE ALL ON SCHEMA public` does not take — the
+retrieval role can cast to `public.vector`, though it can read no table there.
+Closing it is `REVOKE USAGE ON SCHEMA public FROM PUBLIC`, a database-wide
+change to the readers' pinned statements, so it waits for the user's call.
+
 ### Alembic
 
 One history for the database (`ALEMBIC.md`). The web models get their own

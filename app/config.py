@@ -19,5 +19,9 @@ class Settings(BaseSettings):
     database_url_query_mapper: str | None = None
     database_url_retrieval: str | None = None
 
+    #: The Web Server's login, the one role that writes (in `web` only). Set it
+    #: after the `web` migration: its grants name those tables.
+    database_url_web: str | None = None
+
 
 settings = Settings()
