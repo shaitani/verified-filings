@@ -320,15 +320,16 @@ questions:
   # --- user provided: templates. <Company> is substituted before running, so
   # --- these measure coverage of common asks rather than one concrete query.
   - id: q044
-    question: "What is <Company>'s yearly revenue: gross, net"
+    question: "What is <Company>'s yearly gross revenue and net revenue"
     template: true
-    expect: [refused, answered]  # gross revenue (no US GAAP pair), net revenue
+    expect: [answered, answered]  # gross revenue (as total revenue, with a caveat), net revenue
     shape: table
     needs: [retrieval]
     notes: >-
-      Net revenue binds cleanly. Gross revenue is still refused, and rightly:
-      US GAAP has no gross-vs-net revenue pair, so there is nothing honest to
-      map it to. Left uncurated on purpose.
+      Both bind total revenue. "Gross revenue" is answered in its everyday
+      sense -- the top line -- with a narrower_than_asked note saying so: no
+      filer reports a figure before returns and discounts (curated
+      gross_revenue, decided 2026-09-26). Was refused until then.
 
   - id: q045
     question: "What is <Company>'s profit: net, gross"
@@ -365,11 +366,11 @@ questions:
   - id: q048
     question: "What are <Company>'s quarterly revenues: gross, net"
     template: true
-    expect: [refused, answered]  # gross revenue, net revenue
+    expect: [answered, answered]  # gross revenue (as total revenue, with a caveat), net revenue
     shape: table
     needs: [retrieval]
     exercises: [q4_residual]
-    notes: Same gross/net problem as q044, plus Q4 has to be derived.
+    notes: Same gross/net reading as q044, plus Q4 has to be derived.
 
   - id: q049
     question: "Which companies in a given sector performed best: highest revenue, profit both quarterly and yearly"

@@ -174,8 +174,8 @@ per company, which is how filer divergence resolves without per-company
 tables: Apple binds `RevenueFromContractWithCustomerExcludingAssessedTax`,
 NVIDIA binds `Revenues`, from one entry.
 
-An entry does exactly one of three things: **40 resolve**, **6 ask**
-(`clarify`), **5 decline** (`unavailable`). An entry may also attach a
+An entry does exactly one of three things: **41 resolve**, **6 ask**
+(`clarify`), **4 decline** (`unavailable`). An entry may also attach a
 per-concept `caveat`, which becomes a `narrower_than_asked` note.
 
 **A vague term reaches a curated question by one of two routes** — use them

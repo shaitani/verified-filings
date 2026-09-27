@@ -540,19 +540,33 @@ metrics:
 
   gross_revenue:
     label: Gross revenue
-    # Deliberately not mapped to anything for years, on the grounds that there
-    # is nothing honest to map it to -- but "not mapped" is not the same as
-    # "declined". Left unlisted it fell to the embedding net, which offered
-    # GrossProfit at 0.812: revenue minus cost of revenue, a different line
-    # that is smaller than revenue rather than larger, which is the opposite of
-    # what someone asking for a *gross* figure expects.
+    # Answered as total revenue, the top line -- what "gross revenue" usually
+    # means in everyday business usage (gross sales, total revenue before any
+    # costs). Decided 2026-09-26 after checking: filers here report revenue
+    # already net of returns, allowances and discounts, and no filer's income
+    # statement or XBRL carries a figure before those deductions (Apple FY2025:
+    # "Total net sales" $416,161M is the only revenue line). So the narrower
+    # accounting sense has no answer, and the common sense does -- answer it,
+    # and say which sense was answered, via the caveat.
+    #
+    # Was `unavailable` until then. Before that it was unlisted and fell to the
+    # embedding net, which offered GrossProfit at 0.812 -- revenue minus cost
+    # of revenue, a different and smaller line. Listing it keeps it away from
+    # that net either way.
     synonyms: [gross sales, gross revenues, total gross revenue]
-    unavailable: >-
-      US GAAP has no gross-versus-net revenue pair. The revenue a filer tags is
-      already net of returns, allowances and discounts, so there is no separate
-      gross figure to report. Note that "gross profit" is a different line
-      entirely -- revenue minus the cost of producing it -- and is not a gross
-      revenue. Ask for revenue, or for gross profit, by name.
+    terms:
+      - - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+        - us-gaap:Revenues
+        - us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax
+    caveats:
+      us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax: &gross_revenue_caveat >-
+        Answered as total revenue -- the top line, which is what "gross revenue"
+        usually means. Filers report revenue already net of returns, allowances
+        and discounts, so no figure from before those deductions exists in the
+        filings. This is not gross profit, which is revenue minus the cost of
+        sales.
+      us-gaap:Revenues: *gross_revenue_caveat
+      us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax: *gross_revenue_caveat
 
   # --- genuinely several things: ask rather than guess ---------------------
   profit_margin:

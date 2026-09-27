@@ -46,8 +46,8 @@ A refusal on something that is not an item -- a company, a period -- blocks
 the whole question, so every item in it is scored `refused` even where its
 metric bound. q036 ("Apple vs Samsung") binds Apple's revenue and refuses on
 Samsung; nothing runs, and counting revenue `answered` graded it `unsafe`. A
-refusal on one *metric* does not spread to the others: q044 expects "gross"
-refused and "net" answered in the same question.
+refusal on one *metric* does not spread to the others: q052 expects goodwill
+refused for Apple and the other five figures answered in the same question.
 
 Only a full `--stage answer` run is graded: [C] deliberately
 does not judge whether a question is answerable at all, so scoring a

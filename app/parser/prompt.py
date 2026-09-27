@@ -8,8 +8,8 @@ them carry the whole safety argument for using a 7B model at all:
 
 * **Copy ``text`` exactly.** The model transcribes; it never rewords. A
   parser that turns "gross revenue" into "revenue" walks straight around the
-  curated ``unavailable`` entry that exists to refuse that phrase, and hands
-  back a real revenue figure under a label it does not fit. Enforced in
+  curated entry for that phrase, and hands back the figure without the caveat
+  that says which sense of "gross revenue" was answered. Enforced in
   ``acceptor.accept()``, not merely asked for here.
 * **Never name a company the question did not.** The mapper refuses an unknown
   company, so an invented one costs a refusal -- but a *substituted* one costs
@@ -257,10 +257,11 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e4","kind":"period","text":"the last 3 years","last_n_years":3}],"wants_chart":false}""",
     ),
     # Rule 1 under pressure. "gross revenue" is not a line any filer reports,
-    # and the alias layer carries a curated entry saying exactly that. Easing
-    # it to "revenue" is the most expensive mistake available here -- it
-    # returns a real number under a label it does not fit -- so the prompt
-    # shows the model doing the right thing with it.
+    # and the alias layer carries a curated entry for it -- answered as total
+    # revenue with a caveat naming that sense (semantic DESIGN §8a). Easing it
+    # to "revenue" drops the caveat, and for a term the file declines or asks
+    # about it drops the refusal or the question -- so the prompt shows the
+    # model doing the right thing with it.
     (
         "What was Apple's gross revenue in 2024?",
         """{"intent":"lookup","elements":[

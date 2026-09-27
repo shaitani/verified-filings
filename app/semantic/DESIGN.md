@@ -390,20 +390,31 @@ $0.000006 — a plausible wrong number with a rationale reading "verified over
 candidate happening to survive alongside it, which is luck, not a guard.
 
 So the entries exist for the questions people actually ask that this store
-cannot answer, and they reach the resolver first. Four are curated today:
+cannot answer, and they reach the resolver first. Four are curated today,
+among them:
 
 | entry | why it is not here |
 |---|---|
 | `stock_price` | set by the market, never filed |
 | `market_cap` | needs a price; `EntityPublicFloat` is not it |
 | `segment_revenue` | the XBRL data endpoint returns only undimensioned consolidated facts (PITFALLS §3.2) |
-| `gross_revenue` | US GAAP has no gross-versus-net revenue pair; the tagged revenue line is already net |
 
-`gross_revenue` is the instructive one. It was left *unlisted* for a long time
-on the correct reasoning that there was nothing honest to map it to — but
+`gross_revenue` is the instructive one, twice over. It was left *unlisted* for
+a long time on the reasoning that there was nothing honest to map it to — but
 unlisted is not declined. It fell to the embedding net, which offered
 `GrossProfit` at 0.812: a different line, and one *smaller* than revenue where
-the asker expected something larger.
+the asker expected something larger. So it became `unavailable`.
+
+**Then it stopped declining** (2026-09-26, the user's call after checking the
+usage). "Gross revenue" has a narrow accounting sense — revenue before returns,
+allowances and discounts — which no filer here reports, and an everyday sense —
+total revenue, the top line — which every filer does. The refusal answered the
+narrow sense and told a reader asking the common one "no" while the answer sat
+in the data. It now resolves to the same concepts as `revenue`, with a
+per-concept `caveat` that becomes a `narrower_than_asked` note saying which
+sense was answered and that it is not gross profit. The lesson: before
+declining a term, check whether a common reading of it *is* answerable; an
+`unavailable` entry is for when none is.
 
 **The reason text names the plausible wrong answer.** Each one says what the
 thing is, why no filing carries it, and which nearby concept an embedding

@@ -62,20 +62,19 @@ equal is the hole this exists to close.
 **Omission** — a *shortened* span, which passes a substring check because the
 shorter phrase genuinely is in the question. "What was Apple's gross revenue"
 with a metric span of "revenue" resolves cleanly and returns 391 billion under
-a label that does not fit, walking straight around the curated `unavailable`
-entry that exists to refuse the phrase. Caught by `_METRIC_MODIFIERS` — a
+a label that does not fit, walking straight around the curated entry for the
+phrase — once a refusal, now an answer carrying a caveat that says which sense
+of "gross revenue" was answered (semantic DESIGN §8a). Either way, dropping
+the word loses what the curated entry exists to say. Caught by `_METRIC_MODIFIERS` — a
 curated list of words that change which line of the accounts is meant, applied
 to metric spans only. Accounting judgment as data, the same argument as
 `metric_aliases.yaml`: add a word when a filer's numbers differ across it.
 
-Measured end to end: "What was Apple's gross revenue in 2024?" now reaches the
-mapper with the phrase intact and comes back
-
-> US GAAP has no gross-versus-net revenue pair. The revenue a filer tags is
-> already net of returns and allowances.
-
-which is the curated refusal doing its job. Without the gate the same question
-returns a number.
+Measured end to end: "What was Apple's gross revenue in 2024?" reaches the
+mapper with the phrase intact, and the curated entry does its job — at the
+time a refusal, since 2026-09-26 total revenue with a `narrower_than_asked`
+note naming the sense answered. Without the gate the same question returns
+the figure with no note at all.
 
 ## 2a. A colon list that shares its heading
 
@@ -296,7 +295,8 @@ capitalisation" or "competition risk" is not a filed fact.
 Spot checks through the mapper: "What was Apple's revenue in 2024?" →
 `complete`, 1 binding. "Which company had the highest net income in 2024?" →
 `complete`, ranking, 20 bindings. "What was Apple's gross revenue in 2024?" →
-refused by the curated entry (§2). HANDOFF §8 smoke test → `series`, axes
+refused by the curated entry (§2) at the time; answered with a caveat since
+2026-09-26. HANDOFF §8 smoke test → `series`, axes
 `['company','period']`, **36 rows**, `period_misalignment`, metric unresolved
 pending a `clarify` entry (§7).
 

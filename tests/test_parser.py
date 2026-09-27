@@ -138,9 +138,9 @@ def test_a_substituted_metric_is_refused():
 
 def test_a_dropped_modifier_is_refused():
     """Omission, which the substring check alone cannot catch -- "revenue" is
-    genuinely inside "gross revenue". The most expensive mistake available
-    here: it resolves cleanly and returns a real figure under a label it does
-    not fit."""
+    genuinely inside "gross revenue". It resolves cleanly, and whatever the
+    curated entry for the full phrase says -- a caveat, a refusal, a question --
+    never reaches the reader."""
     reply = _reply(
         elements=[
             {"id": "e1", "kind": "company", "text": "Apple"},

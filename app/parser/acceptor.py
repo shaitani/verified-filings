@@ -106,8 +106,9 @@ _EDGE = " \t\n\r\"'`.,;:!?()[]{}"
 #: enough, because a *shortened* span is genuinely present in the question.
 #: "What was Apple's gross revenue" with a metric span of "revenue" passes
 #: every other check here -- the word really is in the question -- and then
-#: resolves to a real revenue figure under a label it does not fit, walking
-#: around the curated `unavailable` entry that exists to refuse the phrase.
+#: resolves to plain revenue, walking around the curated entry for the phrase
+#: and the caveat it attaches. For a term the file declines or asks about,
+#: the same omission walks around the refusal or the question.
 #:
 #: Substitution is caught by the substring check. Omission is caught by this.
 #: Accounting judgment as data, the same argument as `metric_aliases.yaml`:
@@ -134,7 +135,7 @@ _METRIC_MODIFIERS = (
 #: vocabulary of metrics, so a list is the honest tool here. Measured
 #: 2026-09-26: "gross yearly revenue" misses the curated alias and embedding
 #: search puts GrossProfit on top at 0.751, while "gross revenue" hits the
-#: curated refusal it should.
+#: curated entry it should.
 _TIME_WORDS = frozenset(
     {"yearly", "annual", "annually", "quarterly", "monthly", "weekly", "daily",
      "year-to-date", "ytd"}
