@@ -126,7 +126,7 @@ noticed. Evals keep scoring them apart (`asked` vs `confused`).
 ```
 Ask        ask_id, kind: clarification | ambiguity, question, options[]
 Option     option_id, label, description
-Answer     ask_id, kind: option, option_id          ← the only kind for now
+AnswerIn   ask_id, kind: option, option_id          ← the only kind for now
 ```
 
 An ambiguity's options are its candidates: `label` is the concept's label
@@ -171,7 +171,7 @@ now:
 
 Three things keep adding it later additive rather than a refactor:
 
-1. **`Answer` is a union on `kind`** from the start. Free text is a second
+1. **`AnswerIn` is a union on `kind`** from the start. Free text is a second
    variant, `kind: text` — the OpenAPI schema grows, nothing changes shape.
 2. **Every stored answer keeps its text** — for an option, its label — with
    `option_id` nullable (§11). No migration.
@@ -335,6 +335,12 @@ refusals and wrong numbers worth debugging are the ones a person noticed.
 *Decided.* The Angular types are generated from FastAPI's OpenAPI schema, not
 written by hand. `app/schemas` is the single source of truth (`sec-retriever.md`
 §3), and two hand-kept copies of one contract drift.
+
+What the browser sends is named with an `In` suffix (`NewConversationIn`,
+`AnswersIn`), the repo's mark for inbound, validated input (schemas DESIGN
+§4.13); what the server sends is not. Not a `User` prefix: FastAPI Users
+already names its account models `UserRead` / `UserCreate`, and in the
+generated types the two would read as one family.
 
 ## 10. Users and sign-in
 

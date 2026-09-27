@@ -130,39 +130,42 @@ class Reply(_Base):
 # Requests
 # --------------------------------------------------------------------------- #
 
+# Everything the browser sends ends in ``In``, the repo's mark for inbound,
+# validated input (schemas DESIGN §4.13). What the server sends does not.
+
 
 #: The parser's limit. Not imported: that would load the model client with the
 #: schemas. A test holds the two equal.
 MAX_QUESTION = 2000
 
 
-class NewConversation(_Base):
+class NewConversationIn(_Base):
     question: str = Field(min_length=1, max_length=MAX_QUESTION)
 
 
-class OptionAnswer(_Base):
+class OptionAnswerIn(_Base):
     kind: Literal["option"] = "option"  # required on the wire; "text" joins later (§3)
     ask_id: str = Field(min_length=1, max_length=32)
     option_id: str = Field(min_length=1, max_length=32)  # checked against the options offered
 
 
-#: One member today. Free text becomes ``OptionAnswer | TextAnswer`` behind a
+#: One member today. Free text becomes ``OptionAnswerIn | TextAnswerIn`` behind a
 #: ``kind`` discriminator; clients already send ``kind``, so nothing they send changes.
-Answer = OptionAnswer
+AnswerIn = OptionAnswerIn
 
 
-class AnswerRequest(_Base):
-    answers: list[Answer] = Field(min_length=1)
+class AnswersIn(_Base):
+    answers: list[AnswerIn] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _one_answer_per_ask(self) -> AnswerRequest:
+    def _one_answer_per_ask(self) -> AnswersIn:
         ids = [answer.ask_id for answer in self.answers]
         if len(ids) != len(set(ids)):
             raise ValueError("each ask is answered at most once")
         return self
 
 
-class FeedbackRequest(_Base):
+class FeedbackIn(_Base):
     """Report a problem on one job (§8)."""
 
     note: str | None = Field(default=None, max_length=2000)

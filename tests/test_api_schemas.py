@@ -11,14 +11,14 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.api.schemas import (
     MAX_QUESTION,
-    AnswerRequest,
+    AnswersIn,
     Ask,
     DoneEvent,
     JobEvent,
     JobView,
-    NewConversation,
+    NewConversationIn,
     Option,
-    OptionAnswer,
+    OptionAnswerIn,
     Part,
     Refusal,
     Reply,
@@ -186,22 +186,22 @@ def test_the_question_limit_is_the_parsers() -> None:
 
     assert MAX_QUESTION == PARSER_LIMIT
     with pytest.raises(ValidationError):
-        NewConversation(question="x" * (MAX_QUESTION + 1))
+        NewConversationIn(question="x" * (MAX_QUESTION + 1))
 
 
 def test_an_answer_names_its_kind_on_the_wire() -> None:
-    dumped = OptionAnswer(ask_id="a1", option_id="o1").model_dump(mode="json")
+    dumped = OptionAnswerIn(ask_id="a1", option_id="o1").model_dump(mode="json")
     assert dumped == {"kind": "option", "ask_id": "a1", "option_id": "o1"}
     with pytest.raises(ValidationError):
-        OptionAnswer.model_validate(dumped | {"kind": "text"})
+        OptionAnswerIn.model_validate(dumped | {"kind": "text"})
 
 
 def test_each_ask_is_answered_at_most_once() -> None:
-    answer = OptionAnswer(ask_id="a1", option_id="o1")
+    answer = OptionAnswerIn(ask_id="a1", option_id="o1")
     with pytest.raises(ValidationError, match="at most once"):
-        AnswerRequest(answers=[answer, answer])
+        AnswersIn(answers=[answer, answer])
     with pytest.raises(ValidationError):
-        AnswerRequest(answers=[])
+        AnswersIn(answers=[])
 
 
 # --------------------------------------------------------------------------- #
