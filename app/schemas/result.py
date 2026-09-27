@@ -231,7 +231,10 @@ class ResultVerdict(_Base):
 
     missing: list[MissingCell] = Field(default_factory=list)
 
-    #: Indices into ``ResultSet.rows`` that matched no binding.
+    #: Indices into ``ResultSet.rows`` the verdict will not stand behind: a row
+    #: that matched no binding, and also a row that did match one but holds
+    #: something other than what it promised -- the wrong unit
+    #: (``executor._wrong_unit``) or a value that fails the plan's threshold.
     unattributable: list[int] = Field(default_factory=list)
 
     @property
@@ -318,12 +321,26 @@ class ResultSet(_Base):
             raise ValueError(
                 f"row(s) cite binding key(s) with no citation: {sorted(unknown)}"
             )
+        # Every row carrying no binding must be flagged -- the verdict cannot
+        # quietly stand behind one. The converse does not hold: a row can carry
+        # a binding and still be flagged, because it came back in the wrong unit
+        # or fails the threshold. Requiring equality made those two refusals
+        # crash instead (q007, 2026-09-26: six gross margins computed as
+        # subtractions in USD, all correctly flagged, and a ValidationError
+        # where an unanswerable result should have been).
+        flagged = set(self.verdict.unattributable)
         orphans = [
             index for index, annotated in enumerate(self.rows) if not annotated.binding_keys
         ]
-        if orphans != sorted(self.verdict.unattributable):
+        if not set(orphans) <= flagged:
             raise ValueError(
-                f"verdict.unattributable={sorted(self.verdict.unattributable)} "
-                f"disagrees with the rows carrying no binding: {orphans}"
+                f"verdict.unattributable={sorted(flagged)} disagrees with the rows "
+                f"carrying no binding: {orphans} must all be in it"
+            )
+        stray = sorted(index for index in flagged if not 0 <= index < len(self.rows))
+        if stray:
+            raise ValueError(
+                f"verdict.unattributable names row(s) {stray}, but there are only "
+                f"{len(self.rows)} row(s)"
             )
         return self

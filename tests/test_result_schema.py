@@ -358,6 +358,29 @@ def test_an_orphan_row_is_recorded_and_refused() -> None:
     assert not result.is_answerable
 
 
+def test_a_bound_row_in_the_wrong_unit_is_refused_not_a_crash() -> None:
+    """q007: a margin computed as a subtraction comes back in USD. It matched
+    its binding, the verdict flags it, and the result is unanswerable -- not a
+    ValidationError."""
+    result = _set(
+        rows=[AnnotatedRow(row=_row(), binding_keys=["b0"])],
+        verdict=ResultVerdict(
+            status="complete", expected_rows=1, returned_rows=1, unattributable=[0]
+        ),
+    )
+    assert not result.is_answerable
+
+
+def test_unattributable_cannot_name_a_row_that_is_not_there() -> None:
+    with pytest.raises(ValidationError, match="only 1 row"):
+        _set(
+            rows=[AnnotatedRow(row=_row(), binding_keys=["b0"])],
+            verdict=ResultVerdict(
+                status="complete", expected_rows=1, returned_rows=1, unattributable=[3]
+            ),
+        )
+
+
 def test_a_derived_row_can_span_two_bindings() -> None:
     result = _set(
         rows=[AnnotatedRow(row=_row(derivation="yoy_growth", unit="pure",
