@@ -341,7 +341,7 @@ questions:
       gross_revenue, decided 2026-09-26). Was refused until then.
 
   - id: q045
-    question: "What is <Company>'s profit: net, gross"
+    question: "What is <Company>'s: net profit, gross profit"
     template: true
     expect: [answered, answered]  # net profit, gross profit -- both named, so neither is bare
     shape: table
@@ -414,6 +414,12 @@ questions:
       -- sic_numbers.json carries code and description only. The SEC assigns
       offices by SIC range, so it is derivable given that mapping, which this
       project does not have.
+    known_gap: >-
+      The parser invents fiscal_year 2024 for "both quarterly and yearly" when
+      the question names no year, keeps it on the retry, and accept() rejects
+      it -- 10 of 10 cold runs, 2026-09-26. The question never reaches the
+      mapper, where "sic office" would be refused. A parser period problem, set
+      aside to be fixed separately.
 
   - id: q051
     question: "What is <Company>'s cash flow: operating, investing, financing"
