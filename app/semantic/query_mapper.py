@@ -47,6 +47,7 @@ from app.schemas.query import (
     CompanyGroupElementIn,
     ConceptRef,
     Coverage,
+    DisplayAs,
     Intent,
     MetricElementIn,
     MetricQualifierElementIn,
@@ -245,6 +246,7 @@ async def map_query(
         periods=_answered_periods(resolved_periods, over_time, metrics),
         metrics=_answering_metrics(metrics, bindings),
         rank={m.id: m.rank for m in metrics if m.rank and m.id in bound_elements},
+        thresholds=thresholds,
     )
     over_time += _series_growth(metrics, bindings, result, query.intent, over_time, thresholds)
 
@@ -563,6 +565,7 @@ def _describe_result(
     periods: list[ResolvedPeriod],
     metrics: int,
     rank: dict[str, RankDirection],  # only metrics that bound: nothing else has rows to order
+    thresholds: list[PlanThreshold],  # the plan's own list; the Presenter states them
 ) -> ResultSpec:
     """What the answer has to contain, from what actually resolved.
 
@@ -602,6 +605,7 @@ def _describe_result(
         metrics=metrics,
         granularities=sorted({p.granularity for p in periods}),
         rank=rank,
+        thresholds=thresholds,
     )
 
 
@@ -1345,6 +1349,7 @@ async def _resolve_metrics(
             expression = hit.expression
             signs = list(hit.signs)
             caveats = hit.caveats
+            display_as = hit.display_as
             resolved_by = "alias"
             source = f"curated alias {hit.metric!r}"
         else:
@@ -1365,6 +1370,7 @@ async def _resolve_metrics(
             signs = ["signed"]
             # Caveats are curated judgment; a distance match has none behind it.
             caveats = {}
+            display_as = None  # so is how to read the figure
             resolved_by = "embedding"
             source = "embedding search"
 
@@ -1381,6 +1387,7 @@ async def _resolve_metrics(
             slots=slots,
             signs=signs,
             caveats=caveats,
+            display_as=display_as,
             expression=expression,
             resolved_by=resolved_by,
             source=source,
@@ -1484,6 +1491,7 @@ def _bind_per_company(
     resolved_by: str,
     source: str,
     caveats: dict[tuple[str, str], str] | None = None,
+    display_as: DisplayAs | None = None,
     ciks: list[int],
     periods: list[ResolvedPeriod],
     evidence: dict[tuple[int, int], _Evidence],
@@ -1656,6 +1664,7 @@ def _bind_per_company(
                         + f" via {source}; verified over {len(covered)} period(s) ({span})"
                     ),
                     notes=shared_notes + narrower,
+                    display_as=display_as,
                 )
             )
 

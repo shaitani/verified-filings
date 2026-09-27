@@ -25,7 +25,13 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.retrieval.validator import MAX_ROWS
-from app.schemas.query import Binding, QueryPlan, ResolvedPeriod, over_time_pairs
+from app.schemas.query import (
+    Binding,
+    PeriodRef,
+    QueryPlan,
+    ResolvedPeriod,
+    over_time_pairs,
+)
 from app.schemas.result import RESULT_COLUMNS
 
 #: The one relation the retrieval role can read.
@@ -183,8 +189,29 @@ def _over_time_cells(plan: QueryPlan) -> list[PlanCell]:
     are bound. Which periods pair up is ``over_time_pairs``, shared with the
     mapper.
     """
+    return [
+        _over_time_cell(element_id, kind, current, base, now, then)
+        for element_id, kind, current, base, now, then in _over_time_pairs_bound(plan)
+    ]
+
+
+def over_time_bases(plan: QueryPlan) -> dict[tuple[str, int, int, str, str], PeriodRef]:
+    """``(element, cik, fiscal_year, fiscal_period, kind) -> base period`` for
+    every over-time cell -- the same pairs the statement is written from, so the
+    period a reader is told a change is "vs" is the one it was computed against."""
+    return {
+        (element_id, current.company_cik, current.fiscal_year, current.fiscal_period, kind): (
+            PeriodRef(fiscal_year=base.fiscal_year, fiscal_period=base.fiscal_period)
+        )
+        for element_id, kind, current, base, _, _ in _over_time_pairs_bound(plan)
+    }
+
+
+def _over_time_pairs_bound(plan: QueryPlan):
+    """``(element, kind, current, base, binding now, binding then)`` for each pair
+    ``over_time_pairs`` makes where the metric is bound at both ends."""
     if not plan.over_time:
-        return []
+        return
     earlier = {
         (p.company_cik, p.fiscal_year, p.fiscal_period): p for p in plan.filters.support_periods
     }
@@ -197,15 +224,12 @@ def _over_time_cells(plan: QueryPlan) -> list[PlanCell]:
         except (LookupError, ValueError):
             return None
 
-    cells: list[PlanCell] = []
     for entry in plan.over_time:
         element_id, kind = entry.element_id, entry.kind
         for current, base in over_time_pairs(kind, plan.filters.periods, earlier):
             now, then = bound(element_id, current), bound(element_id, base)
-            if now is None or then is None:
-                continue
-            cells.append(_over_time_cell(element_id, kind, current, base, now, then))
-    return cells
+            if now is not None and then is not None:
+                yield element_id, kind, current, base, now, then
 
 
 def _over_time_cell(

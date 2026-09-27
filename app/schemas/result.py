@@ -39,7 +39,9 @@ from pydantic import Field, model_validator
 
 from app.schemas.query import (
     ConceptRef,
+    DisplayAs,
     Note,
+    PeriodRef,
     QueryFiscalPeriod,
     ResolvedBy,
     ResultSpec,
@@ -189,6 +191,8 @@ class Citation(_Base):
     #: reach them through one key rather than being handed the whole plan.
     notes: list[Note] = Field(default_factory=list)
 
+    display_as: DisplayAs | None = None  # the binding's; "multiple" reads 0.89 as 0.89x
+
 
 class AnnotatedRow(_Base):
     """A ``ResultRow`` after Python has attributed it.
@@ -205,6 +209,11 @@ class AnnotatedRow(_Base):
 
     row: ResultRow
     binding_keys: list[str] = Field(default_factory=list)
+
+    #: For a change, growth or CAGR: the period it is measured from, found by the
+    #: same pairing rule the statement was written with (``over_time_pairs``).
+    #: So "+$8.43B" can say "vs Q3 FY2025". None for a filed figure.
+    base: PeriodRef | None = None
 
 
 class MissingCell(_Base):

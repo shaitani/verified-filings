@@ -23,8 +23,8 @@ from app.schemas.query import (
 )
 
 #: How a unit is formatted. A ratio is shown as a percentage, never as money
-#: (PITFALLS §2.1).
-UnitKind = Literal["money", "ratio", "per_share", "count"]
+#: (PITFALLS §2.1); a multiple ("current ratio") as 0.89x, never as 89%.
+UnitKind = Literal["money", "ratio", "multiple", "per_share", "count"]
 
 
 class AnswerRow(_Base):
@@ -33,8 +33,9 @@ class AnswerRow(_Base):
     element_id: str = Field(min_length=1, max_length=32)  # the Reply part it answers
     metric: str = Field(min_length=1, max_length=256)  # the asker's phrase, verbatim
 
-    company_cik: int
-    company: str = Field(min_length=1, max_length=150)  # ticker, else entity name
+    company_cik: int | None  # None: one figure across several companies (an average)
+    company: str = Field(min_length=1, max_length=150)  # ticker, else entity name; "14 companies"
+    companies: list[str] = Field(default_factory=list)  # who an across-companies figure spans
 
     fiscal_year: int = Field(ge=2000, le=2100)
     fiscal_period: QueryFiscalPeriod
@@ -49,6 +50,7 @@ class AnswerRow(_Base):
     unit: str = Field(min_length=1, max_length=32)  # as filed: "USD", "pure", ...
     unit_kind: UnitKind
     derivation: str | None = Field(default=None, max_length=64)  # None = as filed
+    compared_with: str | None = Field(default=None, max_length=32)  # a change's base: "Q3 FY2025"
 
     citations: list[str] = Field(min_length=1)  # keys into AnswerView.citations
 
@@ -59,6 +61,9 @@ class AnswerRow(_Base):
         if self.value is None and self.derivation is None:
             # Same rule as ResultRow: only a computed row may lack a value.
             raise ValueError("an as-filed row must carry a value")
+        if (self.company_cik is None) != bool(self.companies):
+            # A figure is one company's, or it names every company it spans.
+            raise ValueError("company_cik is None exactly when the row lists its companies")
         return self
 
 
@@ -113,6 +118,7 @@ class AnswerView(_Base):
     views: list[View] = Field(default_factory=list)  # panels above the table
     citations: dict[str, CitationView] = Field(min_length=1)
     notes: list[Note] = Field(default_factory=list)  # shown above the views, verbatim
+    conditions: list[str] = Field(default_factory=list)  # what filtered the rows, stated
 
     @model_validator(mode="after")
     def _consistent(self) -> AnswerView:

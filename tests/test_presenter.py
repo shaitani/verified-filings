@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from app.presenter import BAR_LIMIT, PresentationError, present
-from app.presenter.format import display
+from app.presenter.format import condition, display
 from app.schemas.answer_view import AnswerView
 from app.schemas.result import ResultSet
 
@@ -33,7 +33,8 @@ def _present(name: str) -> AnswerView:
 def test_every_captured_result_presents(name: str) -> None:
     result, _ = _load(name)
     view = _present(name)  # AnswerView's own validators run here
-    assert len(view.rows) == len(result.rows)  # the table drops nothing
+    # The table drops nothing: an across-companies row stands for one row per company.
+    assert sum(len(row.companies) or 1 for row in view.rows) == len(result.rows)
     assert view.notes == result.notes  # verbatim
 
 
@@ -83,9 +84,12 @@ def test_a_ranking_sorts_itself_rather_than_trusting_row_order() -> None:
     assert view.rows[view.views[0].rows[0]].company == "NVDA"  # +125.9% growth
 
 
-def test_a_comparison_table_has_no_chart() -> None:
-    view = _present("q017")
-    assert view.shape == "table" and view.views == []
+def test_companies_side_by_side_get_comparison_bars() -> None:
+    view = _present("q017")  # Q4 revenue across Apple, Microsoft and NVIDIA
+    (bar,) = view.views
+    assert view.shape == "table" and bar.kind == "bar"
+    assert [view.rows[i].company for i in bar.rows] == ["AAPL", "MSFT", "NVDA"]  # largest first
+    assert "first" not in bar.title  # a comparison, not a ranking: "revenue, Q4 FY2025"
 
 
 # --------------------------------------------------------------------------- #
@@ -156,6 +160,87 @@ def test_a_concept_switch_is_cited_on_both_bindings() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# What a reader needs besides the figure (2026-09-27 sweep of every eval question)
+# --------------------------------------------------------------------------- #
+
+
+def test_an_average_across_companies_is_one_figure_not_one_per_company() -> None:
+    """q040 returns the average on 14 rows, one per company. As a table that
+    reads as each company spending $15.27B -- a wrong number made by display."""
+    view = _present("q040")
+    (row,) = view.rows
+    assert row.company_cik is None and row.company == "14 companies"
+    assert len(row.companies) == 14 and "AAPL" in row.companies
+    assert row.display == "$15.27B" and row.derivation == "average"
+    assert view.views[0].title.startswith("R&D spend average across 14 companies")
+
+
+def test_an_average_that_differs_by_company_is_refused() -> None:
+    result, metrics = _load("q040")
+    first = result.rows[0]
+    changed = first.model_copy(update={"row": first.row.model_copy(update={"value": Decimal("1")})})
+    rows = [changed, *result.rows[1:]]
+    with pytest.raises(PresentationError, match="differs across the companies"):
+        present(result.model_copy(update={"rows": rows}), metrics)
+
+
+def test_an_average_missing_a_company_is_refused() -> None:
+    result, metrics = _load("q040")
+    with pytest.raises(PresentationError, match="cover 13 of 14 companies"):
+        present(result.model_copy(update={"rows": result.rows[1:]}), metrics)
+
+
+def test_an_unknown_computation_is_refused_rather_than_guessed() -> None:
+    result, metrics = _load("q001")
+    first = result.rows[0]
+    odd = first.model_copy(update={"row": first.row.model_copy(update={"derivation": "vibes"})})
+    with pytest.raises(PresentationError, match="no display rule for a 'vibes' row"):
+        present(result.model_copy(update={"rows": [odd]}), metrics)
+
+
+def test_a_current_ratio_is_a_multiple_not_a_percentage() -> None:
+    result, _ = _load("q022")
+    assert result.citations["b0"].display_as == "multiple"  # curated, carried from the alias
+    row = _present("q022").rows[0]
+    assert (row.display, row.unit_kind) == ("0.89×", "multiple")
+
+
+def test_a_filtered_list_states_its_filter() -> None:
+    view = _present("q039")  # more than 100 billion dollars in revenue
+    assert view.conditions == ["revenue over $100.00B"]
+    assert "revenue over $100.00B" in view.views[0].title
+
+
+def test_a_change_says_what_it_is_measured_from() -> None:
+    view = _present("q020")  # Q3 to Q4
+    assert view.rows[0].compared_with == "Q3 FY2025"
+    assert view.views[0].title.endswith("Q4 FY2025 vs Q3 FY2025")
+    assert _present("q011").rows[0].compared_with == "FY2023"  # growth in 2024
+
+
+def test_only_derived_rows_carry_a_base() -> None:
+    rows = _present("q013").rows  # five figures and four growths
+    assert [row.compared_with for row in rows if row.derivation] == [
+        "FY2021", "FY2022", "FY2023", "FY2024",
+    ]
+    assert all(row.compared_with is None for row in rows if not row.derivation)
+
+
+def test_a_two_company_comparison_gets_bars() -> None:
+    view = _present("q006")  # Apple or Microsoft, FY2024 revenue
+    (bar,) = view.views
+    assert [view.rows[i].company for i in bar.rows] == ["AAPL", "MSFT"]
+    assert bar.title == "revenue, FY2024"
+
+
+def test_a_balance_is_labelled_by_its_date() -> None:
+    view = _present("q002")  # Microsoft's cash at the end of its last fiscal year
+    row = view.rows[0]
+    assert row.period_label == "end of FY2025"
+    assert view.views[0].title.endswith("as of 2025-06-30")
+
+
+# --------------------------------------------------------------------------- #
 # What the Presenter refuses
 # --------------------------------------------------------------------------- #
 
@@ -202,6 +287,23 @@ def test_an_unknown_unit_is_refused_rather_than_guessed() -> None:
 )
 def test_display(value: str, unit: str, derivation: str | None, shown: str) -> None:
     assert display(Decimal(value), unit, derivation) == shown
+
+
+@pytest.mark.parametrize(
+    ("value", "derivation", "shown"),
+    [
+        ("0.893293", None, "0.89×"),
+        ("0.05", "change", "+0.05×"),  # a change in a multiple is a multiple
+        ("0.12", "growth", "+12.0%"),  # a growth of one is still a rate
+    ],
+)
+def test_display_as_a_multiple(value: str, derivation: str | None, shown: str) -> None:
+    assert display(Decimal(value), "pure", derivation, as_multiple=True) == shown
+
+
+def test_a_condition_reads_as_a_sentence() -> None:
+    assert condition("revenue", "gt", Decimal("100000000000"), "USD") == "revenue over $100.00B"
+    assert condition("gross margin", "lte", Decimal("0.3"), "pure") == "gross margin at most 30.0%"
 
 
 def test_a_missing_derived_value_is_a_dash() -> None:

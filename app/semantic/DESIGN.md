@@ -372,6 +372,16 @@ same reason it counts only the companies that did (§8c): `row_count` is a
 promise, and six promised against five fetched would report a shortfall the
 plan had already explained.
 
+## 8f. How a figure reads: `display_as`
+
+Added 2026-09-27. `pure` covers both percentages (margins, tax rates) and
+multiples (a current ratio), and a reader told Apple's current ratio is "89%"
+has been told something wrong. An entry may say `display_as: multiple`; the
+mapper copies it onto every binding it makes, the executor onto the citation,
+and the Presenter shows `0.89×`. Only on an entry that resolves (`terms`); only
+`current_ratio` needs it today. An embedding binding never has one — how to
+read a figure is curated judgment, like a caveat.
+
 ## 8a. Declining, for terms the dataset simply does not hold
 
 `unavailable` carries a sentence of curated reasoning that becomes

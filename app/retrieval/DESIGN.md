@@ -678,7 +678,10 @@ class ResultSet(_Base):
 ```
 
 `result` is the plan's `ResultSpec`, copied across by `execute()` (added
-2026-09-27). The presenter never sees a plan, and what it draws — a figure, a
+2026-09-27). `AnnotatedRow.base` (same day) is the period an over-time row is
+measured from, so the Presenter can say "+$8.43B vs Q3 FY2025". It comes from
+`prompt.over_time_bases`, which walks the same pairs `_over_time_cells` writes
+the statement from — one loop, so the label and the arithmetic cannot differ. The presenter never sees a plan, and what it draws — a figure, a
 series, a ranking, a table — and along which axes is decided by the plan, not
 by the rows. Copying the one piece it needs keeps the rule intact
 (`app/api/DESIGN.md` §2, §5).

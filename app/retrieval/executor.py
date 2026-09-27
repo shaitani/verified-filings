@@ -28,7 +28,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.db.session import RetrievalSessionLocal
-from app.retrieval.prompt import needs_the_model, plan_cells
+from app.retrieval.prompt import needs_the_model, over_time_bases, plan_cells
 from app.schemas.query import Note, QueryPlan
 from app.schemas.result import (
     AnnotatedRow,
@@ -90,6 +90,7 @@ def _citations(plan: QueryPlan) -> dict[str, Citation]:
             confidence=binding.confidence,
             rationale=binding.rationale,
             notes=list(binding.notes),
+            display_as=binding.display_as,
         )
         for index, binding in enumerate(plan.bindings)
     }
@@ -375,8 +376,16 @@ async def execute(sql: str, plan: QueryPlan) -> ResultSet:
             result = await session.execute(text(sql))
             records = result.mappings().all()
 
+        bases = over_time_bases(plan)
         rows = [
-            AnnotatedRow(row=row, binding_keys=_attribute(row, plan))
+            AnnotatedRow(
+                row=row,
+                binding_keys=_attribute(row, plan),
+                base=bases.get(
+                    (row.element_id, row.company_cik, row.fiscal_year, row.fiscal_period,
+                     row.derivation or "")
+                ),  # only an over-time row has one
+            )
             for row in (ResultRow(**dict(record)) for record in records)
         ]
         verdict = _verdict(rows, plan)

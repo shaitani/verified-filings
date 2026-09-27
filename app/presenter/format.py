@@ -25,6 +25,12 @@ _SYMBOL = {"USD": "$", "EUR": "€", "USD/shares": "$"}
 
 #: Arithmetic over time: a positive result is shown with its sign.
 _SIGNED = {"change", "growth", "cagr"}
+_RATES = {"growth", "cagr"}  # a percentage whatever the metric's own unit reads as
+
+#: How a threshold's comparison reads in a sentence.
+_COMPARISON_WORDS = {
+    "gt": "over", "gte": "at least", "lt": "under", "lte": "at most", "eq": "equal to"
+}
 
 _SCALES = ((Decimal(10) ** 12, "T"), (Decimal(10) ** 9, "B"), (Decimal(10) ** 6, "M"))
 
@@ -38,12 +44,16 @@ def unit_kind(unit: str) -> UnitKind:
         raise PresentationError(f"no display rule for unit {unit!r}") from None
 
 
-def display(value: Decimal | None, unit: str, derivation: str | None) -> str:
+def display(
+    value: Decimal | None, unit: str, derivation: str | None, *, as_multiple: bool = False
+) -> str:
     if value is None:
         return MISSING
     kind = unit_kind(unit)
     magnitude = abs(value)
-    if kind == "ratio":
+    if kind == "ratio" and as_multiple and derivation not in _RATES:
+        text = _round(magnitude, 2) + "×"  # a current ratio of 0.89 covers 0.89 times
+    elif kind == "ratio":
         percent = _round(magnitude * 100, 1)
         text = percent + (" pp" if derivation == "change" else "%")  # a ratio's change is points
     elif kind == "per_share":
@@ -59,8 +69,14 @@ def display(value: Decimal | None, unit: str, derivation: str | None) -> str:
     return text
 
 
-def period_label(fiscal_year: int, fiscal_period: str) -> str:
-    return f"FY{fiscal_year}" if fiscal_period == "FY" else f"{fiscal_period} FY{fiscal_year}"
+def period_label(fiscal_year: int, fiscal_period: str, *, instant: bool = False) -> str:
+    label = f"FY{fiscal_year}" if fiscal_period == "FY" else f"{fiscal_period} FY{fiscal_year}"
+    return f"end of {label}" if instant else label  # a balance is at a date, not over a year
+
+
+def condition(metric: str, comparison: str, value: Decimal, unit: str) -> str:
+    """A threshold as the reader is told it: "revenue over $100.00B"."""
+    return f"{metric} {_COMPARISON_WORDS[comparison]} {display(value, unit, None)}"
 
 
 def _scaled(magnitude: Decimal) -> str:

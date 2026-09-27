@@ -476,6 +476,29 @@ In rough order of how much they matter.
   belongs to [C], the Query Parser. Briefly designed as a "bundle" before being
   recognised as nothing new — schemas DESIGN §8.20. Do not re-invent it.
 
+### Questions that come back wrong — collected, to fix later
+
+Every question known to get a wrong, odd or badly worded reply, in one place.
+The user's call (2026-09-27): collect them here and address them together.
+Most came from running every eval question through the chain and the
+Presenter; `pass` in the eval runner means the *decision* was right, not the
+figure (above), so several of these grade `pass`.
+
+| question | what comes back | whose | status |
+|---|---|---|---|
+| q057 "highest operating income at Costco **in 2024**" | Costco's **FY2025** quarters: the parser drops "in 2024" and emits `last_n_years: 1` | [C] | a plausible wrong answer; task chip raised 2026-09-27 |
+| "revenue from 2023 to 2025 **by quarter**" (HANDOFF §8's smoke test, reworded) | 128 rows, not 36: three years plus four bare quarters, which the mapper reads across every year | [C] | task chip raised 2026-09-27; kept as the Presenter's `smoke_mixed` fixture |
+| q042 "has anyone's total debt more than **doubled** since 2021?" | year-over-year dollar changes for 15 filers, not growth from 2021 with a >100% filter | [C]/[D] | the answer-matches-question gap, first bullet of this section |
+| q040 "**average** R&D spend across these companies" | the average on 14 rows, one per company | [E] | the Presenter collapses it to one figure naming the 14 (presenter DESIGN §4a); the real fix is the `aggregate` operation in the TODO above |
+| q018's round trip | dropped "Costco" and ranked every filer's quarters | [C] | fixed by example order, not a check — "A company the parser drops", above |
+| q023 "how much of Alphabet's revenue goes to R&D?" | one of the two operands, not the ratio | schema | `known_gap`; "A relationship between two metrics", above |
+| q015 "gross margin fell three years running" | refused: the 7B model runs out of tokens | [E] | `known_gap` |
+| q050 "by sic office … quarterly and yearly" | refused before the mapper: the parser invents a year | [C] | `known_gap` |
+| q048 "quarterly revenues: gross, net" | fails from a cold model, passes warm | [C] | the prompt-cache note, above |
+| q055 "Apple's **interest expense**" | refused: Apple stops tagging it after FY2023 | data | eval expects `answered`; decide whether the expectation or the answer changes |
+| q028 / q029 "Apple's revenue in 2015 / 2019" | the real refusal plus a knock-on one ("no reporting period in scope to verify coverage against") | [B] | [B] shows only the blocking refusal when one exists — step 3 |
+| q049 "companies in **a given sector**" | "no loaded company matches sic_description='a given sector'" | [D] | reason text written for a developer; reword in the mapper |
+
 ### Explicitly deferred by the user
 
 **The 10-K/A gap** (PITFALLS §3.4). Ingest fetches only `10-K` and `10-Q`, so

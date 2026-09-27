@@ -146,6 +146,11 @@ OverTime = Literal["change", "growth", "cagr"]
 #: "fastest", "most" are highest; "lowest", "least", "largest decline" lowest.
 RankDirection = Literal["highest", "lowest"]
 
+#: How a dimensionless result is read, when not as a percentage. A current
+#: ratio of 0.89 is "0.89x", not "89%"; the unit ("pure") cannot say which.
+#: Curated per metric in ``metric_aliases.yaml``.
+DisplayAs = Literal["multiple"]
+
 #: Rendered into the SQL prompt, and the one place the mapping from name to
 #: operator lives.
 COMPARISON_SQL: dict[str, str] = {
@@ -637,6 +642,8 @@ class Binding(_Base):
     #: Caveats that must reach the reader. See ``NoteKind``.
     notes: list[Note] = Field(default_factory=list)
 
+    display_as: DisplayAs | None = None  # from the curated alias; None = by unit
+
     @property
     def fact_unit(self) -> str:
         """The unit to join facts on -- what retrieval needs, as opposed to
@@ -946,6 +953,10 @@ class ResultSpec(_Base):
     #: orders by. Rides on ResultSet so the Presenter never needs the plan.
     rank: dict[str, RankDirection] = Field(default_factory=dict)
 
+    #: The plan's thresholds, for the same reason: a list filtered by "revenue
+    #: over 100 billion" has to say so, and the Presenter never sees the plan.
+    thresholds: list[PlanThreshold] = Field(default_factory=list)
+
     @property
     def row_count(self) -> int:
         """Rows the retrieval should return. A result with fewer has dropped
@@ -984,6 +995,14 @@ class QueryPlan(_Base):
     #: Kept separate from ``Binding.notes`` because attaching a statement about
     #: the comparison to one of its sides would be arbitrary.
     notes: list[Note] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _result_carries_the_thresholds(self) -> QueryPlan:
+        # Two copies of one list -- retrieval reads this one, the Presenter the
+        # ResultSpec's -- so they are held equal rather than trusted to be.
+        if self.result.thresholds != self.thresholds:
+            raise ValueError("result.thresholds must equal the plan's thresholds")
+        return self
 
     @property
     def is_complete(self) -> bool:

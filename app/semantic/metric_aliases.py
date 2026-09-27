@@ -21,6 +21,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.query import DisplayAs
 from app.schemas.xbrl import Taxonomy
 
 ALIAS_FILE = Path(__file__).with_name("metric_aliases.yaml")
@@ -152,6 +153,10 @@ class MetricAlias(_Base):
     #: 0.726 and reported $0.000006 as Microsoft's share price.
     unavailable: str | None = Field(default=None, min_length=1, max_length=512)
 
+    #: How to read a dimensionless result when a percentage would mislead: a
+    #: current ratio of 0.89 is "0.89x", not "89%". Only on a metric that resolves.
+    display_as: DisplayAs | None = None
+
     @property
     def slots(self) -> list[tuple[list[str], OperandSign]]:
         """``terms`` with the two spellings collapsed to one shape."""
@@ -179,6 +184,8 @@ class MetricAlias(_Base):
             )
         if self.terms is not None and not self.terms:
             raise ValueError("`terms` must list at least one operand slot")
+        if self.display_as is not None and self.terms is None:
+            raise ValueError("`display_as` needs `terms`: only a figure is displayed")
         return self
 
     @model_validator(mode="after")
@@ -343,6 +350,8 @@ class AliasHit:
     #: question reads in business terms rather than in file keys.
     option_labels: tuple[str, ...] = ()
 
+    display_as: DisplayAs | None = None  # carried onto every binding this makes
+
 
 class AliasIndex:
     """Normalized surface form -> ``AliasHit``."""
@@ -366,6 +375,7 @@ class AliasIndex:
                 caveats={
                     split_concept_ref(ref): message for ref, message in alias.caveats.items()
                 },
+                display_as=alias.display_as,
                 option_labels=tuple(
                     document.metrics[o.metric].label for o in alias.clarify.options
                 )

@@ -461,6 +461,7 @@ metrics:
     label: Current ratio
     synonyms: [working capital ratio, liquidity ratio, current ratios]
     expression: c0 / c1
+    display_as: multiple     # 0.89x, not 89%: current assets cover liabilities 0.89 times
     terms:
       - [us-gaap:AssetsCurrent]
       - concepts: [us-gaap:LiabilitiesCurrent]

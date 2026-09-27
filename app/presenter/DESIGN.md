@@ -9,8 +9,10 @@ than prose, and what the client does with the output: `app/api/DESIGN.md` §2,
 §5, §6. The output contract is `app/schemas/answer_view.py`, whose validators
 run on everything this builds.
 
-Built 2026-09-27 against twelve real `ResultSet`s captured from the chain
+Built 2026-09-27 against real `ResultSet`s captured from the chain
 (`tests/fixtures/presenter/`), so its tests run with no database and no model.
+Then checked against every other eval question the same day (§5), which found
+six things a reader needed and did not get; all six are fixed here.
 
 ## 1. Inputs, and what it refuses
 
@@ -22,6 +24,15 @@ Built 2026-09-27 against twelve real `ResultSet`s captured from the chain
   row for an element with no phrase is refused — it has no label to wear.
 - **An unknown unit is refused.** `format.UNIT_KINDS` covers exactly the load
   step's `ALLOWED_UNITS`; guessing a format is how a ratio gets shown as money.
+- **An unknown computation is refused.** A row's `derivation` must be filed
+  (`None`), over time (`change`, `growth`, `cagr`, written in Python), or an
+  aggregate (§4a). Anything else the model wrote has no known reading.
+
+What it reads from the `ResultSet` besides the rows, all put there so it never
+needs the plan: `ResultSpec` (shape, axes, ranking direction, **thresholds**),
+each citation's **`display_as`** (from the curated alias), and each over-time
+row's **`base`** — the period it was measured from, found by the same pairing
+the statement was written with (`prompt.over_time_bases`).
 
 `PresentationError` is always our fault, never the asker's: [B] reports it as
 a failed job, with the detail in the trace.
@@ -43,11 +54,14 @@ then date.
 |---|---|---|
 | `USD`, `EUR` | money | `$391.04B`, `$1.25T`, `$950,000` |
 | `pure`, `Rate` | ratio | `46.2%`; a *change* in a ratio is points, `+0.7 pp` |
+| `pure`, curated `display_as: multiple` | multiple | `0.89×` — a current ratio covers 0.89 times, it is not 89%; its growth is still `+12.0%` |
 | `USD/shares` | per_share | `$1.02` — never scaled like money |
 | `shares` | count | `15.12B shares` |
 
-A change, growth or CAGR carries its sign (`+0.9%`, `-$32.13B`); a filed
-figure does not. A derived row with no value (growth from a zero base) is `—`.
+A change, growth or CAGR carries its sign (`+0.9%`, `-$32.13B`) and says what
+it is measured from (`compared_with`: "vs Q3 FY2025"); a filed figure does not.
+A balance is labelled by its date — "end of FY2025", and "as of 2025-06-30" on
+a stat card — because it is a position at a moment, not a flow over a year. A derived row with no value (growth from a zero base) is `—`.
 Display strings round (1 decimal for percentages, 2 for scaled money); the
 exact value travels beside every one of them.
 
@@ -55,30 +69,58 @@ exact value travels beside every one of them.
 
 | `ResultSpec.shape` | views |
 |---|---|
-| `scalar` | one stat card, when there is exactly one row |
+| any, with exactly one row | one stat card |
 | `ranking` | one bar chart per ranked metric, in the direction the parser recorded (`highest` → descending), capped at `BAR_LIMIT` (10) bars with "top 10 of 359" in the title |
 | `series` | line panels, one per (derivation, unit kind, granularity), one line per (metric, company), each in date order |
-| `table` | none: the table is the answer |
+| `table` along companies only | comparison bars — one figure per company, largest first, titled by what is compared ("revenue, FY2024"), never "highest first" |
+| any other `table` | none: the table is the answer |
+
+**A filtered list states its filter.** Each threshold becomes a sentence in
+`AnswerView.conditions` ("revenue over $100.00B") and joins a ranking's title.
+Without it, q039's eleven companies read as a ranking of everyone.
 
 A line panel never holds a figure beside its own growth, money beside a
 ratio, or a year beside a quarter — `AnswerView` refuses all three, so a
 mistake here fails loudly rather than drawing a misleading chart. Two metrics
 in the same unit share a panel (revenue and net income, q041).
 
-## 5. Found while building it
+## 4a. An aggregate across companies is one figure
 
-- **The reworded HANDOFF §8 smoke test comes back 128 rows, not 36.** "Revenue
-  from 2023 to 2025 by quarter" parses into three years plus four bare quarters,
-  which the mapper reads across every year on file. A parser problem, kept as
-  the `smoke_mixed` fixture because the output is honest and exercises mixed
-  granularity and a tag change; flagged for a separate fix.
-- **q038's "largest decline" is a Q4 → Q1 seasonal drop** (Amazon, -$32.13B).
-  Correct for the words asked; worth knowing before reading it as news.
+q040 ("average R&D spend across these companies") comes back as the average
+on **14 rows, one per company** — the model writes aggregates, and the
+statement attaches the one figure to each company it spans. As a table that
+reads as "Apple spent $15.27B, AMD spent $15.27B, …": a wrong number made by
+the display, not the data.
+
+So an aggregate (`average`, `sum`, `min`, `max`, `median`, …) over more than
+one company becomes **one row**: `company_cik` null, "14 companies", and the
+`companies` it spans listed. Only when that is provable — the same value on
+every row, for every company the metric bound; otherwise it is refused. One
+company's own aggregate stays that company's row.
+
+The real fix is upstream: the parser's closed list of operations (HANDOFF §6
+TODO) lets Python write the aggregate as one row with no company at all.
+
+## 5. Checked against every eval question
+
+2026-09-27: the 41 eval questions not already fixtures, through the chain and
+here. None failed; six displayed something a reader could misread or not see,
+and are fixed (§1, §3, §4, §4a): the average on every company, a current ratio
+as 89%, a filtered list that never said its filter, a change with no "vs", a
+two-company comparison with no chart, a balance labelled like a flow. Fixtures
+for each: `q040`, `q022`, `q039`, `q020`/`q011`/`q013`, `q006`, `q002`.
+
+Questions whose *answers* are wrong or oddly worded — not a display problem —
+are collected in HANDOFF §6, "Questions that come back wrong". Two worth
+knowing before reading a chart: the `smoke_mixed` fixture is a misparsed
+question kept because its output is honest; q038's "largest decline" is a
+Q4 → Q1 seasonal drop, correct for the words asked.
 
 ## 6. Not done
 
-- **No bar chart for a `table` comparison.** "Compare Q4 revenue across Apple,
-  Microsoft and NVIDIA" (q017) is a table only. Unranked bars would be an easy
-  addition if wanted.
 - **No headline sentence.** If one is ever wanted it is templated here from a
   row, never written by a model.
+- **An aggregate over one company's periods** ("Apple's average revenue over
+  five years") keeps the company but is labelled with a single period. Not
+  seen in the eval set; it needs the aggregate operation upstream to say which
+  periods it spans.

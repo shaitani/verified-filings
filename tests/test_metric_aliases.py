@@ -436,3 +436,14 @@ def test_an_unavailable_entry_carries_its_reason_to_the_index() -> None:
     hit = AliasIndex(document).lookup("gone")
     assert hit.unavailable == "no filing carries this"
     assert hit.terms == ()
+
+
+def test_a_multiple_is_read_as_one() -> None:
+    """A current ratio of 0.89 is 0.89x, not 89% -- the unit ("pure") cannot say which."""
+    assert alias_index().lookup("current ratio").display_as == "multiple"
+    assert alias_index().lookup("gross margin").display_as is None  # a margin is a percentage
+
+
+def test_display_as_needs_a_figure_to_display() -> None:
+    with pytest.raises(ValidationError, match="`display_as` needs `terms`"):
+        MetricAlias(label="X", unavailable="not filed", display_as="multiple")

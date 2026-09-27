@@ -7,7 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from app.presenter.format import PresentationError, display, period_label, unit_kind
+from app.presenter.format import (
+    PresentationError,
+    condition,
+    display,
+    period_label,
+    unit_kind,
+)
 from app.schemas.answer_view import (
     AnswerRow,
     AnswerView,
@@ -17,12 +23,22 @@ from app.schemas.answer_view import (
     Series,
     StatView,
 )
-from app.schemas.result import ResultSet
+from app.schemas.result import AnnotatedRow, ResultSet
 
 __all__ = ["BAR_LIMIT", "PresentationError", "present"]
 
 #: Bars drawn for a ranking. The table below the chart holds every row.
 BAR_LIMIT = 10
+
+#: Arithmetic over time, written in Python (retrieval DESIGN §4.8).
+OVER_TIME = frozenset({"change", "growth", "cagr"})
+
+#: One figure over several companies, still written by the model (HANDOFF §6's
+#: TODO moves these to Python). The statement attaches it to every company it
+#: spans, which a table would read as each company's own figure (DESIGN §4a).
+AGGREGATES = frozenset(
+    {"average", "mean", "median", "sum", "total", "min", "minimum", "max", "maximum"}
+)
 
 
 def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
@@ -31,16 +47,21 @@ def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
         # [B] checks first; this is the second lock on the same door (api DESIGN §1).
         raise PresentationError(f"verdict {result.verdict.status!r} is not answerable")
 
-    rows = _order([_row(annotated, metrics) for annotated in result.rows], result, metrics)
+    rows = [_row(annotated, result, metrics) for annotated in result.rows]
+    rows = _order(_collapse_aggregates(rows, result), result, metrics)
+    conditions = _conditions(rows, result, metrics)
+
     shape = result.result.shape
-    if shape == "scalar":
-        views = [StatView(title=_title(rows[0]), row=0)] if len(rows) == 1 else []
+    if len(rows) == 1:
+        views = [StatView(title=_title(rows[0]), row=0)]  # one figure, whatever was asked
     elif shape == "ranking":
-        views = _bars(rows, result)
+        views = _bars(rows, result, conditions)
     elif shape == "series":
         views = _lines(rows)
+    elif shape == "table" and result.result.axes == ["company"]:
+        views = _comparison(rows)
     else:
-        views = []  # "table": the table is the answer
+        views = []  # the table is the answer
 
     return AnswerView(
         shape=shape,
@@ -58,14 +79,24 @@ def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
             for key, citation in result.citations.items()
         },
         notes=result.notes,  # verbatim: never summarised, never dropped
+        conditions=conditions,
     )
 
 
-def _row(annotated, metrics: Mapping[str, str]) -> AnswerRow:
+def _row(annotated: AnnotatedRow, result: ResultSet, metrics: Mapping[str, str]) -> AnswerRow:
     row = annotated.row
     if row.element_id not in metrics:
         # A figure for something the asker's phrases do not name has no label to wear.
         raise PresentationError(f"no metric phrase for element {row.element_id!r}")
+    if row.derivation is not None and row.derivation not in OVER_TIME | AGGREGATES:
+        # Refused rather than guessed: an unknown computation has no known reading.
+        raise PresentationError(f"no display rule for a {row.derivation!r} row")
+
+    multiple = any(result.citations[key].display_as == "multiple" for key in annotated.binding_keys)
+    kind = unit_kind(row.unit)
+    if kind == "ratio" and multiple and row.derivation not in ("growth", "cagr"):
+        kind = "multiple"  # a growth in a current ratio is still a percentage
+    base = annotated.base
     return AnswerRow(
         element_id=row.element_id,
         metric=metrics[row.element_id],
@@ -73,18 +104,68 @@ def _row(annotated, metrics: Mapping[str, str]) -> AnswerRow:
         company=row.ticker or row.entity_name or str(row.company_cik),
         fiscal_year=row.fiscal_year,
         fiscal_period=row.fiscal_period,
-        period_label=period_label(row.fiscal_year, row.fiscal_period),
+        period_label=period_label(row.fiscal_year, row.fiscal_period, instant=row.is_instant),
         granularity="annual" if row.fiscal_period == "FY" else "quarterly",
         period_start=row.period_start,
         period_end=row.period_end,
         is_instant=row.is_instant,
         value=row.value,
-        display=display(row.value, row.unit, row.derivation),
+        display=display(row.value, row.unit, row.derivation, as_multiple=kind == "multiple"),
         unit=row.unit,
-        unit_kind=unit_kind(row.unit),
+        unit_kind=kind,
         derivation=row.derivation,
+        compared_with=period_label(base.fiscal_year, base.fiscal_period) if base else None,
         citations=annotated.binding_keys,
     )
+
+
+#: What an across-companies row replaces rather than copies from its first member.
+_SPAN_FIELDS = {"company_cik", "company", "companies", "period_start", "period_end", "citations"}
+
+
+def _collapse_aggregates(rows: list[AnswerRow], result: ResultSet) -> list[AnswerRow]:
+    """One row per aggregate figure, naming every company it spans.
+
+    Only when it is provably one figure: the same value on every row, for every
+    company the metric bound. Anything less is refused -- an "average" that
+    differs by company is not a figure this can label honestly.
+    """
+    kept: list[AnswerRow] = []
+    groups: dict[tuple, list[AnswerRow]] = {}
+    for row in rows:
+        if row.derivation in AGGREGATES:
+            key = (row.element_id, row.derivation, row.fiscal_year, row.fiscal_period)
+            groups.setdefault(key, []).append(row)
+        else:
+            kept.append(row)
+
+    for (element_id, derivation, *_), members in groups.items():
+        ciks = sorted({row.company_cik for row in members})
+        if len(ciks) == 1:
+            kept += members  # one company's own aggregate is that company's figure
+            continue
+        bound = {c.company_cik for c in result.citations.values() if c.element_id == element_id}
+        if None not in bound and set(ciks) != bound:
+            raise PresentationError(
+                f"{derivation!r} rows cover {len(ciks)} of {len(bound)} companies"
+            )
+        if len({row.value for row in members}) != 1 or len(members) != len(ciks):
+            raise PresentationError(f"{derivation!r} differs across the companies it spans")
+        first = members[0]
+        starts = [row.period_start for row in members if row.period_start is not None]
+        kept.append(
+            AnswerRow(
+                **first.model_dump(exclude=_SPAN_FIELDS),
+                company_cik=None,
+                company=f"{len(ciks)} companies",
+                companies=sorted(row.company for row in members),
+                # The widest window: the companies' fiscal years differ (period_misalignment).
+                period_start=min(starts) if starts else None,
+                period_end=max(row.period_end for row in members),
+                citations=sorted({key for row in members for key in row.citations}, key=_key_order),
+            )
+        )
+    return kept
 
 
 def _order(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]) -> list[AnswerRow]:
@@ -118,7 +199,19 @@ def _order(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str])
     return ordered
 
 
-def _bars(rows: list[AnswerRow], result: ResultSet) -> list[BarView]:
+def _conditions(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]) -> list[str]:
+    """Each threshold, stated: a filtered list must say what it was filtered by."""
+    stated = []
+    for threshold in result.result.thresholds:
+        unit = next((row.unit for row in rows if row.element_id == threshold.element_id), None)
+        if unit is None:
+            continue  # nothing passed the bar: there are no rows for it to describe
+        metric = metrics.get(threshold.element_id, threshold.element_text)
+        stated.append(condition(metric, threshold.comparison, threshold.value, unit))
+    return stated
+
+
+def _bars(rows: list[AnswerRow], result: ResultSet, conditions: list[str]) -> list[BarView]:
     views = []
     for element_id, direction in result.result.rank.items():
         ranked = [i for i, row in enumerate(rows) if row.element_id == element_id]
@@ -129,8 +222,9 @@ def _bars(rows: list[AnswerRow], result: ResultSet) -> list[BarView]:
         if len(kinds) != 1:
             raise PresentationError(f"ranking {element_id!r} mixes unit kinds {sorted(kinds)}")
         shown = valued[:BAR_LIMIT]
-        first = rows[shown[0]]
-        title = f"{_name(first)} — {direction} first"
+        title = f"{_name(rows[shown[0]])} — {direction} first"
+        if conditions:
+            title += f" ({'; '.join(conditions)})"
         if len(valued) > len(shown):
             title += f", top {len(shown)} of {len(valued)}"
         views.append(
@@ -142,6 +236,28 @@ def _bars(rows: list[AnswerRow], result: ResultSet) -> list[BarView]:
             )
         )
     return views
+
+
+def _comparison(rows: list[AnswerRow]) -> list[BarView]:
+    """Bars for companies side by side on one figure -- "Apple or Microsoft?".
+
+    Sorted largest first for reading, which is not a ranking: the title says
+    what is compared, never "highest first".
+    """
+    if len({(row.element_id, row.derivation, row.period_label) for row in rows}) != 1:
+        return []  # several figures per company: the table says it better
+    if len({row.unit_kind for row in rows}) != 1 or any(row.value is None for row in rows):
+        return []
+    order = sorted(range(len(rows)), key=lambda i: rows[i].value, reverse=True)
+    first = rows[order[0]]
+    return [
+        BarView(
+            title=f"{_name(first)}, {first.period_label}",
+            unit_kind=first.unit_kind,
+            order="descending",
+            rows=order,
+        )
+    ]
 
 
 def _lines(rows: list[AnswerRow]) -> list[LineView]:
@@ -182,4 +298,13 @@ def _name(row: AnswerRow) -> str:
 
 
 def _title(row: AnswerRow) -> str:
-    return f"{row.company} — {_name(row)}, {row.period_label}"
+    when = f"as of {row.period_end.isoformat()}" if row.is_instant else row.period_label
+    if row.compared_with:
+        when += f" vs {row.compared_with}"  # a change says what it is measured from
+    if row.companies:
+        return f"{_name(row)} across {row.company}, {when}"  # "R&D spend average across 14 …"
+    return f"{row.company} — {_name(row)}, {when}"
+
+
+def _key_order(key: str) -> int:
+    return int(key[1:])  # "b10" after "b9"

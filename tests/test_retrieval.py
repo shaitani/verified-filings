@@ -760,6 +760,30 @@ def test_a_cagr_is_one_cell_over_the_span() -> None:
     assert "power((c0) / (c1), 1.0 / max(w.span_years)) - 1" in cell.expression
 
 
+def test_every_over_time_cell_knows_the_base_it_was_computed_from() -> None:
+    """The Presenter's "vs FY2021" comes from the same pairs as the statement."""
+    from app.retrieval.prompt import over_time_bases
+
+    plan = _growth_plan()
+    bases = over_time_bases(plan)
+    assert len(bases) == len(plan_cells(plan))  # one per cell, from one loop
+    pairs = {(key[2], base.fiscal_year) for key, base in bases.items()}
+    assert pairs == {(2022, 2021), (2023, 2022)}
+    (cagr,) = over_time_bases(_growth_plan("cagr", years=(2021, 2022, 2023, 2024, 2025))).values()
+    assert cagr.fiscal_year == 2021
+
+
+def test_a_plan_and_its_result_cannot_disagree_about_thresholds() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas.query import QueryPlan
+
+    plan = _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)])
+    dumped = plan.model_dump(mode="json") | {"thresholds": [_threshold().model_dump(mode="json")]}
+    with pytest.raises(ValidationError, match="result.thresholds must equal"):
+        QueryPlan.model_validate(dumped)
+
+
 def test_an_over_time_statement_validates_and_carries_its_derivation() -> None:
     from app.retrieval.prompt import emit_figures, figures_select
     from app.retrieval.validator import validate

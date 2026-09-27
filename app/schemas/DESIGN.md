@@ -492,7 +492,14 @@ questions, and folding them together is how the dimension got missed in the
 first place.
 
 `ResultSet.result` carries a copy (2026-09-27), because the presenter chooses
-the view from it and never sees the plan (retrieval DESIGN §5).
+the view from it and never sees the plan (retrieval DESIGN §5). For the same
+reason it carries the ranking direction (`rank`) and the plan's `thresholds` —
+a filtered list has to say what filtered it. `QueryPlan` refuses a result whose
+thresholds differ from its own, so the two copies cannot drift.
+
+`Binding.display_as` (2026-09-27) is the curated reading of a dimensionless
+result: `multiple` makes a current ratio `0.89×`, not `89%`. The unit (`pure`)
+cannot say which; semantic DESIGN §8f.
 
 ### 8.14a `unit` and `operand_unit` are different questions
 
