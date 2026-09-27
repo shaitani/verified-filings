@@ -845,10 +845,16 @@ in the prompt and could be structure instead:
   rule 4 and the `NULL::text` alias trap with it.
 - **`LIMIT`.** Rule 3 exists only because nothing adds one; §4.3c is two words
   in that rule costing fifteen rows.
-- **The operand expression.** `max(v.value) FILTER (WHERE operand = N)` per
-  `cN` is mechanical substitution into `Binding.expression`. Doing it here
-  would close §9's "same-unit arithmetic has no structural check", which is
-  currently defended by a prompt line alone.
+- **The operand expression — done for plans that compute nothing.**
+  `max(v.value) FILTER (WHERE operand = N)` per `cN` is mechanical
+  substitution into `Binding.expression`, and `prompt.plain_select` now does
+  it: a plan that is not `rank` / `derive`, has no threshold, and has a
+  multi-operand metric gets its whole SELECT written in Python and the model
+  is not asked (2026-09-26). Measured cold: q007's gross margins went from
+  `c0 - c1` in USD (refused) to the six margins, and q024's NVIDIA free cash
+  flow from 64.1 billion — operating cash flow, the subtraction dropped, graded
+  `pass` — to 60.9. A ranking or derivation over such a metric is still
+  written by the model, and still defended by a prompt line alone.
 
 The pattern to keep in mind: a prompt rule exists because the model can get
 something wrong, so every rule names a candidate for deterministic emission.

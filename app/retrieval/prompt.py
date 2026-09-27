@@ -574,6 +574,72 @@ def _operand_terms(expression: str) -> str:
     return re.sub(r"c(\d+)", lambda m: term.format(n=m.group(1)), rendered)
 
 
+def _sql_literal(text: str) -> str:
+    return "'" + text.replace("'", "''") + "'"
+
+
+def plain_select(plan: QueryPlan) -> str | None:
+    """The SELECT for a plan whose answer is exactly its own cells, written
+    here rather than by the model -- or ``None`` when the model is needed.
+
+    Written here when every one of these holds:
+
+    * the intent is not ``rank`` / ``derive`` (nothing to compute above the
+      cells) and there is no threshold (nothing to filter);
+    * at least one metric is arithmetic over several concepts -- a margin, a
+      ratio, free cash flow -- because that is where the model has changed the
+      operator: q007, 2026-09-26, "gross margin" is ``c0 / c1`` and came back
+      as ``c0 - c1`` in USD, with this very expression in the worked example
+      it was shown. HANDOFF §6 and ``app/retrieval/DESIGN.md`` §4.6;
+    * each metric has one expression and one unit across its companies, so the
+      statement can say both per element.
+
+    Every term comes from the plan: ``Binding.expression`` through
+    ``_operand_terms`` (the helper the worked example already uses, with its
+    NULLIF around a divisor), and ``Binding.unit``. It is the combining example
+    with the plan's own values in it, and it still goes through ``validate()``
+    and ``execute()`` like anything the model writes.
+    """
+    if plan.intent in DERIVING_INTENTS or plan.thresholds:
+        return None
+    cells = plan_cells(plan)
+    if not any(cell.operands > 1 for cell in cells):
+        return None
+    shape_of: dict[str, tuple[str, str]] = {}
+    for cell in cells:
+        shape = (cell.expression, cell.result_unit)
+        if shape_of.setdefault(cell.element_id, shape) != shape:
+            return None
+
+    def per_element(render) -> str:
+        whens = "".join(
+            f" WHEN {_sql_literal(element)} THEN {render(expression, unit)}"
+            for element, (expression, unit) in shape_of.items()
+        )
+        return f"CASE w.element_id{whens} END"
+
+    value = per_element(lambda expression, _: _operand_terms(expression))
+    unit = per_element(lambda _, unit: _sql_literal(unit))
+    return f"""SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
+       w.fiscal_year, w.fiscal_period,
+       v.period_start, v.period_end, v.is_instant,
+       {value} AS value,
+       {unit} AS unit,
+       NULL::text AS derivation
+FROM {CTE_NAME} w
+JOIN {VIEW} v
+  ON  v.company_cik = w.company_cik
+  AND v.concept_id  = w.concept_id
+  AND v.unit        = w.unit
+  AND v.is_instant  = w.is_instant
+  AND v.period_end  = w.window_end
+  AND (w.is_instant OR v.period_start = w.window_start)
+GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,
+         w.fiscal_year, w.fiscal_period,
+         v.period_start, v.period_end, v.is_instant
+LIMIT {MAX_ROWS}"""
+
+
 def _example_combining(expression: str, unit: str) -> str:
     """The combined-answer example, in this plan's own operator.
 

@@ -30,7 +30,7 @@ import httpx
 from ollama import AsyncClient
 
 from app.config import settings
-from app.retrieval.prompt import build_prompt, emit_cte, plan_cells
+from app.retrieval.prompt import build_prompt, emit_cte, plain_select, plan_cells
 from app.schemas.query import QueryPlan
 
 #: The model that writes the SQL. Mirrored in ``docker-compose.yml``'s pull
@@ -141,6 +141,14 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     violation, so it travels on the channel that already means the machinery
     failed rather than the one that means the model wrote something wrong.
     """
+    # A plan whose answer is its own cells, with a metric that is arithmetic
+    # over several concepts, gets its SELECT written in Python and the model is
+    # not asked: q007's model turned `c0 / c1` into `c0 - c1`. See
+    # ``prompt.plain_select``.
+    select = plain_select(plan)
+    if select is not None:
+        return emit_cte(plan_cells(plan)) + chr(10) + select
+
     client = AsyncClient(host=settings.embedding_url, timeout=REQUEST_TIMEOUT)
     try:
         response = await client.generate(

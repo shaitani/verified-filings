@@ -273,12 +273,17 @@ In rough order of how much they matter.
   is [C], which deliberately does not do it yet: it needs the eval runner
   first, so the gate can be measured rather than guessed at
   (`app/parser/DESIGN.md` §7).
-- **Same-unit arithmetic rests on the prompt alone.** A ratio in the wrong
-  unit is caught — `execute()` refuses a row whose unit is not the binding's —
-  but `free_cash_flow` is `c0 - c1` over two USD concepts, so a wrong operator
-  is a wrong number in the right unit. It happened once, live: free cash flow
-  as 12.5 rather than 108.8 billion, attributable, verdict `complete`. Fixed
-  in the prompt; there is no structural check behind it.
+- **Same-unit arithmetic rests on the prompt alone — for `rank` and `derive`
+  plans.** A ratio in the wrong unit is caught — `execute()` refuses a row
+  whose unit is not the binding's — but `free_cash_flow` is `c0 - c1` over two
+  USD concepts, so a wrong operator is a wrong number in the right unit. It
+  happened live, twice: free cash flow as 12.5 rather than 108.8 billion, and
+  NVIDIA's FY2025 free cash flow as 64.1 billion (operating cash flow, the
+  subtraction dropped) rather than 60.9 — both attributable, verdict
+  `complete`. For every other plan with a multi-operand metric the SELECT is
+  now written in Python from `Binding.expression` (`prompt.plain_select`), so
+  the operator cannot change. A ranking or a derivation over such a metric is
+  still the model's to write, with no structural check behind it.
 - **The eval set has a runner but no full-run number yet.**
   `evals/run.py` is [B] with the browser, the state and [F] taken out: it
   calls `parse_question` → `map_query` → `answer` over the 56 questions and

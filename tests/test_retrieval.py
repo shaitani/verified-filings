@@ -588,3 +588,63 @@ def test_the_prompt_states_the_comparison_when_the_plan_carries_one() -> None:
 
 def test_the_prompt_says_nothing_about_thresholds_when_there_are_none() -> None:
     assert "FEWER rows" not in build_prompt(_plan([_binding()], [_annual()]))
+
+
+# --------------------------------------------------------------------------- #
+# plain_select -- the SELECT for a multi-operand plan, written without the model
+# --------------------------------------------------------------------------- #
+
+
+def _margin_binding(cik: int = APPLE, element_id: str = "e1") -> Binding:
+    return _binding(
+        element_id=element_id,
+        company_cik=cik,
+        concepts=[_concept(435, "GrossProfit"), _concept(252, "Revenues")],
+        expression="c0 / c1",
+        unit="pure",
+        operand_unit="USD",
+    )
+
+
+def _margin_plan(intent: str = "compare") -> QueryPlan:
+    return _plan(
+        [_margin_binding(APPLE), _margin_binding(NVIDIA)],
+        [_annual(APPLE), _annual(NVIDIA)],
+        intent=intent,
+        companies=2,
+        shape="series",
+        axes=["company"],
+    )
+
+
+def test_a_margin_plan_gets_its_select_written_from_the_plan() -> None:
+    """q007: the plan says `c0 / c1` in `pure`, so the statement says exactly
+    that -- the model is never asked to type the operator."""
+    from app.retrieval.prompt import plain_select
+    from app.retrieval.validator import validate
+
+    select = plain_select(_margin_plan())
+    assert select is not None
+    assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in select
+    assert "THEN 'pure'" in select and " - " not in select.split("AS value")[0]
+    sql = prompt_module.emit_cte(plan_cells(_margin_plan())) + chr(10) + select
+    assert validate(sql) == sql
+
+
+def test_plain_select_leaves_the_model_what_the_model_is_for() -> None:
+    from app.retrieval.prompt import plain_select
+
+    assert plain_select(_margin_plan(intent="rank")) is None, "a ranking computes"
+    assert plain_select(_margin_plan(intent="derive")) is None
+    single = _plan([_binding()], [_annual()], intent="compare")
+    assert plain_select(single) is None, "single-operand plans are out of scope"
+
+
+async def test_generate_does_not_ask_the_model_for_a_margin_plan(monkeypatch) -> None:
+    class NoModel:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("the model was asked")
+
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", NoModel)
+    sql = await generate(_margin_plan())
+    assert sql.startswith("WITH wanted(") and "AS value" in sql
