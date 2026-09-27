@@ -31,6 +31,8 @@ question can be graded ``pass`` while returning a wrong number, and has been.
 from __future__ import annotations
 
 import argparse
+import asyncio
+import sys
 import time
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -53,6 +55,7 @@ from evals.run import (
 )
 
 DEFAULT_OUT = Path("data/question-walkthrough.md")
+STATUS_WIDTH = 100  # the live status line, padded so a shorter one overwrites a longer
 
 MARK = {"pass": "PASS", "fail": "FAIL", "unsafe": "UNSAFE", "ungraded": "n/a"}
 
@@ -291,6 +294,43 @@ def _header(tally: dict[str, list[str]], scope: str) -> list[str]:
     return head + ["---", ""]
 
 
+def _clock(seconds: float) -> str:
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes}:{seconds:02d}"
+
+
+def _graded(tally: dict[str, list[str]]) -> str:
+    graded = f"pass {len(tally.get('pass', []))}  fail {len(tally.get('fail', []))}"
+    if tally.get("unsafe"):
+        graded += f"  UNSAFE {len(tally['unsafe'])}"
+    return graded
+
+
+async def _status(
+    index: int,
+    total: int,
+    qid: str,
+    started: float,
+    run_started: float,
+    tally: dict[str, list[str]],
+) -> None:
+    """Rewrite one terminal line, once a second, until cancelled.
+
+    Only used when stdout is a terminal. Redirected to a file, carriage returns
+    are noise, so the run prints a line per question instead -- which is what
+    the walkthrough skill reads from its log.
+    """
+    while True:
+        now = time.perf_counter()
+        line = (
+            f"[{index}/{total}] {qid}  {_clock(now - started)} on this question"
+            f"  |  {_clock(now - run_started)} total  |  {_graded(tally)}"
+        )
+        sys.stdout.write("\r" + line.ljust(STATUS_WIDTH))
+        sys.stdout.flush()
+        await asyncio.sleep(1)
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(
         prog="evals/walkthrough.py",
@@ -299,6 +339,12 @@ async def main() -> None:
     parser.add_argument("start", nargs="?", help="first question id, e.g. q020")
     parser.add_argument("end", nargs="?", help="last question id, e.g. q029")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output markdown file")
+    parser.add_argument(
+        "--log",
+        type=Path,
+        help="also write the per-question lines and the summary here, for a caller that "
+        "watches the run while the terminal shows the live status line",
+    )
     args = parser.parse_args()
 
     document = yaml.safe_load(QUESTIONS.read_text("utf-8"))
@@ -312,37 +358,70 @@ async def main() -> None:
     scope = f"Questions {todo[0]['id']}–{todo[-1]['id']}"
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
+    live = sys.stdout.isatty()
+    log = args.log.open("w", encoding="utf-8", newline="\n") if args.log else None
+
+    def note(line: str, *, summary: bool = False) -> None:
+        """A per-question line goes to the terminal only when there is no live
+        status line to replace it; the summary always does. Both go to ``--log``."""
+        if summary or not live:
+            print(line, flush=True)
+        if log:
+            log.write(line + "\n")
+            log.flush()
+
     sections: list[str] = []
     tally: dict[str, list[str]] = {}
     run_started = time.perf_counter()
-    for index, entry in enumerate(todo, 1):
-        print(f"[{index}/{len(todo)}] {entry['id']}", flush=True)
-        started = time.perf_counter()
-        stages: dict[str, float] = {}
-        try:
-            g = await one(entry, sections, stages)
-        except Exception as exc:  # a harness fault is a data point, not a reason to stop
-            sections += [f"**Harness error:** `{type(exc).__name__}: {exc}`", ""]
-            g = "error"
-        elapsed = time.perf_counter() - started
-        split = ", ".join(f"{name} {seconds:.1f}s" for name, seconds in stages.items())
-        split = f" ({split})" if split else ""
-        print(f"    {entry['id']} {g} in {elapsed:.1f}s{split}", flush=True)
-        tally.setdefault(g, []).append(entry["id"])
-        sections += [f"**Time:** {elapsed:.1f}s{split}", "", "---", ""]
-        args.out.write_text(
-            "\n".join(_header(tally, scope) + sections), encoding="utf-8", newline="\n"
-        )
+    try:
+        for index, entry in enumerate(todo, 1):
+            started = time.perf_counter()
+            note(f"[{index}/{len(todo)}] {entry['id']}")
+            if live:
+                status = asyncio.create_task(
+                    _status(index, len(todo), entry["id"], started, run_started, tally)
+                )
+            stages: dict[str, float] = {}
+            try:
+                g = await one(entry, sections, stages)
+            except Exception as exc:  # a harness fault is a data point, not a reason to stop
+                sections += [f"**Harness error:** `{type(exc).__name__}: {exc}`", ""]
+                g = "error"
+            finally:
+                if live:
+                    status.cancel()
+            elapsed = time.perf_counter() - started
+            split = ", ".join(f"{name} {seconds:.1f}s" for name, seconds in stages.items())
+            split = f" ({split})" if split else ""
+            note(f"    {entry['id']} {g} in {elapsed:.1f}s{split}")
+            tally.setdefault(g, []).append(entry["id"])
+            sections += [f"**Time:** {elapsed:.1f}s{split}", "", "---", ""]
+            args.out.write_text(
+                "\n".join(_header(tally, scope) + sections), encoding="utf-8", newline="\n"
+            )
+    except BaseException as exc:  # Ctrl-C included: a watcher waiting on --log must hear of it
+        if live:
+            sys.stdout.write("\n")
+        note(f"ABORTED {type(exc).__name__}: {exc}", summary=True)
+        raise
+    finally:
+        if live:
+            sys.stdout.write("\r" + " " * STATUS_WIDTH + "\r")
 
-    minutes, seconds = divmod(time.perf_counter() - run_started, 60)
-    print(f"TOTAL TIME {int(minutes)}m{seconds:04.1f}s", flush=True)
-    print("TALLY " + repr({k: len(v) for k, v in tally.items()}), flush=True)
+    run_time = time.perf_counter() - run_started
+    note(
+        f"FINAL [{len(todo)}/{len(todo)}] done  |  {_clock(run_time)} total  |  {_graded(tally)}",
+        summary=True,
+    )
+    minutes, seconds = divmod(run_time, 60)
+    note(f"TOTAL TIME {int(minutes)}m{seconds:04.1f}s", summary=True)
+    note("TALLY " + repr({k: len(v) for k, v in tally.items()}), summary=True)
     for key, values in sorted(tally.items()):
-        print(f"  {key}: {', '.join(values)}", flush=True)
-    print(f"written: {args.out}", flush=True)
+        note(f"  {key}: {', '.join(values)}", summary=True)
+    note(f"written: {args.out}", summary=True)
+    if log:
+        log.close()
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())
