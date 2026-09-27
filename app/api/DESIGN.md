@@ -21,8 +21,8 @@ and changes what [F] is (§2).
 
 `app/api/` and a top-level `web/` are where `sec-retriever.md` §3 put them
 from the start; `app/db/DESIGN.md` §5 puts request/response models in
-`app/api/`, not `app/schemas/`. [F]'s section moves to
-`app/presenter/DESIGN.md` when that package exists.
+`app/api/`, not `app/schemas/`. [F] is built; its own
+decisions are in `app/presenter/DESIGN.md`.
 
 ---
 

@@ -46,7 +46,7 @@ QueryPlan                concrete coordinates, caveats, cardinality
                                         vf_retrieval_role
    ↓  app/schemas/result.py
 ResultSet                rows + citations + verdict + notes + ResultSpec
-   ↓  app/presenter/     [F] Presenter        ResultSet → AnswerView   NOT BUILT
+   ↓  app/presenter/     [F] Presenter        ResultSet → AnswerView   built
    ↓  app/api/           [B] Web Server       FastAPI                  NOT BUILT
    ↓  web/               [A] Web Client       Angular                  NOT BUILT
 ```
@@ -68,12 +68,13 @@ and that is known, not an oversight.
 | [C] | Query Parser | **built** | `app/parser/` |
 | [D] | Query Mapper | built | `app/semantic/query_mapper.py` |
 | [E] | Executor | built | `app/retrieval/` |
-| [F] | Presenter | not built | `app/presenter/` — `ResultSet → AnswerView`, no model |
+| [F] | Presenter | built | `app/presenter/` — `ResultSet → AnswerView`, no model |
 | [G] | Store | built | `app/db/` |
 | [H] | Ingest | built | `app/ingest/` |
 
-[A], [B] and [F] are designed, not built: read
-[`app/api/DESIGN.md`](app/api/DESIGN.md). [A] and [B] were renamed on
+[A] and [B] are designed, not built: read
+[`app/api/DESIGN.md`](app/api/DESIGN.md). [F] is built (2026-09-27):
+[`app/presenter/DESIGN.md`](app/presenter/DESIGN.md). [A] and [B] were renamed on
 2026-09-27 from Ask UI and Web Display.
 
 There is **no three-way branch** — answer / clarify / refuse. A question is
@@ -109,12 +110,13 @@ The rule that still stands: **do not build a stand-in for either end.** A
 surrogate gets measured and tuned, and then the real thing behaves
 differently, which is worse than no measurement.
 
-**[F] Presenter is not built, and is no longer prose.** `ResultSet →
+**[F] Presenter is built, and is not prose.** `ResultSet →
 AnswerView`, a typed structure the Web Client renders as a chart, a table or a
 figure, written in Python with no model — a model retyping figures is a new
 place for a plausible wrong number. It never sees a plan (the `ResultSpec` it
 needs travels on the `ResultSet`), and it must carry `Note`s through verbatim.
-[`app/api/DESIGN.md`](app/api/DESIGN.md) §2.
+[`app/api/DESIGN.md`](app/api/DESIGN.md) §2,
+[`app/presenter/DESIGN.md`](app/presenter/DESIGN.md).
 
 Two burdens the parser does *not* carry: company names resolve through
 `company_aliases.json` (derived from SEC data, refreshed on every
@@ -541,6 +543,7 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 | [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
 | [`app/api/DESIGN.md`](app/api/DESIGN.md) | [A] [B] [F], the web end — designed, not built: the reply's parts, jobs and conversations, what to draw, logging |
+| [`app/presenter/DESIGN.md`](app/presenter/DESIGN.md) | [F] the Presenter — display strings, views by shape, what it refuses |
 | [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, the validator, and §4.3's catalogue of prompt failures |
 | [`app/parser/DESIGN.md`](app/parser/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
 | [`app/schemas/DESIGN.md`](app/schemas/DESIGN.md) | §8 = the query schemas, decision by decision |
