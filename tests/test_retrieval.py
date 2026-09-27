@@ -290,12 +290,11 @@ def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
 def test_every_example_begins_at_select() -> None:
     """The model is told to begin at SELECT, so no example may show it
     anything else -- a `WITH` or `VALUES` in one is copied."""
-    from app.retrieval.prompt import _FIGURES_EXAMPLE_DERIVE, _FIGURES_EXAMPLE_RANK
+    from app.retrieval.prompt import _FIGURES_EXAMPLE_DERIVE
 
-    for example in (_FIGURES_EXAMPLE_RANK, _FIGURES_EXAMPLE_DERIVE):
-        body = example.split("copy the FORM)", 1)[1]
-        assert body.strip().startswith("SELECT"), body[:60]
-        assert "WITH" not in body and "VALUES" not in body
+    body = _FIGURES_EXAMPLE_DERIVE.split("copy the FORM)", 1)[1]
+    assert body.strip().startswith("SELECT"), body[:60]
+    assert "WITH" not in body and "VALUES" not in body
 
 
 # --------------------------------------------------------------------------- #
@@ -360,8 +359,8 @@ class _FakeGenClient:
 
 
 def _one_cell_plan() -> QueryPlan:
-    """A ranking, because only a ranking or derivation reaches the model now."""
-    return _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)], intent="rank")
+    """A derivation, because only a derivation reaches the model now."""
+    return _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)], intent="derive")
 
 
 async def test_the_sql_ceiling_is_actually_sent(monkeypatch):
@@ -642,31 +641,34 @@ async def test_a_plain_lookup_is_answered_without_the_model(monkeypatch) -> None
         assert validate(sql) == sql
 
 
-async def test_a_ranking_over_a_margin_is_written_over_figures(monkeypatch) -> None:
-    """The model writes only the ordering; the statement it lands in computes
-    the margin itself, and validates."""
+def _ranked(plan: QueryPlan, **rank: str) -> QueryPlan:
+    return plan.model_copy(update={"result": plan.result.model_copy(update={"rank": rank})})
+
+
+async def test_a_ranking_is_ordered_in_python_without_the_model(monkeypatch) -> None:
+    """The direction is in the plan, so the ORDER BY is Python's (q009, q038)."""
     from app.retrieval.validator import validate
 
-    class Model:
+    class NoModel:
         def __init__(self, *args, **kwargs) -> None:
-            pass
+            raise AssertionError("the model was asked")
 
-        async def generate(self, **kwargs):
-            assert "operand" not in kwargs["prompt"]
-            return {
-                "done_reason": "stop",
-                "response": (
-                    "SELECT f.element_id, f.company_cik, f.ticker, f.entity_name, "
-                    "f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, "
-                    "f.is_instant, f.value, f.unit, NULL::text AS derivation "
-                    "FROM figures f ORDER BY f.value DESC LIMIT 500"
-                ),
-            }
-
-    monkeypatch.setattr("app.retrieval.generator.AsyncClient", Model)
-    sql = await generate(_margin_plan(intent="rank"))
-    assert "figures AS (" in sql and "FROM figures f ORDER BY f.value DESC" in sql
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", NoModel)
+    sql = await generate(_ranked(_margin_plan(intent="rank"), e1="highest"))
+    assert "ORDER BY element_id, CASE WHEN element_id IN ('e1') THEN value END DESC" in sql
     assert validate(sql) == sql
+
+
+def test_each_metric_is_ranked_in_its_own_direction() -> None:
+    from app.retrieval.prompt import FIGURES_SELECT, figures_select
+
+    plan = _ranked(_margin_plan(intent="rank"), e1="highest", e2="lowest")
+    select = figures_select(plan)
+    assert "IN ('e1') THEN value END DESC NULLS LAST" in select
+    assert "IN ('e2') THEN value END ASC NULLS LAST" in select
+    assert select.index("ORDER BY") < select.index("LIMIT")
+    # A plan with nothing to rank keeps the statement it always had.
+    assert figures_select(_margin_plan()) == FIGURES_SELECT
 
 
 async def test_generate_does_not_ask_the_model_for_a_margin_plan(monkeypatch) -> None:
@@ -772,16 +774,15 @@ def test_an_over_time_statement_validates_and_carries_its_derivation() -> None:
     assert validate(sql) == sql
 
 
-def test_the_model_is_asked_only_to_rank_an_over_time_metric() -> None:
-    """A derivation the over-time metric already computed is not derived again."""
-    from app.retrieval.prompt import needs_the_model
+def test_an_over_time_metric_never_reaches_the_model() -> None:
+    """Derived again it would be a growth of the growth; ranked, it is ordered
+    in Python. Either way `figures` already holds the answer."""
+    from app.retrieval.prompt import figures_select, needs_the_model
 
-    assert not needs_the_model(_growth_plan(intent="derive"))
-    assert not needs_the_model(_growth_plan(intent="trend"))
-    assert needs_the_model(_growth_plan(intent="rank"))
-    text = build_prompt(_growth_plan(intent="rank"))
-    assert "m is its growth" in text and "f.derivation" in text
-    assert "operand" not in text and "c0" not in text
+    for intent in ("derive", "trend", "rank"):
+        assert not needs_the_model(_growth_plan(intent=intent)), intent
+    select = figures_select(_ranked(_growth_plan(intent="rank"), m="highest"))
+    assert "value, unit, derivation" in select and "DESC NULLS LAST" in select
 
 
 # --------------------------------------------------------------------------- #

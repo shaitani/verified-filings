@@ -399,6 +399,42 @@ example carry it. "Has Intel's R&D spending increased or decreased since
 2021?" deliberately does not — it asks for a series to be judged, which the
 model still derives.
 
+### 10c. `rank` — which end of a ranking comes first
+
+Added 2026-09-27. A `rank` question said *that* it ordered by a metric and not
+*which way*; the direction lived only in the English, and the SQL model read it
+from there. The metric element now carries `rank: highest | lowest`, and
+`accept()` requires it on some metric of a `rank` question and refuses it on
+any other — both repairable. "Largest decline" is `lowest`: the change most
+below zero comes first. The mapper copies it onto `ResultSpec.rank` for the
+metrics that bound, and from there Python writes the `ORDER BY` (retrieval
+DESIGN §4.6) and the Presenter sorts by it without seeing the plan.
+
+**Taught by example, like `clarify_as`**: the five ranking examples carry it,
+one of them `lowest`, and a test holds every ranking example to showing it.
+
+**What adding it broke, and how that was found.** The eval set passed cold, 13
+of 13 including the colon lists. The clarification round trip is not in the
+eval set, and it broke: "Which quarter is Costco's strongest?" answered
+"Total revenue" re-parsed with **no company element** on 2 of 2 cold runs —
+so the scope widened to every filer and the answer was a confident ranking of
+all 20 companies' quarters, verdict `complete`. The code before the change
+kept Costco on 2 of 2.
+
+A variant harness found the cause in one pass: `rank` on the rule-3 example
+("Which company had the highest operating income in 2024?"), the one ranking
+that deliberately names no company. Carrying the same field as the Apple
+ranking, it taught "a ranking names no company". Moving it beside the Apple
+example — a contrasting pair, as in §9 — kept Costco on 4 of 4. Two things
+worth keeping from this:
+
+- **A dropped company is silent.** A question naming no company means every
+  filer (HANDOFF §3), so a company the model omits widens the scope rather
+  than failing. Nothing structural catches it; see HANDOFF §6.
+- **The round trip needs measuring too.** It runs a different prompt (the
+  answers are appended), and a prompt change can move it when the first pass
+  is untouched.
+
 ### 10a. `clarify_as` — the parser names the question
 
 Added 2026-09-26, from q043: "how much money was made" is revenue or net

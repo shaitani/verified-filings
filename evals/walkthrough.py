@@ -51,6 +51,7 @@ from evals.run import (
     grade,
     observe,
     pair,
+    rank_miss,
     substitute,
 )
 
@@ -219,7 +220,10 @@ async def one(entry: dict, out: list[str], stages: dict[str, float]) -> str:
     else:
         observed = observe(query, plan, result)
     items = pair(expected, observed)
-    g = grade(items, expected_count=len(expected), stage="answer")
+    miss = rank_miss(entry, query)
+    g = grade(items, expected_count=len(expected), stage="answer", miss=miss)
+    if miss:
+        out += [f"**Ranking direction wrong.** {miss}", ""]
 
     out += ["**Expected vs got**", "", "| # | item | expected | got | |", "|---|---|---|---|---|"]
     for index, item in enumerate(items, 1):

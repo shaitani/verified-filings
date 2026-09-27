@@ -631,3 +631,8 @@ Three additions, each with its full reasoning elsewhere:
   `periods` so nothing counts or reports them. Which periods pair up is one
   rule, `over_time_pairs`, beside `previous_period` in this module, so the
   mapper and retrieval cannot disagree. Retrieval DESIGN §4.8.
+- **`MetricElementIn.rank`** (`highest` / `lowest`, `RankDirection`) and
+  **`ResultSpec.rank`** (2026-09-27) — which end of a ranking comes first, in
+  the asker's words. `QueryIn` refuses it outside a `rank` question. On
+  `ResultSpec` it is keyed by element and holds only metrics that bound, and
+  it rides on `ResultSet` to the Presenter. Parser DESIGN §10c.

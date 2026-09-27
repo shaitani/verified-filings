@@ -19,6 +19,7 @@ from evals.run import (
     expected_for,
     grade,
     pair,
+    rank_miss,
     substitute,
 )
 
@@ -95,6 +96,12 @@ def test_shape_values_are_known(questions) -> None:
     for q in questions:
         if "shape" in q:
             assert q["shape"] in SHAPES, q["id"]
+
+
+def test_rank_values_are_known(questions) -> None:
+    for q in questions:
+        if "rank" in q:
+            assert q["rank"] in ("highest", "lowest"), q["id"]
 
 
 def test_expect_is_a_list_of_known_values(questions) -> None:
@@ -278,3 +285,17 @@ def test_every_template_question_carries_the_placeholder(questions) -> None:
     for q in questions:
         has_placeholder = "<Company>" in q["question"]
         assert has_placeholder == bool(q.get("template", False)), q["id"]
+
+
+def test_a_ranking_read_backwards_fails_even_with_every_item_answered() -> None:
+    from app.schemas.query import QueryIn
+
+    query = QueryIn.model_validate({
+        "question": "q", "intent": "rank",
+        "elements": [{"id": "e1", "kind": "metric", "text": "revenue", "rank": "lowest"}],
+    })
+    miss = rank_miss({"rank": "highest"}, query)
+    assert miss == "rank: want highest, got lowest"
+    items = _items(("revenue", "answered", "answered"))
+    assert grade(items, expected_count=1, stage="answer", miss=miss) == "fail"
+    assert rank_miss({"rank": "lowest"}, query) == "" and rank_miss({}, query) == ""

@@ -382,6 +382,67 @@ def test_over_time_belongs_to_metrics_only():
         accept(reply, "What was Apple's revenue growth in 2024?")
 
 
+def _ranking(**metric) -> str:
+    return _reply(
+        intent=metric.pop("intent", "rank"),
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "operating income", **metric},
+            {"id": "e2", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+    )
+
+
+RANKING = "Which company had the highest operating income in 2024?"
+
+
+def test_rank_is_carried_to_the_metric():
+    (metric,) = [e for e in accept(_ranking(rank="highest"), RANKING).elements
+                 if e.kind == "metric"]
+    assert metric.rank == "highest"
+
+
+def test_a_ranking_must_say_which_end_comes_first():
+    """Without it the order is a guess, and the wrong order is a plausible
+    wrong answer. Refused with the fix named, so the repair can make it."""
+    with pytest.raises(MalformedProposal, match='"rank": "highest" or "rank": "lowest"'):
+        accept(_ranking(), RANKING)
+
+
+def test_rank_on_a_question_that_is_not_a_ranking_is_refused():
+    with pytest.raises(MalformedProposal, match="carry `rank` but intent is 'lookup'"):
+        accept(_ranking(rank="highest", intent="lookup"), RANKING)
+
+
+def test_rank_belongs_to_metrics_only():
+    reply = _reply(
+        intent="rank",
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "operating income", "rank": "highest"},
+            {"id": "e2", "kind": "period", "text": "2024", "fiscal_year": 2024, "rank": "lowest"},
+        ],
+    )
+    with pytest.raises(MalformedProposal, match="only a metric"):
+        accept(reply, RANKING)
+
+
+def test_the_grammar_allows_exactly_two_directions():
+    rank = WIRE_SCHEMA["$defs"]["WireElement"]["properties"]["rank"]["anyOf"]
+    assert {"enum": ["highest", "lowest"], "type": "string"} in rank
+
+
+def test_every_ranking_example_says_which_end_comes_first():
+    """Taught by example, like clarify_as (DESIGN §10a) -- so every example of a
+    ranking must show it, and "lowest" must be shown at least once."""
+    directions = []
+    for question, reply in _EXAMPLES:
+        parsed = json.loads(reply)
+        if parsed["intent"] == "rank":
+            ranked = [e["rank"] for e in parsed["elements"] if "rank" in e]
+            assert ranked, question
+            directions += ranked
+    assert "lowest" in directions and "highest" in directions
+
+
 def test_an_invented_company_is_refused():
     reply = _reply(
         elements=[
@@ -839,7 +900,7 @@ def test_a_threshold_carries_its_number_as_a_decimal() -> None:
         _reply(
             intent="rank",
             elements=[
-                {"id": "e1", "kind": "metric", "text": "revenue"},
+                {"id": "e1", "kind": "metric", "text": "revenue", "rank": "highest"},
                 {
                     "id": "e2",
                     "kind": "metric_threshold",

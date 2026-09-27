@@ -399,18 +399,20 @@ In rough order of how much they matter.
   (`evals/README.md`). When a run says `pass`, that means the chain made the
   right call about whether to answer — not that the number is right.
 
-- **What Qwen still writes has no structural check.** A ranking or a
-  derivation over `figures` is the model's, and the statement is checked for
-  shape, not for meaning. Measured failures of that layer: q038's `LIMIT 1`
-  (§4.3), q040 leaving `unit` out of an average (refused, now a prompt rule).
+- **What Qwen still writes has no structural check.** A derivation over
+  `figures` is the model's, and the statement is checked for shape, not for
+  meaning. Measured failure of that layer: q040 leaving `unit` out of an
+  average (refused, now a prompt rule). Rankings are no longer the model's
+  (below).
   The old `_JOB_EITHER` choice between "copy" and "compute", which improvised
   arithmetic when its example was missing, is gone with the path that used it.
 - **TODO — retire Qwen as a SQL emitter entirely.** The user's stated
-  direction (2026-09-27), deliberately not started yet. What Qwen still writes
-  is an ordering (q009, q014, q038, q039) or an aggregate (q040's average) —
-  trivial SQL; its only contribution is reading which one the question wants.
-  Move that reading into the parser as a closed list, the pattern that worked
-  for `clarify_as` and `over_time`: e.g. `rank: highest | lowest`,
+  direction (2026-09-27). **Rankings are done** (parser DESIGN §10c): the
+  parser marks `rank: highest | lowest`, Python writes the `ORDER BY`, and q009,
+  q014, q038 and q039 no longer reach Qwen; eval entries pin the direction
+  (`rank:`). What Qwen still writes is an aggregate (q040's average) or another
+  derivation. Move that reading into the parser as a closed list too, the
+  pattern that worked for `clarify_as`, `over_time` and `rank`:
   `aggregate: average | sum | min | max`, `share_of_total`, `difference`,
   grammar-constrained and checked in `accept()`. Python then writes every
   statement from a fixed template over `figures`; an operation not on the list
@@ -419,6 +421,14 @@ In rough order of how much they matter.
   operation in the answer, pin it in eval expectations); long-tail operations
   Qwen improvises today stop working until listed; and it is another parser
   prompt change, so re-measure the colon-list questions cold.
+- **A company the parser drops widens the question silently.** Naming no
+  company means every filer, so an omitted company element is not a refusal —
+  it is an answer about all twenty. Measured 2026-09-27: a prompt change made
+  the q018 round trip drop "Costco" and rank every filer's quarters, verdict
+  `complete` (parser DESIGN §10c; fixed by example order, not by a check). The
+  structural fix would mirror the faithfulness gate: refuse a parse when the
+  question contains a known company alias no company element covers. Not
+  built; it needs measuring for short aliases that occur as ordinary words.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the

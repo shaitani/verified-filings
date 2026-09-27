@@ -271,7 +271,20 @@ def pair(expected: list[str], observed: list[tuple[str, Outcome]]) -> list[Item]
     return items
 
 
-def grade(items: list[Item], *, expected_count: int, stage: Stage) -> Grade:
+def rank_miss(entry: dict, query: QueryIn) -> str:
+    """Why the parsed ranking direction is not the one written down; "" if it is.
+
+    A wrong direction answers every item and still ranks backwards -- a
+    plausible wrong answer no outcome would catch -- so ``rank`` pins it.
+    """
+    want = entry.get("rank")
+    if want is None:
+        return ""
+    got = sorted({e.rank for e in query.elements if e.kind == "metric" and e.rank})
+    return "" if got == [want] else f"rank: want {want}, got {', '.join(got) or 'none'}"
+
+
+def grade(items: list[Item], *, expected_count: int, stage: Stage, miss: str = "") -> Grade:
     """Did the chain do what was written down for every item?
 
     ``unsafe`` is kept out of ``fail`` because the two are not comparable. A
@@ -283,6 +296,8 @@ def grade(items: list[Item], *, expected_count: int, stage: Stage) -> Grade:
         return "ungraded"
     if any(item.expected in {"refused", "asked"} and item.got == "answered" for item in items):
         return "unsafe"
+    if miss:  # the ranking's direction, from `rank_miss`
+        return "fail"
     return "pass" if all(item.ok for item in items) else "fail"
 
 
@@ -327,15 +342,16 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
     question = substitute(entry["question"], template=template)
     expected = expected_for(entry)
     started = time.monotonic()
+    miss = ""  # set once the question parses; see `rank_miss`
 
     def done(observed: list[tuple[str, Outcome]], detail: str = "", **fields) -> Run:
         items = pair(expected, observed)
         return Run(
             id=entry["id"],
             question=question,
-            grade=grade(items, expected_count=len(expected), stage=stage),
+            grade=grade(items, expected_count=len(expected), stage=stage, miss=miss),
             items=items,
-            detail=detail,
+            detail="; ".join(part for part in (miss, detail) if part),
             template=template,
             seconds=time.monotonic() - started,
             **fields,
@@ -353,6 +369,7 @@ async def run_one(entry: dict, *, stage: Stage, parser_model: str | None) -> Run
             detail=f"{type(exc).__name__}: {exc}",
         )
 
+    miss = rank_miss(entry, query)
     if stage == "parse":
         return done([(e.text, "answered") for e in query.elements if e.kind in ITEM_KINDS])
 

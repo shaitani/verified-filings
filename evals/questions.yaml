@@ -68,6 +68,7 @@ questions:
   - id: q009
     question: Which of these companies has the highest operating margin?
     expect: [answered]  # operating margin
+    rank: highest
     needs: [retrieval, ratio, ranking]
     exercises: [derived_metric]
     notes: >-
@@ -99,6 +100,7 @@ questions:
   - id: q014
     question: Which company grew revenue fastest between 2023 and 2024?
     expect: [answered]  # revenue
+    rank: highest
     needs: [retrieval, growth, ranking]
 
   - id: q015
@@ -133,6 +135,7 @@ questions:
   - id: q018
     question: Which quarter is Costco's strongest?
     expect: [asked]  # strongest -- curated, genuinely several things
+    rank: highest
     needs: [retrieval, ranking]
     exercises: [q4_residual]
 
@@ -276,12 +279,14 @@ questions:
   - id: q038
     question: Which company had the largest single-quarter revenue decline?
     expect: [answered]  # revenue
+    rank: lowest
     needs: [retrieval, growth, ranking, aggregation]
     exercises: [q4_residual]
 
   - id: q039
     question: List companies with more than 100 billion dollars in revenue last year.
     expect: [answered]  # revenue
+    rank: highest
     needs: [retrieval, multi_step]
     notes: A filter on the value itself rather than on a coordinate.
 
@@ -384,6 +389,7 @@ questions:
   - id: q049
     question: "Which companies in a given sector performed best: highest revenue, profit both quarterly and yearly"
     expect: [refused, refused]  # revenue, profit -- no sector scope to resolve against
+    rank: highest
     blocked_by: [sector_classification]
     shape: ranking
     needs: [retrieval, ranking]
@@ -500,3 +506,21 @@ questions:
       Now aliased and resolving. Still the live case for PITFALLS 1.14: the
       concept is filed under two units, so the multi-unit guard binds one and
       filers using the other fall out of coverage.
+
+  # --- a company the parser drops -------------------------------------------
+  - id: q057
+    question: Which quarter had the highest operating income at Costco in 2024?
+    expect: [answered]  # operating income
+    rank: highest
+    needs: [retrieval, ranking]
+    notes: >-
+      Probes HANDOFF 6's silent-widening gap: a dropped company element means
+      every filer, not a refusal. Worded to sit as close as possible to the
+      parser's rule-3 example ("Which company had the highest operating income
+      in 2024?"), the one ranking that names no company -- the example that
+      made the q018 round trip drop Costco (parser DESIGN 10c). The grade
+      cannot see the bug: dropped or kept, the metric is "answered". Read the
+      plan instead. Kept: 1 company, 4 rows, Costco's Q4 first (3.04B, a
+      16-week quarter, over 2.20B, 2.06B, 1.98B -- checked 2026-09-27).
+      Dropped: 16 filers report quarterly OperatingIncomeLoss, so about 64 rows
+      and a partial_coverage note naming the four that do not.

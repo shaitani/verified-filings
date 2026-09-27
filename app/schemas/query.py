@@ -142,6 +142,10 @@ Comparison = Literal["gt", "gte", "lt", "lte", "eq"]
 #: ``app/retrieval/DESIGN.md`` §4.8.
 OverTime = Literal["change", "growth", "cagr"]
 
+#: Which end of a ranking comes first. The asker's words, not SQL's: "highest",
+#: "fastest", "most" are highest; "lowest", "least", "largest decline" lowest.
+RankDirection = Literal["highest", "lowest"]
+
 #: Rendered into the SQL prompt, and the one place the mapping from name to
 #: operator lives.
 COMPARISON_SQL: dict[str, str] = {
@@ -210,6 +214,8 @@ class MetricElementIn(_ElementBase):
     #: "year-over-year change", "compound annual growth". ``text`` stays the
     #: metric ("revenue"); this says what to compute from it. See ``OverTime``.
     over_time: OverTime | None = None
+
+    rank: RankDirection | None = None  # set on the metrics a "rank" question orders by
 
 
 class CompanyElementIn(_ElementBase):
@@ -484,6 +490,16 @@ class QueryIn(_Base):
                     f"{element.qualifies!r}, which is not a metric element of this "
                     f"query (metrics: {sorted(metrics)})"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _rank_only_on_a_ranking(self) -> QueryIn:
+        ranked = [e.id for e in self.elements if e.kind == "metric" and e.rank is not None]
+        if ranked and self.intent != "rank":
+            # A direction on a lookup would order nothing, silently.
+            raise ValueError(
+                f"metric(s) {ranked} carry `rank` but intent is {self.intent!r}, not 'rank'"
+            )
         return self
 
     @model_validator(mode="after")
@@ -925,6 +941,10 @@ class ResultSpec(_Base):
     #: Which period granularities the result mixes. More than one means annual
     #: and quarterly figures share an axis, which is rarely what was wanted.
     granularities: list[PeriodGranularity] = Field(default_factory=list)
+
+    #: element_id -> which end comes first, for each bound metric a ranking
+    #: orders by. Rides on ResultSet so the Presenter never needs the plan.
+    rank: dict[str, RankDirection] = Field(default_factory=dict)
 
     @property
     def row_count(self) -> int:

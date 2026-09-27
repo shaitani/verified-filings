@@ -340,6 +340,28 @@ async def test_no_candidate_with_coverage_is_reported_not_guessed(
     assert "No filed figure for 'widget nothing'" in plan.unresolved[0].reason
 
 
+async def test_a_ranking_carries_its_direction_for_bound_metrics_only(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The direction reaches ResultSpec -- and so the Presenter -- only for a
+    metric that bound; a refused one has no rows to order."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric", "rank": "highest"},
+            {"id": "x", "text": "nothing like this", "kind": "metric", "rank": "lowest"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+            intent="rank",
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert {b.element_id for b in plan.bindings} == {"m"}
+    assert plan.result.rank == {"m": "highest"}
+
+
 async def test_multi_slot_alias_binds_every_operand(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:

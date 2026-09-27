@@ -14,9 +14,9 @@ that can reach exactly one relation -- the ``xbrl.reported_fact`` view.
 Qwen also does not write all of the SQL. Retrieval -- getting the values a
 ``Binding`` names -- is bounded to four shapes (direct/residual x
 instant/duration) and should be deterministic code. Qwen writes the layer
-*above* it: ranking, growth, ratios across companies, filters on computed
-values. Measured on the eval set, 20 of 45 answerable questions (44%) need
-that layer.
+*above* it: ratios across companies, filters on computed values. Measured on
+the eval set, 20 of 45 answerable questions (44%) needed that layer when it
+also held rankings and growth, which Python now writes (DESIGN §4.6, §4.8).
 
 Each function does one job and only it does that job:
 

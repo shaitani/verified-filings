@@ -384,8 +384,8 @@ def uses_figures(plan: QueryPlan) -> bool:
     derivation, as one curated entry always gives.
 
     Python writes the fetch, the metric arithmetic, the threshold and any
-    change, growth or CAGR, in `figures`; the model is asked for nothing but a
-    ranking or a derivation above it (``needs_the_model``). It got here one
+    change, growth or CAGR, in `figures`, and a ranking's ORDER BY; the model
+    is asked for nothing but a derivation above it (``needs_the_model``). It got here one
     failure at a time -- q007 turned ``c0 / c1`` into ``c0 - c1``, q024 dropped
     a subtraction and was graded ``pass`` at 64.1 billion, q009 ranked
     operating income *minus* revenue, q010 put a growth rate in `derivation`,
@@ -419,7 +419,7 @@ def emit_figures(plan: QueryPlan) -> str:
     divisor), grouped to one row per cell. Single-operand: the plain join.
 
     A threshold is applied here, in the statement, so a ranking or derivation
-    written above it only ever sees the rows that qualify -- "rank the
+    above it only ever sees the rows that qualify -- "rank the
     companies with a margin above 40%" filters first, then ranks. The executor
     still re-checks every row against it (``_threshold_violations``).
     """
@@ -541,56 +541,60 @@ def _emit_figures_over_time(plan: QueryPlan, cells: list[PlanCell]) -> str:
     return chr(10).join(lines)
 
 
-#: The whole SELECT for a plan that computes nothing above its cells: the
-#: figures, as they are. The model is not asked.
-FIGURES_SELECT = f"""SELECT element_id, company_cik, ticker, entity_name,
+def _select(derivation: str, order_by: str = "") -> str:
+    """The whole SELECT over ``figures``, for a plan the model is not asked about."""
+    return (
+        f"""SELECT element_id, company_cik, ticker, entity_name,
        fiscal_year, fiscal_period, period_start, period_end, is_instant,
-       value, unit, NULL::text AS derivation
+       value, unit, {derivation}
 FROM {FIGURES_NAME}
-LIMIT {MAX_ROWS}"""
+"""
+        + (order_by + chr(10) if order_by else "")
+        + f"LIMIT {MAX_ROWS}"
+    )
+
+
+#: The figures, as they are.
+FIGURES_SELECT = _select("NULL::text AS derivation")
 
 #: The same, when some metric is asked for over time: `figures` then carries
 #: each row's `derivation` ("growth", ...) and it is passed through.
-FIGURES_SELECT_OVER_TIME = f"""SELECT element_id, company_cik, ticker, entity_name,
-       fiscal_year, fiscal_period, period_start, period_end, is_instant,
-       value, unit, derivation
-FROM {FIGURES_NAME}
-LIMIT {MAX_ROWS}"""
+FIGURES_SELECT_OVER_TIME = _select("derivation")
+
+
+def _order_by(plan: QueryPlan) -> str:
+    """A ranking's ORDER BY, from the direction the plan carries -- never from English."""
+    rank = plan.result.rank
+    if not rank:
+        return ""
+    keys = ["element_id"]  # each metric ranked on its own
+    for direction, sql in (("highest", "DESC"), ("lowest", "ASC")):
+        ids = sorted(e for e, d in rank.items() if d == direction)
+        if ids:
+            names = ", ".join(_sql_literal(e) for e in ids)
+            # NULLS LAST: a growth from a zero base has no value and no place.
+            keys.append(f"CASE WHEN element_id IN ({names}) THEN value END {sql} NULLS LAST")
+    keys += ["company_cik", "period_end"]  # ties, and unranked metrics, in a stable order
+    return "ORDER BY " + ", ".join(keys)
 
 
 def figures_select(plan: QueryPlan) -> str:
     """The SELECT over ``figures`` for a plan the model is not asked about."""
-    return FIGURES_SELECT_OVER_TIME if _carries_derivation(plan_cells(plan)) else FIGURES_SELECT
+    over_time = _carries_derivation(plan_cells(plan))
+    return _select("derivation" if over_time else "NULL::text AS derivation", _order_by(plan))
 
 
 def needs_the_model(plan: QueryPlan) -> bool:
     """Whether anything is left for the model once ``figures`` is written.
 
-    A ranking always is. A derivation is, unless it is exactly what an
+    A ranking is not: its direction is in the plan (``ResultSpec.rank``), so
+    Python writes the ORDER BY. A derivation is, unless it is exactly what an
     over-time metric already computed -- "Tesla's year-over-year revenue
     growth" is `derive`, and `figures` holds the growth itself; asking the
     model to derive again would compute a growth of the growth.
     """
-    if plan.intent == "rank":
-        return True
     return plan.intent == "derive" and not plan.over_time
 
-
-_FIGURES_JOB_RANK = """This question asks for an ORDERING of the figures -- which is highest,
-lowest, largest, smallest. Return EVERY row of `figures` with `value` and
-`unit` unchanged and `derivation` NULL, ordered the way the question asks:
-DESC for highest / largest / most, ASC for lowest / smallest / least.
-No LIMIT 1 and no WHERE: the reader has to see the whole ordering, and every
-row of `figures` is part of the answer."""
-
-_FIGURES_EXAMPLE_RANK = f"""WORKED EXAMPLE (copy the FORM)
-
-  SELECT f.element_id, f.company_cik, f.ticker, f.entity_name,
-         f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, f.is_instant,
-         f.value, f.unit, NULL::text AS derivation
-  FROM {FIGURES_NAME} f
-  ORDER BY f.value DESC
-  LIMIT {MAX_ROWS}"""
 
 _FIGURES_JOB_DERIVE = """This question asks for a value COMPUTED from the figures -- a change, a
 share of a total, a growth rate. Compute it from `f.value` with a window
@@ -613,7 +617,7 @@ _FIGURES_EXAMPLE_DERIVE = f"""WORKED EXAMPLE (invented name -- copy the FORM)
 
 
 def _figures_prompt(plan: QueryPlan) -> str:
-    """The prompt for a ranking or derivation over ``figures``.
+    """The prompt for a derivation over ``figures``.
 
     Short on purpose: no relation, no coordinates, no join and no operands --
     ``figures`` already holds every value, computed. What is left is the layer
@@ -634,20 +638,11 @@ def _figures_prompt(plan: QueryPlan) -> str:
             f"{chr(10)}  - Only rows meeting the question's condition are in `figures`: "
             f"{tests}.{chr(10)}    It is already applied. Do not filter again."
         )
-    ranking = plan.intent == "rank"
-    job = _FIGURES_JOB_RANK if ranking else _FIGURES_JOB_DERIVE
-    example = _FIGURES_EXAMPLE_RANK if ranking else _FIGURES_EXAMPLE_DERIVE
+    # Only a derivation reaches here, and never over an over-time metric
+    # (`needs_the_model`), so `figures` carries no `derivation` column.
+    job = _FIGURES_JOB_DERIVE
+    example = _FIGURES_EXAMPLE_DERIVE
     signature = "unit)"
-    if _carries_derivation(cells):
-        # The rows already carry what they are ("growth"); a ranking keeps it.
-        signature = "unit, derivation)"
-        kinds = ", ".join(f"{o.element_id} is its {o.kind}" for o in plan.over_time)
-        unit_lines += (
-            f"{chr(10)}    Over time: {kinds} -- already computed; `derivation` "
-            "says so on every row."
-        )
-        job = job.replace("`derivation` NULL", "`derivation` as it is in `figures`")
-        example = example.replace("NULL::text AS derivation", "f.derivation")
     return f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
 QUESTION
@@ -728,8 +723,8 @@ MAX_PROMPT_CHARS = int(_CONTEXT_TOKENS * CHARS_PER_TOKEN)
 
 
 def build_prompt(plan: QueryPlan) -> str:
-    """The prompt for the one thing left to the model: a ranking or a
-    derivation over ``figures``.
+    """The prompt for the one thing left to the model: a derivation over
+    ``figures``.
 
     Every value the answer reads is written in Python (``emit_cte``,
     ``emit_figures``), so the model sees no relation, no coordinate and no

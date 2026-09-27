@@ -295,13 +295,6 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e2","kind":"metric","text":"fare","clarify_as":"performance"},
   {"id":"e3","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
     ),
-    # Rule 3. No company element at all, because naming none means all.
-    (
-        "Which company had the highest operating income in 2024?",
-        """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"operating income"},
-  {"id":"e2","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
-    ),
     # Rule 1 again, on a conversational metric. Measured: the model compressed
     # "how much money was made" to "money made" on three runs out of three,
     # which the faithfulness gate refused each time. A metric phrase is copied
@@ -354,7 +347,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "Which company grew revenue fastest between 2023 and 2024?",
         """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"revenue","over_time":"growth"},
+  {"id":"e1","kind":"metric","text":"revenue","over_time":"growth","rank":"highest"},
   {"id":"e2","kind":"period","text":"between 2023 and 2024","fiscal_year":2023},
   {"id":"e3","kind":"period","text":"between 2023 and 2024","fiscal_year":2024}],"wants_chart":false}""",
     ),
@@ -429,11 +422,23 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "Which company had the largest single-quarter revenue decline?",
         """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"revenue","over_time":"change"},
+  {"id":"e1","kind":"metric","text":"revenue","over_time":"change","rank":"lowest"},
   {"id":"e2","kind":"period","text":"single-quarter","fiscal_period":"Q1"},
   {"id":"e3","kind":"period","text":"single-quarter","fiscal_period":"Q2"},
   {"id":"e4","kind":"period","text":"single-quarter","fiscal_period":"Q3"},
   {"id":"e5","kind":"period","text":"single-quarter","fiscal_period":"Q4"}],"wants_chart":false}""",
+    ),
+    # Rule 3. No company element at all, because naming none means all. It sits
+    # beside the Apple ranking below on purpose: measured 2026-09-27, once
+    # both carried "rank", this one alone taught "a ranking names no company"
+    # and the q018 round trip ("Which quarter is Costco's strongest?" ->
+    # "Total revenue") dropped Costco on 2 of 2 cold runs, ranking all 20
+    # filers. Side by side, 4 of 4 kept it.
+    (
+        "Which company had the highest operating income in 2024?",
+        """{"intent":"rank","elements":[
+  {"id":"e1","kind":"metric","text":"operating income","rank":"highest"},
+  {"id":"e2","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
     ),
     # The same side of 5e, asked the other way round. The one above ranks
     # companies; this one ranks the periods themselves, which is the case the
@@ -444,7 +449,7 @@ _EXAMPLES: list[tuple[str, str]] = [
         "Which quarter does Apple earn the most revenue in?",
         """{"intent":"rank","elements":[
   {"id":"e1","kind":"company","text":"Apple"},
-  {"id":"e2","kind":"metric","text":"revenue"},
+  {"id":"e2","kind":"metric","text":"revenue","rank":"highest"},
   {"id":"e3","kind":"period","text":"which quarter","fiscal_period":"Q1"},
   {"id":"e4","kind":"period","text":"which quarter","fiscal_period":"Q2"},
   {"id":"e5","kind":"period","text":"which quarter","fiscal_period":"Q3"},
@@ -478,7 +483,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "List companies with more than 100 billion dollars in revenue last year.",
         """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"revenue"},
+  {"id":"e1","kind":"metric","text":"revenue","rank":"highest"},
   {"id":"e2","kind":"metric_threshold","text":"more than 100 billion dollars","qualifies":"e1","comparison":"gt","threshold":100000000000},
   {"id":"e3","kind":"period","text":"last year","last_n_years":1}],"wants_chart":false}""",
     ),

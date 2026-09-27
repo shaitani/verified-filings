@@ -153,8 +153,9 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     # Every value is written in Python: the coordinates (`wanted`) and each
     # cell's figure, combined, filtered and over time as the plan says
     # (`figures`). A plan that computes nothing above its cells is then
-    # complete and the model is not asked; a ranking or derivation is written
-    # by the model over `figures` alone. See ``prompt.uses_figures``.
+    # complete and the model is not asked -- a ranking included, since its
+    # direction is in the plan. A derivation is written by the model over
+    # `figures` alone. See ``prompt.uses_figures``.
     if not uses_figures(plan):
         raise UnsupportedPlan(
             "a metric's values could not be written in Python (one element with "

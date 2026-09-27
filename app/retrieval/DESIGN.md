@@ -842,6 +842,13 @@ catalogue says this, and the derivation example in §4.3 is the fourth instance.
 **Where to look next, when optimising.** Every one of these is currently prose
 in the prompt and could be structure instead:
 
+- **A ranking's ORDER BY — done (2026-09-27).** The direction is in the plan
+  (`ResultSpec.rank`, parser DESIGN §10c), so a ranking is `figures` plus an
+  `ORDER BY` Python writes — per metric, `NULLS LAST` so a growth with no base
+  sinks — and the model is not asked. That retires §4.3c's `LIMIT 1` for good,
+  and a ranking's verdict is now exact (`_verdict_exact`). The model's ranking
+  job, its example and the over-time branch of its prompt went with it; what
+  reaches the model now is a derivation and nothing else.
 - **The join itself — done (2026-09-26).** `figures` is emitted for every
   plan, so the join is never the model's: a lookup, a comparison or a series
   reads `figures` as it is and the model is not asked, and a ranking or
@@ -974,8 +981,9 @@ same period. The lenient branch remains only for what the model writes.
 
 ## 9. Open
 
-- **`ResultShape` is not enforced.** The verdict checks cardinality; nothing
-  checks that a `ranking` came back ordered.
+- **`ResultShape` is not enforced.** The verdict checks cardinality. A
+  ranking's order is now written in Python (§4.6) and checked again where it is
+  drawn (`BarView`), but nothing checks it in the verdict.
 - **Restatement disclosure** (HANDOFF §4.9) needs the superseded rows, which
   `is_latest` hides and the view therefore cannot see. A second view, or a
   `filed_date` column, when that is built.

@@ -285,11 +285,12 @@ def _verdict_exact(rows: list[AnnotatedRow], plan: QueryPlan, expected) -> Resul
     """The verdict when the plan names every row, derived ones included.
 
     Nothing above the cells is computed by the model here -- a lookup, a
-    comparison, a series with the growth beside it, an over-time metric -- so
+    comparison, a ranking, a series with the growth beside it, an over-time
+    metric -- so
     every row the answer should hold is a plan cell, keyed by ``(element,
     company, fiscal period, derivation)``, and the rows are held to exactly
     that: none missing unannounced, none extra. The lenient branch in
-    ``_verdict`` is only for a ranking or derivation the model wrote.
+    ``_verdict`` is only for a derivation the model wrote.
     """
 
     def key(element, cik, year, period, derivation):

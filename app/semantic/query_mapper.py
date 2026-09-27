@@ -60,6 +60,7 @@ from app.schemas.query import (
     PlanThreshold,
     QueryIn,
     QueryPlan,
+    RankDirection,
     ResolvedPeriod,
     ResultAxis,
     ResultSpec,
@@ -243,6 +244,7 @@ async def map_query(
         ciks=_answering_ciks(ciks, bindings),
         periods=_answered_periods(resolved_periods, over_time, metrics),
         metrics=_answering_metrics(metrics, bindings),
+        rank={m.id: m.rank for m in metrics if m.rank and m.id in bound_elements},
     )
     over_time += _series_growth(metrics, bindings, result, query.intent, over_time, thresholds)
 
@@ -555,7 +557,12 @@ def _answering_metrics(metrics: list[MetricElementIn], bindings: list[Binding]) 
 
 
 def _describe_result(
-    query: QueryIn, *, ciks: list[int], periods: list[ResolvedPeriod], metrics: int
+    query: QueryIn,
+    *,
+    ciks: list[int],
+    periods: list[ResolvedPeriod],
+    metrics: int,
+    rank: dict[str, RankDirection],  # only metrics that bound: nothing else has rows to order
 ) -> ResultSpec:
     """What the answer has to contain, from what actually resolved.
 
@@ -594,6 +601,7 @@ def _describe_result(
         periods=len(distinct_periods),
         metrics=metrics,
         granularities=sorted({p.granularity for p in periods}),
+        rank=rank,
     )
 
 

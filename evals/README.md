@@ -102,6 +102,14 @@ this stops growing.
 A `refuse` is a success when the system declines clearly. The failure mode
 worth catching is a confident answer built on the wrong facts.
 
+## `rank` — which end of a ranking comes first
+
+`highest` or `lowest`, on a question that orders by a metric. The parser must
+put exactly that direction on the ranked metric (`MetricElementIn.rank`), or
+the question grades `fail` whatever its items say — a ranking read backwards
+answers every item and is still wrong. "Largest decline" is `lowest`: the
+change most below zero comes first.
+
 ## `shape` — what the answer has to be
 
 Optional, and it changes *how much data* is needed rather than how it is drawn.

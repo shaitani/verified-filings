@@ -122,6 +122,15 @@ def test_duplicate_element_ids_are_rejected() -> None:
         )
 
 
+def test_rank_is_only_carried_by_a_ranking() -> None:
+    metric = {"id": "e1", "text": "revenue", "kind": "metric", "rank": "lowest"}
+    assert QueryIn.model_validate(_query(metric, intent="rank")).elements[0].rank == "lowest"
+    with pytest.raises(ValidationError, match="carry `rank` but intent is 'lookup'"):
+        QueryIn.model_validate(_query(metric))
+    with pytest.raises(ValidationError):
+        QueryIn.model_validate(_query(metric | {"rank": "top"}, intent="rank"))
+
+
 @pytest.mark.parametrize(
     "fields",
     [

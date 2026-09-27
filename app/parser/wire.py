@@ -32,7 +32,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.query import Comparison, Intent, OverTime, QueryFiscalPeriod
+from app.schemas.query import Comparison, Intent, OverTime, QueryFiscalPeriod, RankDirection
 from app.semantic.metric_aliases import alias_index
 
 #: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
@@ -95,6 +95,10 @@ class WireElement(BaseModel):
     # Metric only: the metric asked for as its movement over time -- "change",
     # "growth" or "cagr". A Literal, so the grammar allows exactly those.
     over_time: OverTime | None = None
+
+    # Metric only: which end of a ranking comes first. `accept()` requires it on
+    # some metric of a "rank" question and refuses it anywhere else.
+    rank: RankDirection | None = None
 
 
 class WireQuery(BaseModel):

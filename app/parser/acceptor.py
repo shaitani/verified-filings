@@ -210,7 +210,7 @@ _YEAR = re.compile(r"\b\d{4}\b")
 #: Which optional wire fields each kind may carry. Anything outside its set
 #: is a confusion, not a spare field -- see gate 3.
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
-    "metric": frozenset({"clarify_as", "over_time"}),
+    "metric": frozenset({"clarify_as", "over_time", "rank"}),
     "company": frozenset(),
     "period": frozenset(
         {"fiscal_year", "fiscal_period", "last_n_years", "last_n_quarters"}
@@ -513,6 +513,7 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 text=span,
                 clarify_as=element.clarify_as,
                 over_time=element.over_time,
+                rank=element.rank,
             )
         if element.kind == "company":
             # No ticker, no name: see wire.py. The span alone reaches the
@@ -636,6 +637,20 @@ def accept(
             "return every year on file. Every question needs at least one: when "
             "the question names no time, use last_n_years: 1 for the most recent "
             "year."
+        )
+
+    ranked = [e.id for e in elements if e.kind == "metric" and e.rank is not None]
+    if wire.intent == "rank" and not ranked:
+        # Without it the ordering is a guess, and a list in the wrong order is a
+        # plausible wrong answer ("which is highest" answered with the lowest).
+        raise MalformedProposal(
+            'intent is "rank" but no metric says which end comes first. Set '
+            '"rank": "highest" or "rank": "lowest" on the metric being ranked.'
+        )
+    if ranked and wire.intent != "rank":
+        raise MalformedProposal(
+            f"metric(s) {ranked} carry `rank` but intent is {wire.intent!r}. Either "
+            'the question orders by that metric -- intent "rank" -- or drop `rank`.'
         )
 
     try:

@@ -239,11 +239,10 @@ The `period_misalignment` note still shows.
   and has nowhere to hang a citation.
 - **Notes sit above the view**, not in a tooltip. A `narrower_than_asked` or
   `partial_coverage` note is part of the answer.
-- **A ranking is drawn in order or not at all.** Nothing upstream checks the
-  order (retrieval DESIGN §9), so `BarView` refuses bars that are not monotonic
-  in its stated direction. The direction itself is not in the plan — the model
-  writes `ORDER BY` — so for now [F] reads it from the rows; it moves to the
-  parser with the closed list of operations (HANDOFF §6).
+- **A ranking is drawn in order or not at all.** The direction is
+  `ResultSpec.rank` on the `ResultSet` (parser DESIGN §10c), so [F] sorts by it
+  and says which end is first ("highest first"); `BarView` refuses bars that
+  are not monotonic in its stated direction.
 - **`mixed_granularity` splits** into separate series or panels.
 - **Derived rows are their own series**, labelled by `derivation`.
 
