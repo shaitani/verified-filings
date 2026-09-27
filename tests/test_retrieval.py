@@ -690,3 +690,91 @@ def test_arithmetic_or_a_threshold_is_never_handed_to_the_model() -> None:
     )
     with pytest.raises(UnsupportedPlan, match="never handed to the model"):
         build_prompt(mixed)
+
+
+# --------------------------------------------------------------------------- #
+# over_time -- change, growth and CAGR, computed in Python from two periods
+# --------------------------------------------------------------------------- #
+
+
+def _revenue(years, concept_id: int = 252) -> Binding:
+    return _binding(
+        element_id="m",
+        company_cik=NVIDIA,
+        concepts=[_concept(concept_id, "Revenues")],
+        periods=[PeriodRef(fiscal_year=y, fiscal_period="FY") for y in years],
+    )
+
+
+def _growth_plan(kind: str = "growth", years=(2021, 2022, 2023), bindings=None, intent="trend"):
+    from app.schemas.query import PlanOverTime
+
+    periods = [_annual(NVIDIA, y) for y in years]
+    plan = _plan(bindings or [_revenue(years)], periods, intent=intent)
+    return plan.model_copy(update={"over_time": [PlanOverTime(element_id="m", kind=kind)]})
+
+
+def test_over_time_pairs_a_series_step_by_step_and_a_single_period_with_its_support() -> None:
+    from app.schemas.query import over_time_pairs
+
+    series = [_annual(NVIDIA, y) for y in (2021, 2022, 2023)]
+    pairs = over_time_pairs("growth", series, {})
+    assert [(a.fiscal_year, b.fiscal_year) for a, b in pairs] == [(2022, 2021), (2023, 2022)]
+    single = [_annual(NVIDIA, 2024)]
+    earlier = {(NVIDIA, 2023, "FY"): _annual(NVIDIA, 2023)}
+    pairs = over_time_pairs("growth", single, earlier)
+    assert [(a.fiscal_year, b.fiscal_year) for a, b in pairs] == [(2024, 2023)]
+    assert over_time_pairs("growth", single, {}) == [], "nothing loaded to measure against"
+    cagr = over_time_pairs("cagr", series, {})
+    assert [(a.fiscal_year, b.fiscal_year) for a, b in cagr] == [(2023, 2021)]
+
+
+def test_a_growth_cell_reads_the_metric_at_both_ends() -> None:
+    cells = plan_cells(_growth_plan())
+    assert [(c.fiscal_year, c.derivation, c.result_unit) for c in cells] == [
+        (2022, "growth", "pure"), (2023, "growth", "pure"),
+    ]
+    first = cells[0]
+    assert first.concept_ids == (252, 252)
+    assert [w[1].year for w in first.operand_windows] == [2022, 2021]
+    assert first.expression == "CASE WHEN (c1) > 0 THEN ((c0) - (c1)) / (c1) END"
+
+
+def test_a_growth_across_a_tag_change_reads_each_end_from_its_own_binding() -> None:
+    """NVIDIA's revenue concept changes between FY2022 and FY2023, so FY2023's
+    growth reads one concept now and the other a year back."""
+    plan = _growth_plan(bindings=[_revenue((2021, 2022), 252), _revenue((2023,), 254)])
+    by_year = {c.fiscal_year: c.concept_ids for c in plan_cells(plan)}
+    assert by_year == {2022: (252, 252), 2023: (254, 252)}
+
+
+def test_a_cagr_is_one_cell_over_the_span() -> None:
+    (cell,) = plan_cells(_growth_plan("cagr", years=(2021, 2022, 2023, 2024, 2025)))
+    assert (cell.fiscal_year, cell.span_years, cell.derivation) == (2025, 4, "cagr")
+    assert "power((c0) / (c1), 1.0 / max(w.span_years)) - 1" in cell.expression
+
+
+def test_an_over_time_statement_validates_and_carries_its_derivation() -> None:
+    from app.retrieval.prompt import emit_figures, figures_select
+    from app.retrieval.validator import validate
+
+    plan = _growth_plan()
+    cte = prompt_module.emit_cte(plan_cells(plan))
+    assert "cell_start, cell_end, span_years" in cte
+    figures = emit_figures(plan)
+    assert "THEN 'growth'" in figures and "w.cell_end AS period_end" in figures
+    sql = cte + "," + chr(10) + figures + chr(10) + figures_select(plan)
+    assert "value, unit, derivation" in figures_select(plan)
+    assert validate(sql) == sql
+
+
+def test_the_model_is_asked_only_to_rank_an_over_time_metric() -> None:
+    """A derivation the over-time metric already computed is not derived again."""
+    from app.retrieval.prompt import needs_the_model
+
+    assert not needs_the_model(_growth_plan(intent="derive"))
+    assert not needs_the_model(_growth_plan(intent="trend"))
+    assert needs_the_model(_growth_plan(intent="rank"))
+    text = build_prompt(_growth_plan(intent="rank"))
+    assert "m is its growth" in text and "f.derivation" in text
+    assert "operand" not in text and "c0" not in text

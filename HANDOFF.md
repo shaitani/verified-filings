@@ -280,9 +280,10 @@ In rough order of how much they matter.
   as 64.1 (operating cash flow, the subtraction dropped) rather than 60.9, and
   q009 ranking operating income minus revenue as "operating margin" — all
   attributable, verdict `complete`. Since 2026-09-26 every multi-operand
-  metric and every threshold is computed in a Python-written CTE, `figures`
-  (retrieval DESIGN §4.6); the model sees only computed values, and only for
-  a ranking or derivation above them. What the model still writes — the
+  metric, every threshold, and every change / growth / CAGR the parser marks
+  (`over_time`) is computed in a Python-written CTE, `figures` (retrieval
+  DESIGN §4.6, §4.8); the model sees only computed values, and only for a
+  ranking or derivation above them. What the model still writes — the
   ordering, a derivation — has no structural check behind it.
 - **The eval set has a runner but no full-run number yet.**
   `evals/run.py` is [B] with the browser, the state and [F] taken out: it

@@ -301,13 +301,14 @@ questions:
     expect: [answered]  # total debt
     needs: [retrieval, growth, ranking, multi_step]
     notes: >-
-      ANSWERED WRONG, and graded pass (found 2026-09-27). The parser turns
-      "more than doubled" into a metric_threshold of total debt > 2 -- an
-      absolute $2 -- so every debt figure qualifies and nothing checks for
-      doubling; the SQL is `WHERE value > 2.0`, 85 rows. Already so before the
-      threshold moved into Python (identical SQL from the model on 2026-09-26).
-      Needs a threshold on growth against a base year (2021), which a
-      PlanThreshold cannot express today.
+      ANSWERED WRONG, and graded pass (found 2026-09-27). Until the over_time
+      examples went into the parser prompt, "more than doubled" became a
+      metric_threshold of total debt > 2 -- an absolute $2 -- so every debt
+      figure qualified (`WHERE value > 2.0`, 85 rows). Since then it is parsed
+      as over_time change with no threshold: 68 rows of year-over-year changes
+      in total debt, still no check of doubling since 2021. Needs growth against
+      a base year (2021) with a threshold on it (growth > 1.0), which neither
+      over_time nor PlanThreshold expresses today.
 
   # --- user provided -------------------------------------------------------
   - id: q043

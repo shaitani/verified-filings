@@ -331,9 +331,22 @@ _EXAMPLES: list[tuple[str, str]] = [
         "What was Tesla's year-over-year revenue growth in 2024?",
         """{"intent":"derive","elements":[
   {"id":"e1","kind":"company","text":"Tesla"},
-  {"id":"e2","kind":"metric","text":"revenue"},
+  {"id":"e2","kind":"metric","text":"revenue","over_time":"growth"},
   {"id":"e3","kind":"period","text":"the year before 2024","fiscal_year":2023},
   {"id":"e4","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
+    ),
+    # `over_time` on the metric: the question wants its movement, not its level.
+    # "growth" and "change" run from one period to the next (the growth above,
+    # the decline below); "cagr" is compound growth from the first year to the
+    # last. The metric's `text` stays the metric -- "revenue", not "revenue
+    # growth" -- and the arithmetic is computed from it in Python, never by the
+    # model (app/retrieval/DESIGN.md §4.8).
+    (
+        "What was Microsoft's compound annual growth rate of revenue over the last five years?",
+        """{"intent":"derive","elements":[
+  {"id":"e1","kind":"company","text":"Microsoft"},
+  {"id":"e2","kind":"metric","text":"revenue","over_time":"cagr"},
+  {"id":"e3","kind":"period","text":"the last five years","last_n_years":5}],"wants_chart":false}""",
     ),
     # Rule 5c. Measured: "between 2023 and 2024" came back as Q4-2023 plus all
     # four quarters of 2024 -- a growth question silently decomposed into
@@ -341,7 +354,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "Which company grew revenue fastest between 2023 and 2024?",
         """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"revenue"},
+  {"id":"e1","kind":"metric","text":"revenue","over_time":"growth"},
   {"id":"e2","kind":"period","text":"between 2023 and 2024","fiscal_year":2023},
   {"id":"e3","kind":"period","text":"between 2023 and 2024","fiscal_year":2024}],"wants_chart":false}""",
     ),
@@ -416,7 +429,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     (
         "Which company had the largest single-quarter revenue decline?",
         """{"intent":"rank","elements":[
-  {"id":"e1","kind":"metric","text":"revenue"},
+  {"id":"e1","kind":"metric","text":"revenue","over_time":"change"},
   {"id":"e2","kind":"period","text":"single-quarter","fiscal_period":"Q1"},
   {"id":"e3","kind":"period","text":"single-quarter","fiscal_period":"Q2"},
   {"id":"e4","kind":"period","text":"single-quarter","fiscal_period":"Q3"},

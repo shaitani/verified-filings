@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.retrieval.validator import MAX_ROWS
-from app.schemas.query import Binding, QueryPlan, ResolvedPeriod
+from app.schemas.query import Binding, QueryPlan, ResolvedPeriod, over_time_pairs
 from app.schemas.result import RESULT_COLUMNS
 
 #: The one relation the retrieval role can read.
@@ -79,6 +79,19 @@ class PlanCell:
     is_instant: bool
     binding_index: int
 
+    #: For a metric asked for over time only: the window each operand is read
+    #: from, positionally. A growth cell reads the metric at its own period
+    #: *and* the one before, so its operands do not share the cell's window.
+    #: Empty means every operand is read at the cell's own window.
+    operand_windows: tuple[tuple[date, date], ...] = ()
+
+    #: Fiscal years between the two ends of a CAGR cell; 0 otherwise.
+    span_years: int = 0
+
+    #: What an over-time cell reports -- "change", "growth", "cagr" -- as the
+    #: row's ``derivation``; ``None`` for a figure as filed or combined.
+    derivation: str | None = None
+
     @property
     def operands(self) -> int:
         return len(self.concept_ids)
@@ -109,8 +122,11 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     concepts -- produces one cell carrying both ``concept_ids`` and the
     expression. It is still one row of the answer.
     """
+    over_time = {entry.element_id: entry.kind for entry in plan.over_time}
     cells: list[PlanCell] = []
     for index, binding in enumerate(plan.bindings):
+        if binding.element_id in over_time:
+            continue  # answered as its movement; see _over_time_cells
         concept_ids = tuple(concept.concept_id for concept in binding.concepts)
         for period in _periods_for(binding, plan):
             cells.append(
@@ -129,9 +145,103 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
                     binding_index=index,
                 )
             )
+    cells += _over_time_cells(plan, over_time)
     if not cells:
         raise UnsupportedPlan("the plan binds nothing, so there is no query to write")
     return cells
+
+
+#: Each over-time cell's arithmetic, in operand terms: ``cur`` is the metric
+#: at the cell's own period, ``prev`` at the earlier one (``over_time_pairs``).
+#: Guarded rather than divided blindly: a growth from a zero or negative base
+#: has no meaning, and comes back NULL on a derived row -- which ``ResultRow``
+#: allows -- rather than as a number.
+_OVER_TIME_EXPRESSION = {
+    "change": "({cur}) - ({prev})",
+    "growth": "CASE WHEN ({prev}) > 0 THEN (({cur}) - ({prev})) / ({prev}) END",
+    "cagr": (
+        "CASE WHEN ({prev}) > 0 AND ({cur}) > 0 "
+        "THEN power(({cur}) / ({prev}), 1.0 / max(w.span_years)) - 1 END"
+    ),
+}
+
+
+def _shift(expression: str, by: int) -> str:
+    """``c0 / c1`` shifted by 2 is ``c2 / c3`` -- the same metric's operands,
+    read a second time at another period."""
+    return re.sub(r"c(\d+)", lambda m: f"c{int(m.group(1)) + by}", expression)
+
+
+def _over_time_cells(plan: QueryPlan, over_time: dict[str, str]) -> list[PlanCell]:
+    """The answer cells of every metric asked for as change, growth or CAGR.
+
+    Built per cell, not per binding, because the two ends can be bound to
+    different concepts: NVIDIA tags revenue one way through FY2022 and another
+    from FY2023, so its FY2023 growth reads one concept now and the other a
+    year back. Each end takes its operands from whichever binding covers *its*
+    period (``QueryPlan.binding_for``), and a cell is made only where both ends
+    are bound. Which periods pair up is ``over_time_pairs``, shared with the
+    mapper.
+    """
+    if not over_time:
+        return []
+    earlier = {
+        (p.company_cik, p.fiscal_year, p.fiscal_period): p for p in plan.filters.support_periods
+    }
+
+    def bound(element_id: str, period: ResolvedPeriod) -> tuple[int, Binding] | None:
+        try:
+            return plan.binding_for(
+                element_id, period.company_cik, period.fiscal_year, period.fiscal_period
+            )
+        except (LookupError, ValueError):
+            return None
+
+    cells: list[PlanCell] = []
+    for element_id, kind in over_time.items():
+        for current, base in over_time_pairs(kind, plan.filters.periods, earlier):
+            now, then = bound(element_id, current), bound(element_id, base)
+            if now is None or then is None:
+                continue
+            cells.append(_over_time_cell(element_id, kind, current, base, now, then))
+    return cells
+
+
+def _over_time_cell(
+    element_id: str,
+    kind: str,
+    current: ResolvedPeriod,
+    earlier: ResolvedPeriod,
+    now: tuple[int, Binding],
+    then: tuple[int, Binding],
+) -> PlanCell:
+    (index, binding_now), (_, binding_then) = now, then
+    width = len(binding_now.concepts)
+    expression = _OVER_TIME_EXPRESSION[kind].format(
+        cur=binding_now.expression, prev=_shift(binding_then.expression, width)
+    )
+    return PlanCell(
+        element_id=element_id,
+        company_cik=current.company_cik,
+        fiscal_year=current.fiscal_year,
+        fiscal_period=current.fiscal_period,
+        period_start=current.period_start,
+        period_end=current.period_end,
+        concept_ids=tuple(
+            c.concept_id for c in [*binding_now.concepts, *binding_then.concepts]
+        ),
+        expression=expression,
+        unit=binding_now.fact_unit,
+        result_unit=binding_now.unit if kind == "change" else "pure",
+        is_instant=binding_now.is_instant,
+        binding_index=index,
+        operand_windows=(
+            *[(current.period_start, current.period_end)] * width,
+            *[(earlier.period_start, earlier.period_end)] * len(binding_then.concepts),
+        ),
+        span_years=current.fiscal_year - earlier.fiscal_year if kind == "cagr" else 0,
+        derivation=kind,
+    )
 
 
 NEWLINE = chr(10)
@@ -193,7 +303,15 @@ _CTE_COLUMNS_OPERANDS = (
 )
 
 
+#: The same, plus each answer cell's own window and a CAGR's span, used only
+#: when some metric is asked for over time: its operands are read at windows
+#: other than the cell's, so the cell has to be named separately.
+_CTE_COLUMNS_OVER_TIME = (*_CTE_COLUMNS_OPERANDS, "cell_start", "cell_end", "span_years")
+
+
 def _cte_columns(cells: list[PlanCell]) -> tuple[str, ...]:
+    if any(cell.operand_windows for cell in cells):
+        return _CTE_COLUMNS_OVER_TIME
     combining = any(cell.operands > 1 for cell in cells)
     return _CTE_COLUMNS_OPERANDS if combining else _CTE_COLUMNS
 
@@ -228,9 +346,15 @@ def emit_cte(cells: list[PlanCell]) -> str:
     """
     columns = _cte_columns(cells)
     combining = "operand" in columns
+    over_time = "cell_start" in columns
     rows = []
     for cell in cells:
         for operand, concept_id in enumerate(cell.concept_ids):
+            start, end = (
+                cell.operand_windows[operand]
+                if cell.operand_windows
+                else (cell.period_start, cell.period_end)
+            )
             values = [
                 f"'{cell.element_id}'",
                 str(cell.company_cik),
@@ -240,8 +364,14 @@ def emit_cte(cells: list[PlanCell]) -> str:
                 str(concept_id),
                 f"'{cell.unit}'",
                 "true" if cell.is_instant else "false",
-                f"DATE '{cell.period_start}'",
-                f"DATE '{cell.period_end}'",
+                f"DATE '{start}'",
+                f"DATE '{end}'",
+                *(
+                    [f"DATE '{cell.period_start}'", f"DATE '{cell.period_end}'",
+                     str(cell.span_years)]
+                    if over_time
+                    else []
+                ),
             ]
             rows.append("    (" + ", ".join(values) + ")")
     declared = ", ".join(columns)
@@ -270,7 +400,7 @@ def wants_period_changes(plan: QueryPlan) -> bool:
     ``rank`` / ``derive``, where the model is asked to compute and its rows
     are already derived. See ``app/retrieval/changes.py``.
     """
-    if "period" not in plan.result.axes or plan.intent in DERIVING_INTENTS:
+    if "period" not in plan.result.axes or plan.intent in DERIVING_INTENTS or plan.over_time:
         return False
     return _plain_figures(plan)
 
@@ -502,7 +632,7 @@ def uses_figures(plan: QueryPlan) -> bool:
     if not plan.bindings:
         return False
     cells = plan_cells(plan)
-    if not (plan.thresholds or any(cell.operands > 1 for cell in cells)):
+    if not (plan.thresholds or plan.over_time or any(cell.operands > 1 for cell in cells)):
         return False
     shape_of: dict[str, tuple[str, str]] = {}
     for cell in cells:
@@ -530,7 +660,9 @@ def emit_figures(plan: QueryPlan) -> str:
     """
     cells = plan_cells(plan)
     combining = any(cell.operands > 1 for cell in cells)
+    over_time = any(cell.operand_windows for cell in cells)
     shape_of = {cell.element_id: (cell.expression, cell.result_unit) for cell in cells}
+    labels = {cell.element_id: cell.derivation for cell in cells if cell.derivation}
 
     def per_element(pick) -> str:
         whens = "".join(
@@ -551,13 +683,43 @@ def emit_figures(plan: QueryPlan) -> str:
         for t in plan.thresholds
         if t.element_id in term
     ]
+    if over_time:
+        # Operands are read at other periods than the cell's, so the cell's
+        # own window comes from `wanted`, and the row is grouped by it.
+        derivation = per_element(
+            lambda element: _sql_literal(labels[element]) if element in labels else "NULL"
+        )
+        head = [
+            f"{FIGURES_NAME} AS (",
+            "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "         w.fiscal_year, w.fiscal_period,",
+            "         CASE WHEN w.is_instant THEN NULL ELSE w.cell_start END AS period_start,",
+            "         w.cell_end AS period_end, w.is_instant,",
+            f"         {value} AS value,",
+            f"         {unit} AS unit,",
+            f"         {derivation} AS derivation",
+        ]
+        group = [
+            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "           w.fiscal_year, w.fiscal_period,",
+            "           w.cell_start, w.cell_end, w.is_instant",
+        ]
+    else:
+        head = [
+            f"{FIGURES_NAME} AS (",
+            "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "         w.fiscal_year, w.fiscal_period,",
+            "         v.period_start, v.period_end, v.is_instant,",
+            f"         {value} AS value,",
+            f"         {unit} AS unit",
+        ]
+        group = [
+            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "           w.fiscal_year, w.fiscal_period,",
+            "           v.period_start, v.period_end, v.is_instant",
+        ]
     lines = [
-        f"{FIGURES_NAME} AS (",
-        "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
-        "         w.fiscal_year, w.fiscal_period,",
-        "         v.period_start, v.period_end, v.is_instant,",
-        f"         {value} AS value,",
-        f"         {unit} AS unit",
+        *head,
         f"  FROM {CTE_NAME} w",
         f"  JOIN {VIEW} v",
         "    ON  v.company_cik = w.company_cik",
@@ -568,11 +730,7 @@ def emit_figures(plan: QueryPlan) -> str:
         "    AND (w.is_instant OR v.period_start = w.window_start)",
     ]
     if combining:
-        lines += [
-            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
-            "           w.fiscal_year, w.fiscal_period,",
-            "           v.period_start, v.period_end, v.is_instant",
-        ]
+        lines += group
     if conditions:
         keyword = "HAVING" if combining else "WHERE"
         lines.append(f"  {keyword} " + (chr(10) + "    AND ").join(conditions))
@@ -587,6 +745,32 @@ FIGURES_SELECT = f"""SELECT element_id, company_cik, ticker, entity_name,
        value, unit, NULL::text AS derivation
 FROM {FIGURES_NAME}
 LIMIT {MAX_ROWS}"""
+
+#: The same, when some metric is asked for over time: `figures` then carries
+#: each row's `derivation` ("growth", ...) and it is passed through.
+FIGURES_SELECT_OVER_TIME = f"""SELECT element_id, company_cik, ticker, entity_name,
+       fiscal_year, fiscal_period, period_start, period_end, is_instant,
+       value, unit, derivation
+FROM {FIGURES_NAME}
+LIMIT {MAX_ROWS}"""
+
+
+def figures_select(plan: QueryPlan) -> str:
+    """The SELECT over ``figures`` for a plan the model is not asked about."""
+    return FIGURES_SELECT_OVER_TIME if plan.over_time else FIGURES_SELECT
+
+
+def needs_the_model(plan: QueryPlan) -> bool:
+    """Whether anything is left for the model once ``figures`` is written.
+
+    A ranking always is. A derivation is, unless it is exactly what an
+    over-time metric already computed -- "Tesla's year-over-year revenue
+    growth" is `derive`, and `figures` holds the growth itself; asking the
+    model to derive again would compute a growth of the growth.
+    """
+    if plan.intent == "rank":
+        return True
+    return plan.intent == "derive" and not plan.over_time
 
 
 _FIGURES_JOB_RANK = """This question asks for an ORDERING of the figures -- which is highest,
@@ -650,6 +834,17 @@ def _figures_prompt(plan: QueryPlan) -> str:
     ranking = plan.intent == "rank"
     job = _FIGURES_JOB_RANK if ranking else _FIGURES_JOB_DERIVE
     example = _FIGURES_EXAMPLE_RANK if ranking else _FIGURES_EXAMPLE_DERIVE
+    signature = "unit)"
+    if plan.over_time:
+        # The rows already carry what they are ("growth"); a ranking keeps it.
+        signature = "unit, derivation)"
+        kinds = ", ".join(f"{o.element_id} is its {o.kind}" for o in plan.over_time)
+        unit_lines += (
+            f"{chr(10)}    Over time: {kinds} -- already computed; `derivation` "
+            "says so on every row."
+        )
+        job = job.replace("`derivation` NULL", "`derivation` as it is in `figures`")
+        example = example.replace("NULL::text AS derivation", "f.derivation")
     return f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
 QUESTION
@@ -665,7 +860,7 @@ It is already written above whatever you write. Do NOT write `WITH`. Begin
 your reply at `SELECT`, and read FROM `{FIGURES_NAME}`.
 
   {FIGURES_NAME}(element_id, company_cik, ticker, entity_name, fiscal_year,
-          fiscal_period, period_start, period_end, is_instant, value, unit)
+          fiscal_period, period_start, period_end, is_instant, value, {signature}
 
   - One row per company, period and metric the question needs.
   - `value` is each metric's figure ALREADY COMPUTED -- a margin is already

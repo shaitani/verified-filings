@@ -386,6 +386,19 @@ that plan `complete` — nothing was unresolved because nothing had been asked
 for. `accept()` now requires a metric element, the mirror of the period gate,
 and rule 1b tells the model that the vague word *is* the metric.
 
+### 10b. `over_time` — the metric's movement, not its level
+
+Added 2026-09-26. "Revenue growth", "grew fastest", "the largest decline",
+"compound annual growth" ask for a metric's movement. The metric element keeps
+the metric's words ("revenue") and carries `over_time: change | growth | cagr`;
+the grammar allows exactly those values and `accept()` allows the field on
+metrics only. Retrieval computes the arithmetic in Python (retrieval DESIGN
+§4.8). Taught by example, like `clarify_as`, not by a numbered rule: the Tesla
+growth, "grew revenue fastest", the single-quarter decline, and one CAGR
+example carry it. "Has Intel's R&D spending increased or decreased since
+2021?" deliberately does not — it asks for a series to be judged, which the
+model still derives.
+
 ### 10a. `clarify_as` — the parser names the question
 
 Added 2026-09-26, from q043: "how much money was made" is revenue or net

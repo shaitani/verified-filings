@@ -56,6 +56,7 @@ from app.schemas.query import (
     PeriodElementIn,
     PeriodRef,
     PlanFilters,
+    PlanOverTime,
     PlanThreshold,
     QueryIn,
     QueryPlan,
@@ -63,6 +64,8 @@ from app.schemas.query import (
     ResultAxis,
     ResultSpec,
     Unresolved,
+    over_time_pairs,
+    previous_period,
 )
 from app.semantic.company_aliases import company_alias_index
 from app.semantic.metric_aliases import AliasHit, alias_index
@@ -158,6 +161,13 @@ async def map_query(
                     if element.text in missing_companies
                 ]
         resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
+        # A metric asked for over time is bound over the periods asked for
+        # *and* the one before each, which a growth figure divides by; every
+        # other metric only over the periods asked for, so it gains no rows.
+        over_time_metrics = [m for m in metrics if m.over_time]
+        support_periods: list[ResolvedPeriod] = []
+        if any(m.over_time in ("change", "growth") for m in over_time_metrics):
+            support_periods = await _previous_periods(session, ciks, resolved_periods)
         (
             bindings,
             ambiguous,
@@ -165,13 +175,30 @@ async def map_query(
             clarifications,
             coverage_notes,
         ) = await _resolve_metrics(
-            metrics,
+            [m for m in metrics if not m.over_time],
             session,
             ciks=ciks,
             periods=resolved_periods,
             intent=query.intent,
             named=bool(companies),
         )
+        if over_time_metrics:
+            resolved = await _resolve_metrics(
+                over_time_metrics,
+                session,
+                ciks=ciks,
+                periods=sorted(
+                    {*resolved_periods, *support_periods},
+                    key=lambda p: (p.company_cik, p.period_end, p.fiscal_period),
+                ),
+                intent=query.intent,
+                named=bool(companies),
+            )
+            bindings += resolved[0]
+            ambiguous += resolved[1]
+            metric_problems += resolved[2]
+            clarifications += resolved[3]
+            coverage_notes += resolved[4]
 
     qualifiers = [e for e in query.elements if isinstance(e, MetricQualifierElementIn)]
     if qualifiers:
@@ -206,10 +233,15 @@ async def map_query(
         and element.qualifies in bound_elements
     ]
 
+    over_time, over_time_problems, over_time_notes = _over_time(
+        over_time_metrics, bindings, resolved_periods, support_periods
+    )
+    metric_problems += over_time_problems
+
     result = _describe_result(
         query,
         ciks=_answering_ciks(ciks, bindings),
-        periods=resolved_periods,
+        periods=_answered_periods(resolved_periods, over_time, metrics),
         metrics=_answering_metrics(metrics, bindings),
     )
 
@@ -230,14 +262,18 @@ async def map_query(
         question=query.question,
         intent=query.intent,
         result=result,
-        filters=PlanFilters(ciks=ciks, periods=resolved_periods),
+        filters=PlanFilters(
+            ciks=ciks, periods=resolved_periods, support_periods=support_periods
+        ),
         bindings=bindings,
         ambiguous=ambiguous,
         unresolved=unresolved,
         clarifications=clarifications,
         thresholds=thresholds,
+        over_time=over_time,
         notes=company_notes
         + coverage_notes
+        + over_time_notes
         + _alignment_notes(resolved_periods, result)
         + _granularity_notes(result),
     )
@@ -361,6 +397,113 @@ def _answering_ciks(ciks: list[int], bindings: list[Binding]) -> list[int]:
         return ciks
     bound = {binding.company_cik for binding in bindings}
     return [cik for cik in ciks if cik in bound]
+
+
+async def _previous_periods(
+    session: AsyncSession, ciks: list[int], periods: list[ResolvedPeriod]
+) -> list[ResolvedPeriod]:
+    """The window before a period asked for on its own -- what "growth in 2024"
+    is measured against. A series needs none: its first period is the base
+    (``over_time_pairs``).
+
+    From the same windows ``_resolve_periods`` reads, derived Q4 included, so a
+    lone Q1's previous quarter is the prior year's synthesized Q4.
+    """
+    windows = _with_derived_q4(await _load_windows(session, ciks))
+    runs: dict[tuple[int, bool], list[ResolvedPeriod]] = defaultdict(list)
+    for period in periods:
+        runs[(period.company_cik, period.fiscal_period == "FY")].append(period)
+    wanted = [
+        (run[0].company_cik, *previous_period(run[0].fiscal_year, run[0].fiscal_period))
+        for run in runs.values()
+        if len(run) == 1
+    ]
+    return [windows[key] for key in sorted(set(wanted)) if key in windows]
+
+
+def _over_time(
+    elements: list[MetricElementIn],
+    bindings: list[Binding],
+    asked: list[ResolvedPeriod],
+    support: list[ResolvedPeriod],
+) -> tuple[list[PlanOverTime], list[Unresolved], list[Note]]:
+    """Which over-time metrics can be answered.
+
+    A figure needs the metric bound at both of its ends (``over_time_pairs``).
+    When no figure has both, the part is refused, saying why; when a company
+    has none -- one period asked for, and the one before it not loaded -- the
+    rest are answered and a note names what is missing.
+    """
+    bound: dict[str, set[tuple[int, int, str]]] = defaultdict(set)
+    for binding in bindings:
+        for ref in binding.periods:
+            bound[binding.element_id].add(
+                (binding.company_cik, ref.fiscal_year, ref.fiscal_period)
+            )
+    earlier = {(p.company_cik, p.fiscal_year, p.fiscal_period): p for p in support}
+
+    def key(period: ResolvedPeriod) -> tuple[int, int, str]:
+        return period.company_cik, period.fiscal_year, period.fiscal_period
+
+    entries: list[PlanOverTime] = []
+    problems: list[Unresolved] = []
+    notes: list[Note] = []
+    for element in elements:
+        have = bound.get(element.id)
+        if not have:
+            continue  # the metric itself did not bind; its refusal already says why
+        kind = element.over_time
+        pairs = [
+            (now, then)
+            for now, then in over_time_pairs(kind, asked, earlier)
+            if key(now) in have and key(then) in have
+        ]
+        if not pairs:
+            need = (
+                "at least two fiscal years of it"
+                if kind == "cagr"
+                else "its value in an earlier period to measure against, and none is loaded"
+            )
+            problems.append(
+                Unresolved(
+                    element_id=element.id,
+                    reason=f"the {'compound annual growth' if kind == 'cagr' else kind} "
+                    f"of {element.text!r} needs {need}",
+                )
+            )
+            continue
+        entries.append(PlanOverTime(element_id=element.id, kind=kind))
+        covered = {now.company_cik for now, _ in pairs}
+        left_out = sorted({p.company_cik for p in asked if key(p) in have} - covered)
+        if left_out:
+            notes.append(
+                Note(
+                    kind="partial_coverage",
+                    message=(
+                        f"No {kind} of {element.text!r} for cik {', '.join(map(str, left_out))}: "
+                        "there is no earlier period loaded to measure it against"
+                    )[:512],
+                )
+            )
+    return entries, problems, notes
+
+
+def _answered_periods(
+    asked: list[ResolvedPeriod], over_time: list[PlanOverTime], metrics: list[MetricElementIn]
+) -> list[ResolvedPeriod]:
+    """The periods the answer has rows for. An over-time figure is answered at
+    the later end of each pair, so a question asking only for those has fewer
+    periods than it names: "the last five years" of growth is four, a CAGR one."""
+    kinds = {entry.element_id: entry.kind for entry in over_time}
+    if not metrics or any(m.id not in kinds for m in metrics):
+        return asked
+    answered = {
+        (now.company_cik, now.fiscal_year, now.fiscal_period): now
+        for kind in set(kinds.values())
+        for now, _ in over_time_pairs(kind, asked, {})
+    }
+    single = [p for p in asked if (p.company_cik, p.fiscal_year, p.fiscal_period) in answered]
+    return single or asked
 
 
 def _answering_metrics(metrics: list[MetricElementIn], bindings: list[Binding]) -> int:

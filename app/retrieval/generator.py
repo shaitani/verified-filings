@@ -31,11 +31,11 @@ from ollama import AsyncClient
 
 from app.config import settings
 from app.retrieval.prompt import (
-    DERIVING_INTENTS,
-    FIGURES_SELECT,
     build_prompt,
     emit_cte,
     emit_figures,
+    figures_select,
+    needs_the_model,
     plan_cells,
     uses_figures,
 )
@@ -156,8 +156,8 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     # ``prompt.uses_figures``.
     if uses_figures(plan):
         head = emit_cte(plan_cells(plan)) + "," + chr(10) + emit_figures(plan)
-        if plan.intent not in DERIVING_INTENTS:
-            return head + chr(10) + FIGURES_SELECT
+        if not needs_the_model(plan):
+            return head + chr(10) + figures_select(plan)
         return head + chr(10) + _begins_at_select(await _ask(plan, model))
     return _splice(plan, await _ask(plan, model))
 

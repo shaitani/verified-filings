@@ -1454,6 +1454,28 @@ def test_clarify_entry_answers_only_for_a_curated_question(fake_aliases) -> None
     assert fake_aliases.clarify_entry("no_such_entry") is None
 
 
+async def test_growth_with_nothing_earlier_loaded_is_refused_with_its_reason(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """One year asked for, and no year before it in the store: there is nothing
+    to measure the growth against, and the part says so."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric", "over_time": "growth"},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.over_time == []
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m" and not problem.blocks_question
+    assert "needs its value in an earlier period" in problem.reason
+
+
 async def test_when_no_named_company_resolves_the_scope_does_not_widen(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:

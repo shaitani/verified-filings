@@ -355,6 +355,33 @@ def test_a_list_heading_with_a_time_word_still_drops_the_list():
         check_span(_element(text="yearly revenue"), "What is Apple's yearly revenue: gross, net")
 
 
+def test_over_time_is_carried_to_the_metric():
+    reply = _reply(
+        intent="derive",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple"},
+            {"id": "e2", "kind": "metric", "text": "revenue", "over_time": "growth"},
+            {"id": "e3", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+    )
+    (metric,) = [e for e in accept(reply, "What was Apple's revenue growth in 2024?").elements
+                 if e.kind == "metric"]
+    assert metric.text == "revenue" and metric.over_time == "growth"
+
+
+def test_over_time_belongs_to_metrics_only():
+    reply = _reply(
+        intent="derive",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "Apple", "over_time": "growth"},
+            {"id": "e2", "kind": "metric", "text": "revenue"},
+            {"id": "e3", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+    )
+    with pytest.raises(MalformedProposal, match="only a metric"):
+        accept(reply, "What was Apple's revenue growth in 2024?")
+
+
 def test_an_invented_company_is_refused():
     reply = _reply(
         elements=[

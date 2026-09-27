@@ -32,7 +32,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.query import Comparison, Intent, QueryFiscalPeriod
+from app.schemas.query import Comparison, Intent, OverTime, QueryFiscalPeriod
 from app.semantic.metric_aliases import alias_index
 
 #: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
@@ -91,6 +91,10 @@ class WireElement(BaseModel):
     # plain string here; the grammar below narrows it to the curated names, so
     # the model cannot spell one that does not exist.
     clarify_as: str | None = None
+
+    # Metric only: the metric asked for as its movement over time -- "change",
+    # "growth" or "cagr". A Literal, so the grammar allows exactly those.
+    over_time: OverTime | None = None
 
 
 class WireQuery(BaseModel):

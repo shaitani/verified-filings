@@ -916,6 +916,58 @@ Not for ratios: a percentage change of a margin reads as a change in points
 and is not one. Those still go through `_JOB_EITHER`, and the missing
 DERIVATION example there (§4.3e) is still open.
 
+### 4.8 Change, growth and CAGR are metric arithmetic too
+
+Added 2026-09-26. A growth is `(this - before) / before` over one metric at
+two periods; a change is `this - before`; a CAGR is
+`(last / first) ^ (1 / years) - 1`. Each is fixed arithmetic the plan can
+state, so it is written in Python like a margin (`figures`, §4.6), never by the
+model. The model got growth wrong when asked (q010 put the rate in
+`derivation`).
+
+**How a question reaches it.** The parser marks the metric element
+`over_time: change | growth | cagr` (`MetricElementIn.over_time`); the metric's
+`text` stays the metric ("revenue"). The mapper records the element in
+`QueryPlan.over_time` and binds the metric over every period it needs.
+
+**Which periods pair up** is one shared rule, `over_time_pairs` in
+`app/schemas/query.py`, used by the mapper to fetch and by retrieval to read:
+
+* a series steps from each period to the next *in the series* — "the last five
+  years" is four growths, "between 2023 and 2024" is one, Q4 over three years
+  is Q4 against Q4. The first period asked for is the base, not an answer;
+* a single period is measured against the one before it, which the mapper
+  fetches as a `PlanFilters.support_periods` window — "growth in 2024" reads
+  2023 too;
+* a CAGR is the last fiscal year against the first, one figure per company.
+
+**Built per cell, not per binding** (`_over_time_cells`), because the two ends
+can be different concepts: NVIDIA tags revenue one way through FY2022 and
+another from FY2023, so its FY2023 growth reads each end from the binding that
+covers it, and the row cites both. Each operand row in `wanted` carries its own
+window; `cell_start` / `cell_end` name the answer cell, which `figures` groups
+by and reports, and `span_years` feeds a CAGR's exponent.
+
+**Guarded arithmetic.** A growth or CAGR from a zero or negative base comes
+back NULL on the derived row rather than as a number. Rows carry
+`derivation = change | growth | cagr`, so the unit check and the verdict treat
+them as derived.
+
+**What the model still does.** A ranking over them ("which company grew
+revenue fastest") — the prompt shows `figures` with the computed value and its
+`derivation`. A `derive` question the over-time metric already answers is not
+sent to the model at all (`needs_the_model`): asking it to derive again would
+compute a growth of the growth.
+
+Measured end to end, over-time set by hand: Tesla FY2024 revenue growth 0.95%;
+NVIDIA's four growths across its tag change (61.4%, 0.2%, 125.9%, 114.2%);
+Apple's five-year revenue CAGR 3.28%; Apple's quarterly revenue changes; the
+change in Apple's gross margin — a ratio base, shifted operands — +0.70 points.
+
+§4.7's period-change rows still serve a plain series nobody asked to compute
+("show me revenue over five years"); an over-time metric takes their place
+where the question asks for the movement, and never gets both.
+
 ## 9. Open
 
 - **`ResultShape` is not enforced.** The verdict checks cardinality; nothing

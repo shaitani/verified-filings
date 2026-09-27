@@ -603,3 +603,28 @@ a particular list, and that belongs to the *parser*, not to the query model.
 Recorded here because it was briefly designed as a "bundle" concept before
 being recognised as nothing new.
 
+
+### 8.21 Fields added 2026-09-26: per-part refusals, curated questions, movement over time
+
+Three additions, each with its full reasoning elsewhere:
+
+- **`Unresolved.blocks_question`** and **`QueryPlan.has_answerable_part`** — a
+  question is answered per part. A refused metric or narrative span refuses
+  only itself (`False`, set by the mapper from the element's kind); a refused
+  company, company group or period sinks the whole question (`True`, the
+  default, so an unclassified refusal errs toward refusing). The caller runs
+  SQL when `has_answerable_part`; `is_complete` still means everything bound.
+  Semantic DESIGN §8e.
+- **`MetricElementIn.clarify_as`** — the name of a curated `clarify` entry the
+  parser judges a vague metric to be about ("fare" → `performance`). It can only
+  produce a question, never a binding, and is consulted only when the curated
+  lookup of `text` finds nothing. Parser DESIGN §10a.
+- **`MetricElementIn.over_time`** (`change` / `growth` / `cagr`),
+  **`QueryPlan.over_time`** (`PlanOverTime`) and **`PlanFilters.support_periods`**
+  — a metric asked for as its movement rather than its level. `text` stays the
+  metric; retrieval builds each answer cell from the metric at two periods and
+  computes the arithmetic in Python. `support_periods` are windows fetched only
+  as an operand (the year before a single year asked for), kept out of
+  `periods` so nothing counts or reports them. Which periods pair up is one
+  rule, `over_time_pairs`, beside `previous_period` in this module, so the
+  mapper and retrieval cannot disagree. Retrieval DESIGN §4.8.

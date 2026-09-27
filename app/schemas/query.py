@@ -132,6 +132,16 @@ NoteKind = Literal[
 #: reading a phrase rather than composing a predicate.
 Comparison = Literal["gt", "gte", "lt", "lte", "eq"]
 
+#: A metric asked for as its movement over time rather than its level.
+#:   "change" -- this period minus the one before, in the metric's own unit.
+#:   "growth" -- that change over the earlier period's value, as a fraction.
+#:   "cagr"   -- compound annual growth from the first fiscal year asked for
+#:               to the last, one figure per company.
+#: Each is arithmetic over the same metric at two periods, so it is written in
+#: Python like any other multi-operand metric, never by the model. See
+#: ``app/retrieval/DESIGN.md`` §4.8.
+OverTime = Literal["change", "growth", "cagr"]
+
 #: Rendered into the SQL prompt, and the one place the mapping from name to
 #: operator lives.
 COMPARISON_SQL: dict[str, str] = {
@@ -195,6 +205,11 @@ class MetricElementIn(_ElementBase):
     #: picks comes back through the ordinary round trip and binds by alias. A
     #: wrong name costs a misdirected question, never a figure.
     clarify_as: str | None = Field(default=None, max_length=64)
+
+    #: The metric's movement over time rather than its level: "revenue growth",
+    #: "year-over-year change", "compound annual growth". ``text`` stays the
+    #: metric ("revenue"); this says what to compute from it. See ``OverTime``.
+    over_time: OverTime | None = None
 
 
 class CompanyElementIn(_ElementBase):
@@ -641,6 +656,65 @@ class Binding(_Base):
         return self
 
 
+def previous_period(fiscal_year: int, fiscal_period: str) -> tuple[int, str]:
+    """The period before this one, of the same length: the prior fiscal year,
+    or the prior quarter -- Q1's is the previous year's Q4. What a growth or a
+    change is measured against. Shared by the mapper, which fetches that
+    window, and retrieval, which reads it."""
+    if fiscal_period == "FY":
+        return fiscal_year - 1, "FY"
+    quarter = int(fiscal_period[1])
+    if quarter == 1:
+        return fiscal_year - 1, "Q4"
+    return fiscal_year, f"Q{quarter - 1}"
+
+
+PeriodKey = tuple[int, int, str]  # (company_cik, fiscal_year, fiscal_period)
+
+
+def over_time_pairs(
+    kind: str, asked: list[ResolvedPeriod], earlier: dict[PeriodKey, ResolvedPeriod]
+) -> list[tuple[ResolvedPeriod, ResolvedPeriod]]:
+    """``(current, earlier)`` for every over-time figure the periods asked for
+    make: per company and granularity (annual apart from quarterly), in date
+    order.
+
+    * change / growth over a series: each period against the one before it
+      **in the series** -- "the last five years" is four growths, "between 2023
+      and 2024" is one, and Q4 over three years is Q4 against Q4. The first
+      period asked for is the base, not an answer.
+    * change / growth of a single period: against the period before it, from
+      ``earlier`` (``PlanFilters.support_periods``) when it is loaded -- "revenue
+      growth in 2024" reads 2023 too.
+    * cagr: the last fiscal year against the first, one per company.
+
+    The rule the mapper fetches by and retrieval reads by, so the two cannot
+    disagree about which periods a figure spans.
+    """
+    series: dict[tuple[int, bool], list[ResolvedPeriod]] = {}
+    for period in sorted(asked, key=lambda p: p.period_end):
+        series.setdefault((period.company_cik, period.fiscal_period == "FY"), []).append(period)
+    pairs: list[tuple[ResolvedPeriod, ResolvedPeriod]] = []
+    for (cik, annual), run in series.items():
+        if kind == "cagr":
+            if annual and len(run) >= 2:
+                pairs.append((run[-1], run[0]))
+        elif len(run) >= 2:
+            pairs += list(zip(run[1:], run[:-1], strict=True))
+        else:
+            key = (cik, *previous_period(run[0].fiscal_year, run[0].fiscal_period))
+            if key in earlier:
+                pairs.append((run[0], earlier[key]))
+    return pairs
+
+
+class PlanOverTime(_Base):
+    """One metric element answered as its movement over time. See ``OverTime``."""
+
+    element_id: str = Field(min_length=1, max_length=32)
+    kind: OverTime
+
+
 class PlanThreshold(_Base):
     """A comparison the answer's rows must satisfy, carried into the plan.
 
@@ -815,6 +889,12 @@ class PlanFilters(_Base):
 
     forms: list[FilingForm] = Field(default_factory=list)
 
+    #: Windows fetched only as operands of an ``over_time`` metric -- the year
+    #: before the first one asked for, whose value a growth figure divides by.
+    #: Kept apart from ``periods`` because they are not answered: nothing is
+    #: reported for them, and nothing counts them as rows.
+    support_periods: list[ResolvedPeriod] = Field(default_factory=list)
+
 
 class ResultSpec(_Base):
     """How much data the answer needs, and along which dimensions.
@@ -866,6 +946,11 @@ class QueryPlan(_Base):
     #: for almost every question. See ``PlanThreshold``: these are the one
     #: narrowing that is *meant* to return fewer rows than the grid promises.
     thresholds: list[PlanThreshold] = Field(default_factory=list)
+
+    #: Metric elements answered as change, growth or CAGR rather than as
+    #: filed. Their bindings are the metric's own; ``plan_cells`` builds each
+    #: answer cell from them at two periods. See ``PlanOverTime``.
+    over_time: list[PlanOverTime] = Field(default_factory=list)
 
     #: Caveats about the result as a whole rather than about one binding --
     #: currently only that the companies' fiscal labels cover different dates.

@@ -210,7 +210,7 @@ _YEAR = re.compile(r"\b\d{4}\b")
 #: Which optional wire fields each kind may carry. Anything outside its set
 #: is a confusion, not a spare field -- see gate 3.
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
-    "metric": frozenset({"clarify_as"}),
+    "metric": frozenset({"clarify_as", "over_time"}),
     "company": frozenset(),
     "period": frozenset(
         {"fiscal_year", "fiscal_period", "last_n_years", "last_n_quarters"}
@@ -508,7 +508,12 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
     try:
         if element.kind == "metric":
             _check_clarify_as(element)
-            return MetricElementIn(id=element.id, text=span, clarify_as=element.clarify_as)
+            return MetricElementIn(
+                id=element.id,
+                text=span,
+                clarify_as=element.clarify_as,
+                over_time=element.over_time,
+            )
         if element.kind == "company":
             # No ticker, no name: see wire.py. The span alone reaches the
             # mapper's lexicon, and a hint the model invented would outrank
