@@ -38,8 +38,9 @@ QueryIn                  question + typed elements + optional shape
    ↓  app/semantic/query_mapper.py  [D]  reads as vf_query_mapper_role
 QueryPlan                concrete coordinates, caveats, cardinality
    ↓  app/retrieval/     [E] Executor
-       build_prompt(plan) → text for Qwen                no DB, writes no SQL
-       generate(plan)     → Qwen writes the SQL          no DB
+       build_prompt(plan) → text for Qwen (rank/derive)  no DB, writes no SQL
+       generate(plan)     → the SQL: Python writes it;   no DB
+                            Qwen only a ranking/derivation over `figures`
        validate(sql)      → verdict only                 no DB, no edits
        execute(sql, plan) → ResultSet   reads xbrl.reported_fact as
                                         vf_retrieval_role
@@ -237,8 +238,13 @@ Each function does one job, and only it does that job.
 | `validate` | judges, returning its input byte-identical | run it, or edit it |
 | `execute` | the only thing that touches the database | anything else |
 
-**Qwen writes all of the SQL.** The plan reaches it as a table of coordinates
-— not a `VALUES` list, which would be SQL. `validate` raises `OutOfRole`
+**Python writes the SQL; Qwen writes only a ranking or a derivation.** Since
+2026-09-26 every value the answer reads is written in Python from the plan:
+the coordinates (`wanted`) and each cell's figure — fetched, combined, filtered
+by a threshold, or computed over time — in a second CTE, `figures`. A plan
+that computes nothing above its cells never reaches Qwen. A `rank` or `derive`
+plan gets a short prompt showing only `figures`, and Qwen writes the layer
+above it (retrieval DESIGN §4.6). `validate` raises `OutOfRole`
 (logged at WARNING) when the statement steps outside its role — a `SET`,
 `set_config`, a relation other than the view, a data-modifying CTE, or a
 statement that reads nothing at all — and `ContractViolation` for an ordinary
@@ -383,17 +389,26 @@ In rough order of how much they matter.
   (`evals/README.md`). When a run says `pass`, that means the chain made the
   right call about whether to answer — not that the number is right.
 
-- **`_JOB_EITHER` can point at an example that is not in the prompt.** Its
-  branch (b) says to follow the `DERIVATION example`, which is attached only to
-  a single-operand deriving plan. A multi-operand plan phrased as a comparison
-  therefore takes branch (b), finds nothing to follow, and improvises the
-  arithmetic. Selecting the job text on `combining` rather than `intent` looks
-  like the fix and is not: it was tried and reverted, because it broke a
-  question that had been passing. See `app/retrieval/DESIGN.md` §4.3e.
-  Narrowed 2026-09-25/26: a series along `period` of plain figures no longer
-  reaches `_JOB_EITHER` — its SQL, and the growth between its periods, are
-  written in Python (retrieval DESIGN §4.7, §4.8). That fixed q010. Ratios and
-  non-series comparisons still take this path.
+- **What Qwen still writes has no structural check.** A ranking or a
+  derivation over `figures` is the model's, and the statement is checked for
+  shape, not for meaning. Measured failures of that layer: q038's `LIMIT 1`
+  (§4.3), q040 leaving `unit` out of an average (refused, now a prompt rule).
+  The old `_JOB_EITHER` choice between "copy" and "compute", which improvised
+  arithmetic when its example was missing, is gone with the path that used it.
+- **TODO — retire Qwen as a SQL emitter entirely.** The user's stated
+  direction (2026-09-27), deliberately not started yet. What Qwen still writes
+  is an ordering (q009, q014, q038, q039) or an aggregate (q040's average) —
+  trivial SQL; its only contribution is reading which one the question wants.
+  Move that reading into the parser as a closed list, the pattern that worked
+  for `clarify_as` and `over_time`: e.g. `rank: highest | lowest`,
+  `aggregate: average | sum | min | max`, `share_of_total`, `difference`,
+  grammar-constrained and checked in `accept()`. Python then writes every
+  statement from a fixed template over `figures`; an operation not on the list
+  is refused with a reason (q015's "fell three years running" until added).
+  Costs to weigh: a wrong direction becomes a plausible wrong answer (state the
+  operation in the answer, pin it in eval expectations); long-tail operations
+  Qwen improvises today stop working until listed; and it is another parser
+  prompt change, so re-measure the colon-list questions cold.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the

@@ -288,12 +288,11 @@ Each function does one job, and only it does that job:
 | `validate` | judges the statement | run it, or **modify** it |
 | `execute` | runs it against the database | anything else |
 
-**Qwen writes the SQL. All of it.** `build_prompt` hands over what the model
-needs — the view's columns and their traps, a table of coordinates (one row
-per value the answer needs), the required projection, the rules — and the
-model composes the statement. The coordinate table is deliberately *not* a
-`VALUES` list: that would be SQL, and a half-written statement blurs the line
-this table exists to keep.
+**Superseded 2026-09-26: Python writes the SQL; the model writes only a
+ranking or a derivation** (§4.6). What follows is how it started. Qwen wrote
+all of it: `build_prompt` handed over the view's columns and their traps, a
+table of coordinates, the required projection and the rules, and the model
+composed the statement. §4.3 is the catalogue of what that cost.
 
 `validate` returns its input **byte-identical**. An earlier version appended a
 missing `LIMIT`; it no longer does, because a validator that edits its input
@@ -836,11 +835,13 @@ catalogue says this, and the derivation example in §4.3 is the fourth instance.
 **Where to look next, when optimising.** Every one of these is currently prose
 in the prompt and could be structure instead:
 
-- **The join itself.** Five equality conditions, identical in every statement.
-  A second emitted CTE — `figures AS (SELECT ... FROM wanted JOIN view ON ...)`
-  — would leave the model only the analytical layer. It also removes the
-  `unit`-in-the-join rule, `period_start`-only-when-duration, and "do not use
-  BETWEEN", which are three of the measured failures in §4.3.
+- **The join itself — done (2026-09-26).** `figures` is emitted for every
+  plan, so the join is never the model's: a lookup, a comparison or a series
+  reads `figures` as it is and the model is not asked, and a ranking or
+  derivation is written over `figures` alone. The model's prompt shows no
+  relation, no coordinate and no operand, only computed values; the `unit`-in-
+  the-join rule, `period_start`-only-when-duration and "do not use BETWEEN"
+  went with it. A plan `figures` cannot hold is refused.
 - **The fixed twelve-column projection.** `RESULT_COLUMNS` never varies, and
   the contract refuses any deviation. Emitting the projection would retire
   rule 4 and the `NULL::text` alias trap with it.
@@ -897,17 +898,12 @@ never compared and a tag change cites both bindings. What changed: a growth
 from a zero or negative figure comes back as a NULL-valued growth row rather
 than as an omitted row with a note.
 
-**The same for a plain comparison** (`prompt.wants_side_by_side`): intent
-`compare`, single-concept, not `pure`, and not a series. `_JOB_SIDE_BY_SIDE`
-tells the model the figures side by side are the comparison. q008 ("How does
-Tesla's R&D spending compare to Meta's?") had passed only by luck — it put a
-`LAG` in `derivation`, which came out NULL on one row per company — and q036
-renamed `value` for the same reason: "compare" pushed it to branch (b), where
-no example waits. Nothing is computed afterwards; there is nothing to compute.
-
-Not for ratios: a percentage change of a margin reads as a change in points
-and is not one. Those still go through `_JOB_EITHER`, and the missing
-DERIVATION example there (§4.3e) is still open.
+A plain comparison went the same way. q008 ("How does Tesla's R&D spending
+compare to Meta's?") had passed only by luck — it put a `LAG` in
+`derivation`, which came out NULL on one row per company — and q036 renamed
+`value`: "compare" pushed the model to branch (b) of `_JOB_EITHER`, where no
+example waited. A side-by-side job fixed it for a while; since `figures` is
+emitted for every plan (§4.6) a comparison never reaches the model at all.
 
 ### 4.8 Change, growth and CAGR are metric arithmetic too
 

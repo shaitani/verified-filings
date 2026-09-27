@@ -250,34 +250,6 @@ NEWLINE = chr(10)
 #: The name of the CTE this module writes and the model selects from.
 CTE_NAME = "wanted"
 
-#: How much rendered CTE to inline before falling back to describing it.
-#:
-#: Moving the CTE out of the prompt (2026-09-24) shrank it to a constant ~6,200
-#: characters and fixed q038. It also broke q001, q004, q005, q007 and q008,
-#: and the mechanism took a day to find: **a model that cannot see the CTE
-#: invents a filter to narrow it.** Told only "1 row(s) of coordinates", it
-#: wrote ``WHERE w.fiscal_year = '2024' AND w.fiscal_period = 'Q2'`` -- lifting
-#: `Q2` from the OUTPUT section, the one place in the whole prompt where a
-#: fiscal_period value appears. The join then matched nothing and a question
-#: that had worked for four days returned `empty`.
-#:
-#: Eight wordings were measured against it and only one held: show the rows.
-#: Telling it "add no other filter", or "your statement has NO WHERE clause at
-#: all", or making that a numbered RULE, each fixed some questions and broke
-#: others -- and q005 answered every prohibition with a *different* invented
-#: filter (`v.concept_id`, then `v.concept_name`). Showing it the two bad
-#: clauses as things not to write taught it to write them, which is
-#: DESIGN.md §4.3's recurring lesson arriving again.
-#:
-#: So the CTE is inlined while it is small, and described when it is not. The
-#: gate is characters rather than rows because a multi-operand plan carries two
-#: rows per cell: what has to stay bounded is the prompt. At 4,000 the whole
-#: eval set inlines except q038 (378 rows, 34,664 characters, which would put
-#: the prompt at 43,542 -- roughly 11k tokens against an 8,192 context, and it
-#: would truncate). q038 is also the question the optimisation was made for,
-#: and it passes without seeing the CTE.
-MAX_INLINE_CTE_CHARS = 4000
-
 #: Column names for the coordinate CTE. One constant so the worked example, the
 #: CTE's own declaration and the prose describing it can never drift apart -- a
 #: model shown two different column lists has been given a reason to invent a
@@ -386,201 +358,6 @@ def emit_cte(cells: list[PlanCell]) -> str:
     return opener + ("," + NEWLINE).join(rows) + NEWLINE + ")"
 
 
-#: ``QueryIn.intent`` is the parser saying what kind of answer is wanted, and
-#: it is the only signal available here that separates "give me the figures"
-#: from "compute something from them".
-#:
-#: It is used to remove an option rather than to add one. Measured with
-#: qwen2.5-coder:7b: given a complete, correct query in the prompt *and*
-#: permission to return it unchanged, it returns it unchanged even for a
-#: ranking question -- it copied the base query and appended an ORDER BY. A
-#: 7B model handed a finished answer does not go looking for a better one.
-#: So when the intent says the answer must be computed, the "reply unchanged"
-#: branch is not offered at all.
-DERIVING_INTENTS = frozenset({"rank", "derive"})
-
-def _plain_figures(plan: QueryPlan) -> bool:
-    """Every binding a single concept, as filed, in a unit that is not ``pure``."""
-    return all(len(b.concepts) == 1 and b.unit != "pure" for b in plan.bindings)
-
-
-def wants_side_by_side(plan: QueryPlan) -> bool:
-    """A comparison whose answer is the figures themselves, side by side.
-
-    q008 ("How does Tesla's R&D spending compare to Meta's?") and q036 were
-    both offered `_JOB_EITHER`; the word "compare" pushed the model toward
-    branch (b), where there is no DERIVATION example to follow. q008 put a
-    LAG in `derivation`; q036 renamed `value` to `apple_revenue`. Two
-    companies' filed figures next to each other already are the comparison.
-    """
-    return plan.intent == "compare" and _plain_figures(plan)
-
-
-#: The job for `wants_side_by_side`: the model is given one option, not two,
-#: because offered the choice it computed something nobody asked for (q036,
-#: q008).
-_JOB_SIDE_BY_SIDE = """Reply with the worked example above, unchanged.
-
-The figures side by side ARE the comparison: the reader sees each company's
-value next to the others. Do not compute a difference, a ratio, a rank or
-anything else, and leave `derivation` NULL on every row."""
-
-_JOB_EITHER = """Decide which of these two the question needs. Read the question again before
-choosing -- returning the figures when the question asked for a comparison
-between them answers a different question.
-
-(a) The question asks for the figures themselves ("what was X's revenue").
-    Reply with the worked example above, unchanged.
-
-(b) The question asks for something COMPUTED from them -- a growth rate, a
-    ranking, a share of a total, a difference, a filter on a computed value.
-    Then follow the DERIVATION example below instead of the as-filed one.
-    Set `derivation` to a short name for what you computed. Leave it NULL only
-    on rows whose `value` is a figure exactly as filed -- a computed value with
-    a NULL derivation is reported to the reader as the metric itself, which is
-    wrong."""
-
-#: The derivation the model is shown, on an invented derivation name.
-#:
-#: Added 2026-09-24, and it is the difference between q038 failing and passing.
-#: Told in prose to compute, qwen2.5-coder:7b wrote
-#: ``WHERE w.fiscal_period = 'Q4' ORDER BY v.value DESC LIMIT 1`` -- a filter
-#: the plan never asked for, an ordering by *revenue* rather than by change, and
-#: one row, labelled ``derivation = 'revenue_decline'`` having computed no
-#: decline. One row of twenty companies also fails the verdict, correctly.
-#:
-#: **One level, not two.** A first attempt showed the computation in a subquery
-#: with the outer level filtering the NULL leading row. The model flattened it,
-#: aliased the computed column ``AS change``, and the projection was refused --
-#: the same refusal to restructure measured earlier the same day on q011's
-#: growth query. It does not need two levels: PostgreSQL takes an output alias
-#: in ORDER BY, and a NULL ``value`` is legal on a derived row now
-#: (``ResultRow._null_value_needs_a_derivation``), so there is nothing to filter.
-_EXAMPLE_DERIVED = f"""WORKED EXAMPLE OF A DERIVATION (invented name -- copy the FORM)
-
-A question asking which company's figure fell most from one period to the next.
-ONE level: the computed column is aliased `value`, and the window function goes
-straight in the projection.
-
-  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
-         w.fiscal_year, w.fiscal_period,
-         v.period_start, v.period_end, v.is_instant,
-         v.value - LAG(v.value) OVER (
-           PARTITION BY v.company_cik ORDER BY v.period_end) AS value,
-         v.unit, 'qoq_change' AS derivation
-  FROM {CTE_NAME} w
-  JOIN {VIEW} v
-    ON  v.company_cik = w.company_cik
-    AND v.concept_id  = w.concept_id
-    AND v.unit        = w.unit
-    AND v.is_instant  = w.is_instant
-    AND v.period_end  = w.window_end
-    AND (w.is_instant OR v.period_start = w.window_start)
-  ORDER BY value ASC
-  LIMIT {MAX_ROWS}
-
-Three things that gets right and are easy to get wrong:
-
-  - The computed column is aliased `value`, never its own name. The projection
-    is fixed and `change` is not one of its columns.
-  - `PARTITION BY v.company_cik`, so each company is compared against ITSELF.
-  - No `LIMIT 1` and no WHERE of your own. `LIMIT 1` answers "what is the
-    biggest fall" but not "which company", and a ranking the reader cannot see
-    is not a ranking. The first period of each company has nothing before it,
-    so its computed value is NULL -- that is expected, and it is kept.
-"""
-
-_JOB_MUST_DERIVE = """This question asks for a value that must be COMPUTED from those rows. The
-as-filed example is NOT the answer -- returning it unchanged, or with only an
-ORDER BY added, answers a different question.
-
-Follow the DERIVATION example instead. In every row you compute, set
-`derivation` to a short name for what it is, and set `unit` to what the computed
-number actually is ('pure' for a ratio or a growth rate). Leave `derivation`
-NULL only on rows whose `value` is a figure exactly as filed."""
-
-
-#: One worked example, on **invented data**.
-#:
-#: Not a retreat from "the model writes the SQL": the cik, concept ids and
-#: dates here belong to no company in the store, so this teaches the *form*
-#: and answers no part of the plan it is attached to.
-#:
-#: It exists because of a measured failure. Without it, qwen2.5-coder:7b
-#: transcribed the filter table into a ``UNION ALL`` of literal rows -- column
-#: for column, in the table's own order -- and invented a value to go with
-#: them. One filter row still produced a correct query; two did not, because
-#: with two rows "transcribe the table" becomes the more obvious completion
-#: than "join against it". The example makes the join the obvious one instead.
-#:
-#: The closing sentence does most of the work: it names the three columns the
-#: model was inventing and says where they come from.
-_EXAMPLE_PLAIN = f"""WORKED EXAMPLE -- this is the whole shape of an as-filed answer:
-
-  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,
-         w.fiscal_year, w.fiscal_period,
-         v.period_start, v.period_end, v.is_instant,
-         v.value, v.unit, NULL::text AS derivation
-  FROM {CTE_NAME} w
-  JOIN {VIEW} v
-    ON  v.company_cik = w.company_cik
-    AND v.concept_id  = w.concept_id
-    AND v.unit        = w.unit
-    AND v.is_instant  = w.is_instant
-    AND v.period_end  = w.window_end
-    AND (w.is_instant OR v.period_start = w.window_start)
-  LIMIT {MAX_ROWS}
-
-Note that value, ticker and entity_name appear ONLY as v.<column>. They are
-never written as literals -- they are what you are querying FOR. Every
-coordinate is w.<column>, because those are already in `{CTE_NAME}`.
-"""
-
-
-#: Shown only when the filter table has a `minus_window_ending`.
-#:
-#: Prose alone was not enough. Told in words to subtract, qwen2.5-coder:7b
-#: returned Apple's FY2024 annual revenue -- 391,035,000,000 -- as its Q4,
-#: against a real Q4 of 94,930,000,000. Thirty-six of thirty-six rows came
-#: back, every one attributed, verdict `complete`: nothing downstream can see
-#: that a quarter is really a year. It is the most dangerous single thing in
-#: this prompt, so it gets its own worked example rather than a sentence.
-_RESIDUAL_HELP = """
-{count} row(s) in the filter table have a date in `minus_window_ending`. Those
-values are NOT filed directly. Reading `window_start`..`window_end` for them
-returns a FULL YEAR, and reporting that as a quarter is the worst mistake you
-can make here.
-
-Each one is a subtraction of two rows of the relation that share a start date:
-
-  (value for window_start..window_end) MINUS (value for window_start..minus_window_ending)
-
-which means joining the relation to itself:
-
-  JOIN xbrl.reported_fact v
-    ON v.company_cik = w.company_cik AND v.concept_id = w.concept_id
-   AND v.unit = w.unit AND v.period_start = w.window_start
-   AND v.period_end = w.window_end
-  JOIN xbrl.reported_fact sub
-    ON sub.company_cik = w.company_cik AND sub.concept_id = w.concept_id
-   AND sub.unit = w.unit AND sub.period_start = w.window_start
-   AND sub.period_end = w.minus_window_ending
-  ...
-  v.value - sub.value AS value
-
-Use an inner join for the second one: if the row to subtract is missing, the
-answer must be left out entirely, never returned unsubtracted.
-"""
-
-
-#: The same example for a plan whose metrics combine operands.
-#:
-#: Two of them, not one adaptive one, because the difference is not cosmetic:
-#: the column list gains `operand` and the select gains a pivot and a GROUP
-#: BY. Handing over the plain example beside an operand filter table produced
-#: exactly the failure that would predict -- ten values per row against nine
-#: declared column names, so `unit` received a concept id and `is_instant`
-#: received 'USD', failing as `boolean = text`.
 def _operand_terms(expression: str) -> str:
     """``c0 - c1`` -> the two aggregate terms, with a NULLIF around any divisor.
 
@@ -602,26 +379,23 @@ FIGURES_NAME = "figures"
 
 
 def uses_figures(plan: QueryPlan) -> bool:
-    """Whether Python computes the values, so the model never sees an operand.
+    """Whether Python writes every value this plan reads -- which is always,
+    for a plan whose every element has one expression and one unit per
+    derivation, as one curated entry always gives.
 
-    True when the plan has a metric that is arithmetic over several concepts --
-    a margin, a ratio, free cash flow -- or a threshold. Both are fully written
-    down in the plan (``Binding.expression`` / ``unit``, ``PlanThreshold``), and
-    both failed when the model was asked to write them: q007 turned ``c0 / c1``
-    into ``c0 - c1``, q024 dropped the subtraction in free cash flow and was
-    graded ``pass`` at 64.1 billion, q009 ranked operating income *minus*
-    revenue. Written here, the operator cannot change.
-
-    Needs one expression and one unit per element across its companies, which
-    one curated entry always gives; otherwise the old path stands.
+    Python writes the fetch, the metric arithmetic, the threshold and any
+    change, growth or CAGR, in `figures`; the model is asked for nothing but a
+    ranking or a derivation above it (``needs_the_model``). It got here one
+    failure at a time -- q007 turned ``c0 / c1`` into ``c0 - c1``, q024 dropped
+    a subtraction and was graded ``pass`` at 64.1 billion, q009 ranked
+    operating income *minus* revenue, q010 put a growth rate in `derivation`,
+    q036 and q008 improvised when offered a choice -- and now holds for every
+    plan: whatever the plan fully specifies is Python's.
     """
     if not plan.bindings:
         return False
-    cells = plan_cells(plan)
-    if not (plan.thresholds or plan.over_time or any(cell.operands > 1 for cell in cells)):
-        return False
     shape_of: dict[tuple[str, str | None], tuple[str, str]] = {}
-    for cell in cells:
+    for cell in plan_cells(plan):
         shape = (cell.expression, cell.result_unit)
         if shape_of.setdefault((cell.element_id, cell.derivation), shape) != shape:
             return False
@@ -915,6 +689,11 @@ RULES (the statement is rejected if it breaks one)
 3. Give every projected column an explicit alias unless it is a bare column
    reference. `NULL::text` without an alias is a column named "text".
 4. Never write a number, a date or a company name into the SQL as a literal.
+5. Always project `unit`: `f.unit` for figures, or for a sum, average or
+   difference of figures in one unit; 'pure' for a ratio or a growth rate.
+   Measured: an average left it out and the statement was refused.
+6. `{FIGURES_NAME}` is already the complete row selection. Add no WHERE of your
+   own -- no year, no company -- unless the question's own condition needs one.
 
 CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
 {chr(10).join(notes) if notes else "- none"}
@@ -949,148 +728,24 @@ MAX_PROMPT_CHARS = int(_CONTEXT_TOKENS * CHARS_PER_TOKEN)
 
 
 def build_prompt(plan: QueryPlan) -> str:
-    """Render ``plan`` as the text Qwen is asked to write SQL from.
+    """The prompt for the one thing left to the model: a ranking or a
+    derivation over ``figures``.
 
-    Raises ``UnsupportedPlan`` when the rendered prompt cannot fit the model's
-    context window. See ``_refuse_if_too_long``.
+    Every value the answer reads is written in Python (``emit_cte``,
+    ``emit_figures``), so the model sees no relation, no coordinate and no
+    operand -- only computed values. A plan `figures` cannot hold is refused,
+    never handed to the model to fetch or combine itself.
+
+    Raises ``UnsupportedPlan`` for that, and when the prompt would not fit the
+    model's context window (``_refuse_if_too_long``).
     """
-    if uses_figures(plan):
-        return _figures_prompt(plan)
-    cells = plan_cells(plan)
-    if plan.thresholds or any(cell.operands > 1 for cell in cells):
-        # `uses_figures` declined a plan it should hold: one element with two
-        # expressions or units across its companies, which one curated entry
-        # cannot produce. Refused rather than handed to the model -- metric
-        # arithmetic and threshold filters are never the model's to write.
+    if not uses_figures(plan):
         raise UnsupportedPlan(
-            "a metric's arithmetic or threshold could not be written in Python "
-            "(one element with more than one expression or unit), and it is "
-            "never handed to the model"
+            "a metric's values could not be written in Python (one element with "
+            "more than one expression or unit), and they are never handed to the model"
         )
-    spec = plan.result
-    notes = _plan_notes(plan)
-    columns = ", ".join(RESULT_COLUMNS)
-    if plan.intent in DERIVING_INTENTS:
-        job = _JOB_MUST_DERIVE
-    elif wants_side_by_side(plan):
-        job = _JOB_SIDE_BY_SIDE
-    else:
-        job = _JOB_EITHER
-    worked_example = _EXAMPLE_PLAIN
-    # Shown for a deriving plan. Measured 2026-09-24: shown alongside the
-    # combining example on q009 ("highest operating margin"), the model took the
-    # example's `-` where its own expression said `/`. Metric arithmetic is now
-    # written in Python (`figures`), so no plan reaching this prompt combines
-    # operands and the two are never shown together.
-    if plan.intent in DERIVING_INTENTS:
-        worked_example = worked_example + chr(10) + _EXAMPLE_DERIVED
-    declared = ", ".join(_cte_columns(cells))
-    rendered = emit_cte(cells)
-    if len(rendered) <= MAX_INLINE_CTE_CHARS:
-        indented = chr(10).join("  " + line for line in rendered.splitlines())
-        cte_body = (
-            "This is it in full -- it is already written, do not repeat it:"
-            + chr(10) * 2
-            + indented
-        )
-    else:
-        cte_body = f"  {CTE_NAME}({declared})"
-
-    prompt = f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
-
-QUESTION
-{plan.question}
-
-WHAT THE ANSWER MUST CONTAIN
-shape={spec.shape}, varies along {spec.axes or ["nothing"]}, {spec.row_count} row(s) of
-underlying data ({spec.companies} compan(ies) x {spec.periods} period(s) x
-{spec.metrics} metric(s)). Do not collapse an axis the answer varies along.
-
-THE ONLY RELATION YOU CAN READ
-{VIEW}(company_cik, ticker, entity_name, concept_id, taxonomy, concept_name,
-                   concept_label, unit, is_instant, period_start, period_end, value)
-
-  - One row per reported value. Superseded restatements are already filtered
-    out; you do not need to think about that.
-  - `period_end` is the date the value is as of (is_instant = true) or ends on
-    (is_instant = false). `period_start` is NULL for every instant.
-  - It has NO fiscal_year or fiscal_period column, on purpose. Match on the
-    dates given below, never on a year.
-  - `unit` MUST be part of every join or filter that selects a value. The same
-    company, concept and period can be filed under two units, and ignoring it
-    returns each value twice.
-
-A COORDINATE CTE IS ALREADY WRITTEN FOR YOU
-Do NOT write `WITH`. Do NOT write a `VALUES` list. Begin your reply at
-`SELECT`. A CTE named `{CTE_NAME}` is already defined above whatever you write,
-holding {len(cells)} row(s) of coordinates across {spec.companies} compan(ies):
-
-{cte_body}
-
-Every coordinate you need is in it, already correct. **Never write a date, a
-cik or a concept_id as a literal** -- there is nothing to copy and nothing to
-work out. `concept_id` differs per company on purpose, because filers tag the
-same business concept differently, and `{CTE_NAME}` already knows which is
-which.
-
-`element_id`, `fiscal_year` and `fiscal_period` exist ONLY in `{CTE_NAME}` --
-the relation has no such columns -- so project them as `w.<column>`.
-
-`{CTE_NAME}` is the COMPLETE row selection. Add no other filter. In particular,
-do not filter on `ticker` or `entity_name` using names from the question: the
-question says "Apple", the database says "Apple Inc.", and a filter on the
-one finds none of the other. `company_cik` in the CTE already identifies the
-company exactly; `ticker` and `entity_name` are for display only.
-
-A Q4 row is no different from any other: no filer reports a fourth quarter,
-but the relation supplies one anyway, already computed. Fetch it like the rest.
-
-Match each row with an EXACT equality on all of:
-  company_cik, concept_id, unit, is_instant, period_end = window_end
-and, only when is_instant is false, period_start = window_start.
-Do not use BETWEEN or a date range: two different periods can end in the same
-year, and a range returns both.
-
-Joining `{CTE_NAME}` to the relation also keeps `element_id` and the period
-labels attached to the right rows.
-{worked_example}
-
-YOUR JOB
-{job}
-
-OUTPUT
-Project exactly these column names, in any order:
-  {columns}
-
-  - `element_id`, `fiscal_year` and `fiscal_period` come from `{CTE_NAME}`
-    and are projected under exactly those names -- the relation has no such
-    columns. `fiscal_period` is one of 'FY', 'Q1', 'Q2', 'Q3', 'Q4' and
-    nothing else.
-  - `period_start`, `period_end`, `is_instant`, `value`, `unit`, `ticker`,
-    `entity_name`, `company_cik` come from the relation.
-
-RULES (the statement is rejected if it breaks one)
-0. EVERY value must be read from the relation. Never write a number, a
-   ticker, a date or a company name into the SQL as a literal -- a statement
-   that does not read `{VIEW}` is rejected outright. `{CTE_NAME}` says WHICH
-   rows to fetch; it holds no values, and the values are not yours to supply.
-1. Begin at SELECT. No `WITH` and no `VALUES` -- the CTE is already written,
-   and a second one replaces it. SELECT only: no SET, no set_config(), no
-   data-modifying CTE, no SELECT INTO, no locking clause.
-2. `{VIEW}` is the only readable relation. `fact`, `filing`, `company` and
-   `concept` will raise a permission error.
-3. End with `LIMIT {MAX_ROWS}`. A statement with no LIMIT is rejected;
-   nothing adds one for you, and a smaller limit is not an improvement --
-   it drops rows the plan asked for.
-4. Give every projected column an explicit alias unless it is a bare column
-   reference. `NULL::text` without an alias is a column named "text".
-5. Never mix rows of different `unit` in one arithmetic expression.
-
-CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
-{chr(10).join(notes) if notes else "- none"}
-
-SQL:"""
-    _refuse_if_too_long(prompt, cells)
+    prompt = _figures_prompt(plan)
+    _refuse_if_too_long(prompt, plan_cells(plan))
     return prompt
 
 

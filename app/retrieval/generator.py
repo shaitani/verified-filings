@@ -31,6 +31,7 @@ from ollama import AsyncClient
 
 from app.config import settings
 from app.retrieval.prompt import (
+    UnsupportedPlan,
     build_prompt,
     emit_cte,
     emit_figures,
@@ -149,17 +150,20 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
     violation, so it travels on the channel that already means the machinery
     failed rather than the one that means the model wrote something wrong.
     """
-    # Metric arithmetic and thresholds are written in Python, in a second CTE
-    # (`figures`), so the model never sees an operand. A plan that computes
-    # nothing above its cells is then complete and the model is not asked; a
-    # ranking or derivation is written by the model over `figures` alone. See
-    # ``prompt.uses_figures``.
-    if uses_figures(plan):
-        head = emit_cte(plan_cells(plan)) + "," + chr(10) + emit_figures(plan)
-        if not needs_the_model(plan):
-            return head + chr(10) + figures_select(plan)
-        return head + chr(10) + _begins_at_select(await _ask(plan, model))
-    return _splice(plan, await _ask(plan, model))
+    # Every value is written in Python: the coordinates (`wanted`) and each
+    # cell's figure, combined, filtered and over time as the plan says
+    # (`figures`). A plan that computes nothing above its cells is then
+    # complete and the model is not asked; a ranking or derivation is written
+    # by the model over `figures` alone. See ``prompt.uses_figures``.
+    if not uses_figures(plan):
+        raise UnsupportedPlan(
+            "a metric's values could not be written in Python (one element with "
+            "more than one expression or unit), and they are never handed to the model"
+        )
+    head = emit_cte(plan_cells(plan)) + "," + chr(10) + emit_figures(plan)
+    if not needs_the_model(plan):
+        return head + chr(10) + figures_select(plan)
+    return head + chr(10) + _begins_at_select(await _ask(plan, model))
 
 
 async def _ask(plan: QueryPlan, model: str) -> str:
@@ -191,18 +195,6 @@ async def _ask(plan: QueryPlan, model: str) -> str:
     if not reply.strip():
         raise GenerationError(f"{model} returned an empty response")
     return extract_sql(reply)
-
-
-def _splice(plan: QueryPlan, select: str) -> str:
-    """Put the generated SELECT behind the CTE this package wrote.
-
-    The model is told to begin at ``SELECT``, and mostly does. When it opens
-    with its own ``WITH`` anyway the two cannot be concatenated -- the result
-    would be ``WITH ... WITH ...``, which does not parse -- so that is a
-    generation failure, reported as one rather than handed to ``validate()``
-    as a mystery syntax error.
-    """
-    return emit_cte(plan_cells(plan)) + chr(10) + _begins_at_select(select)
 
 
 def _begins_at_select(select: str) -> str:

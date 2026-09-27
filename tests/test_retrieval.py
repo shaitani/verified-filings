@@ -214,17 +214,6 @@ def test_a_plan_binding_nothing_is_refused() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_a_deriving_intent_is_not_offered_the_easy_option() -> None:
-    """Measured with qwen2.5-coder:7b: given a complete correct query *and*
-    permission to return it unchanged, it returns it unchanged even for a
-    ranking question. So the branch is removed rather than argued with."""
-    bindings, periods = [_binding()], [_annual()]
-    assert "unchanged" in build_prompt(_plan(bindings, periods, intent="lookup"))
-    ranked = build_prompt(_plan(bindings, periods, intent="rank"))
-    assert "is NOT the answer" in ranked
-    assert "Reply with the query above, unchanged" not in ranked
-
-
 def test_the_prompt_states_the_row_count_the_answer_needs() -> None:
     plan = _plan(
         [_binding(company_cik=APPLE), _binding(company_cik=NVIDIA)],
@@ -299,17 +288,14 @@ def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
 
 
 def test_every_example_begins_at_select() -> None:
-    """The CTE is written in Python now, and rule 1 forbids the model a `WITH`
-    of its own. This example still opened with `WITH wanted(...) AS (VALUES` --
-    written before that move and missed when the other two examples were
-    rewritten -- so a multi-operand plan was shown the one thing its own rules
-    forbid. Measured on q024: `max(v.value)` with no FILTER at all.
-    """
-    from app.retrieval.prompt import _EXAMPLE_DERIVED, _EXAMPLE_PLAIN
+    """The model is told to begin at SELECT, so no example may show it
+    anything else -- a `WITH` or `VALUES` in one is copied."""
+    from app.retrieval.prompt import _FIGURES_EXAMPLE_DERIVE, _FIGURES_EXAMPLE_RANK
 
-    for example in (_EXAMPLE_PLAIN, _EXAMPLE_DERIVED):
-        assert "WITH " not in example
-        assert "VALUES" not in example
+    for example in (_FIGURES_EXAMPLE_RANK, _FIGURES_EXAMPLE_DERIVE):
+        body = example.split("copy the FORM)", 1)[1]
+        assert body.strip().startswith("SELECT"), body[:60]
+        assert "WITH" not in body and "VALUES" not in body
 
 
 # --------------------------------------------------------------------------- #
@@ -374,7 +360,8 @@ class _FakeGenClient:
 
 
 def _one_cell_plan() -> QueryPlan:
-    return _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)])
+    """A ranking, because only a ranking or derivation reaches the model now."""
+    return _plan([_binding(company_cik=APPLE)], [_annual(APPLE, 2024)], intent="rank")
 
 
 async def test_the_sql_ceiling_is_actually_sent(monkeypatch):
@@ -630,12 +617,29 @@ def test_a_threshold_on_a_margin_is_a_having_on_the_computed_value() -> None:
     assert ") > 0.4)" in figures
 
 
-def test_figures_is_only_for_arithmetic_or_a_threshold() -> None:
+def test_every_plan_reads_figures() -> None:
+    """Whatever the plan specifies is Python's, a single filed figure too."""
     from app.retrieval.prompt import uses_figures
 
-    assert uses_figures(_margin_plan(intent="rank")), "rank reads figures too"
-    assert uses_figures(_margin_plan(intent="derive"))
-    assert not uses_figures(_plan([_binding()], [_annual()], intent="rank"))
+    assert uses_figures(_margin_plan(intent="rank"))
+    assert uses_figures(_plan([_binding()], [_annual()], intent="lookup"))
+    assert uses_figures(_plan([_binding()], [_annual()], intent="rank"))
+
+
+async def test_a_plain_lookup_is_answered_without_the_model(monkeypatch) -> None:
+    """q001, q006, q008, q036: a figure as filed, or several side by side, is
+    the plan's own cells -- nothing is left for the model to write."""
+    from app.retrieval.validator import validate
+
+    class NoModel:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("the model was asked")
+
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", NoModel)
+    for intent in ("lookup", "compare", "trend"):
+        sql = await generate(_plan([_binding()], [_annual()], intent=intent))
+        assert "figures AS (" in sql and "v.value AS value" in sql
+        assert validate(sql) == sql
 
 
 async def test_a_ranking_over_a_margin_is_written_over_figures(monkeypatch) -> None:
@@ -778,19 +782,6 @@ def test_the_model_is_asked_only_to_rank_an_over_time_metric() -> None:
     text = build_prompt(_growth_plan(intent="rank"))
     assert "m is its growth" in text and "f.derivation" in text
     assert "operand" not in text and "c0" not in text
-
-
-def test_a_comparison_of_plain_figures_is_asked_for_the_figures_only() -> None:
-    """q008: "compare" pushed the model to compute, with nothing to follow. The
-    figures side by side are the comparison, so no choice is offered."""
-    compare = build_prompt(_plan([_binding()], [_annual()], intent="compare"))
-    assert "side by side ARE the comparison" in compare
-    assert "Decide which of these two" not in compare
-    assert "side by side ARE the comparison" not in build_prompt(
-        _plan([_binding()], [_annual()], intent="lookup")
-    )
-    ratio = _plan([_binding(unit="pure")], [_annual()], intent="compare")
-    assert "side by side ARE the comparison" not in build_prompt(ratio)
 
 
 # --------------------------------------------------------------------------- #
