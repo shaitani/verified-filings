@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import Field, ModelWrapValidatorHandler, computed_field, model_validator
 
 from app.schemas.answer_view import AnswerView
+from app.schemas.job import JobStage, JobStatus
 from app.schemas.query import _Base
 
 # --------------------------------------------------------------------------- #
@@ -175,9 +176,8 @@ class FeedbackIn(_Base):
 # Jobs and their events
 # --------------------------------------------------------------------------- #
 
-#: In order. "queued" is real: model calls go through a one-at-a-time gate (§4).
-JobStage = Literal["queued", "parsing", "mapping", "fetching", "presenting"]
-JobStatus = Literal["queued", "parsing", "mapping", "fetching", "presenting", "done", "failed"]
+# JobStage and JobStatus live in app/schemas/job.py: the ORM column and its
+# CHECK read the same list, so a status cannot be spelled two ways.
 
 
 class JobCreated(_Base):
