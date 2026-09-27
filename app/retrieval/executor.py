@@ -28,7 +28,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.db.session import RetrievalSessionLocal
-from app.retrieval.prompt import plan_cells
+from app.retrieval.prompt import needs_the_model, plan_cells
 from app.schemas.query import Note, QueryPlan
 from app.schemas.result import (
     AnnotatedRow,
@@ -213,6 +213,8 @@ def _threshold_violations(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int
 
 def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     expected = plan_cells(plan)
+    if not needs_the_model(plan):
+        return _verdict_exact(rows, plan, expected)
     expected_keys = {
         (cell.element_id, cell.company_cik, cell.fiscal_year, cell.fiscal_period)
         for cell in expected
@@ -270,6 +272,63 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     else:
         status = "complete"
 
+    return ResultVerdict(
+        status=status,
+        expected_rows=len(expected),
+        returned_rows=len(rows),
+        missing=missing,
+        unattributable=unattributable,
+    )
+
+
+def _verdict_exact(rows: list[AnnotatedRow], plan: QueryPlan, expected) -> ResultVerdict:
+    """The verdict when the plan names every row, derived ones included.
+
+    Nothing above the cells is computed by the model here -- a lookup, a
+    comparison, a series with the growth beside it, an over-time metric -- so
+    every row the answer should hold is a plan cell, keyed by ``(element,
+    company, fiscal period, derivation)``, and the rows are held to exactly
+    that: none missing unannounced, none extra. The lenient branch in
+    ``_verdict`` is only for a ranking or derivation the model wrote.
+    """
+
+    def key(element, cik, year, period, derivation):
+        return element, cik, year, period, derivation or ""
+
+    expected_keys = {
+        key(c.element_id, c.company_cik, c.fiscal_year, c.fiscal_period, c.derivation)
+        for c in expected
+    }
+    returned_keys = {
+        key(r.row.element_id, r.row.company_cik, r.row.fiscal_year, r.row.fiscal_period,
+            r.row.derivation)
+        for r in rows
+    }
+    missing = [
+        MissingCell(
+            element_id=element_id,
+            company_cik=cik,
+            fiscal_year=year,
+            fiscal_period=period,
+            anticipated=_anticipated(plan, element_id, cik),
+        )
+        for element_id, cik, year, period, _ in sorted(expected_keys - returned_keys)
+    ]
+    unattributable = sorted(
+        {index for index, r in enumerate(rows) if not r.binding_keys}
+        | set(_wrong_unit(rows, plan))
+        | set(_threshold_violations(rows, plan))
+    )
+    if not rows:
+        status = "empty"
+    elif plan.thresholds:
+        status, missing = "complete", []
+    elif len(rows) > len(expected):
+        status = "over"
+    elif missing:
+        status = "partial"
+    else:
+        status = "complete"
     return ResultVerdict(
         status=status,
         expected_rows=len(expected),

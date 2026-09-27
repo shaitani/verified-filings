@@ -1734,3 +1734,35 @@ def test_the_refusal_names_which_kind_of_non_figure_was_asked_for(
     """
     element = NarrativeElementIn(id="e1", text=span)
     assert expected_fragment in query_mapper._narrative_refusal(element)
+
+
+
+def test_a_plain_series_gets_its_growth_beside_it() -> None:
+    """The figures and the growth between them; never for a ranking, a ratio,
+    or beside a threshold, and never twice for a metric already over time."""
+    from app.schemas.query import PlanOverTime, PlanThreshold
+
+    def binding(unit: str = "USD", concepts: int = 1) -> Binding:
+        return Binding(
+            element_id="m", company_cik=1,
+            concepts=[ConceptRef(concept_id=i, taxonomy="us-gaap", name=f"X{i}")
+                      for i in range(concepts)],
+            expression="c0" if concepts == 1 else "c0 / c1",
+            operand_unit=None if concepts == 1 else "USD",
+            unit=unit, is_instant=False, coverage=Coverage(fact_count=1),
+            confidence=1.0, resolved_by="alias", rationale="test",
+        )
+
+    metric = MetricElementIn(id="m", text="revenue")
+    series = ResultSpec(shape="series", axes=["period"], companies=1, periods=5, metrics=1)
+    one = ResultSpec(shape="scalar", axes=[], companies=1, periods=1, metrics=1)
+    grow = query_mapper._series_growth
+    (entry,) = grow([metric], [binding()], series, "trend", [], [])
+    assert (entry.kind, entry.replaces) == ("growth", False)
+    assert grow([metric], [binding()], one, "trend", [], []) == []
+    assert grow([metric], [binding()], series, "rank", [], []) == []
+    assert grow([metric], [binding("pure", 2)], series, "trend", [], []) == []
+    bar = PlanThreshold(element_id="m", element_text="x", comparison="gt", value=Decimal(1))
+    assert grow([metric], [binding()], series, "trend", [], [bar]) == []
+    taken = [PlanOverTime(element_id="m", kind="growth")]
+    assert grow([metric], [binding()], series, "derive", taken, []) == []

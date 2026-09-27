@@ -244,6 +244,7 @@ async def map_query(
         periods=_answered_periods(resolved_periods, over_time, metrics),
         metrics=_answering_metrics(metrics, bindings),
     )
+    over_time += _series_growth(metrics, bindings, result, query.intent, over_time, thresholds)
 
     # Per part, not all or nothing. A refused metric or narrative span is that
     # part's answer; a refused company or period is every part's, because every
@@ -488,13 +489,48 @@ def _over_time(
     return entries, problems, notes
 
 
+def _series_growth(
+    metrics: list[MetricElementIn],
+    bindings: list[Binding],
+    result: ResultSpec,
+    intent: Intent,
+    over_time: list[PlanOverTime],
+    thresholds: list[PlanThreshold],
+) -> list[PlanOverTime]:
+    """The growth from each period to the next, shown beside a plain series.
+
+    "Show me NVIDIA's revenue over five years" gets its five figures and the
+    four growths between them. Computed in the statement like any over-time
+    metric (retrieval DESIGN §4.8); this used to be a separate Python step
+    that added rows after the query ran (``changes.py``), the same arithmetic
+    in a second place.
+
+    Only for a series along ``period`` that computes nothing else (not
+    ``rank`` / ``derive``), for a metric that is one concept and not a ratio --
+    a percentage change of a margin reads as a change in points and is not
+    one -- and never beside a threshold, which would filter the growths by a
+    bar meant for the figures.
+    """
+    if "period" not in result.axes or intent in ("rank", "derive") or thresholds:
+        return []
+    taken = {entry.element_id for entry in over_time}
+    extra: list[PlanOverTime] = []
+    for metric in metrics:
+        own = [b for b in bindings if b.element_id == metric.id]
+        if metric.id in taken or not own:
+            continue
+        if all(len(b.concepts) == 1 and b.unit != "pure" for b in own):
+            extra.append(PlanOverTime(element_id=metric.id, kind="growth", replaces=False))
+    return extra
+
+
 def _answered_periods(
     asked: list[ResolvedPeriod], over_time: list[PlanOverTime], metrics: list[MetricElementIn]
 ) -> list[ResolvedPeriod]:
     """The periods the answer has rows for. An over-time figure is answered at
     the later end of each pair, so a question asking only for those has fewer
     periods than it names: "the last five years" of growth is four, a CAGR one."""
-    kinds = {entry.element_id: entry.kind for entry in over_time}
+    kinds = {entry.element_id: entry.kind for entry in over_time if entry.replaces}
     if not metrics or any(m.id not in kinds for m in metrics):
         return asked
     answered = {

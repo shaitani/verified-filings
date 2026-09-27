@@ -390,11 +390,10 @@ In rough order of how much they matter.
   arithmetic. Selecting the job text on `combining` rather than `intent` looks
   like the fix and is not: it was tried and reverted, because it broke a
   question that had been passing. See `app/retrieval/DESIGN.md` §4.3e.
-  Narrowed 2026-09-25: a series along `period` of plain figures no longer
-  reaches `_JOB_EITHER` — it is asked for the figures only, and the change
-  between periods is computed in Python (`app/retrieval/changes.py`, retrieval
-  DESIGN §4.7). That fixed q010. Ratios and non-series comparisons still take
-  this path.
+  Narrowed 2026-09-25/26: a series along `period` of plain figures no longer
+  reaches `_JOB_EITHER` — its SQL, and the growth between its periods, are
+  written in Python (retrieval DESIGN §4.7, §4.8). That fixed q010. Ratios and
+  non-series comparisons still take this path.
 - **A relationship between two metrics has nowhere to live.** "How much of
   Alphabet's revenue goes to R&D?" is a ratio of two filed figures, and the
   chain cannot say so: the parser emits two independent metric elements, the

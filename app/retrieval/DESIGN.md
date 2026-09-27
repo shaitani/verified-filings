@@ -882,27 +882,20 @@ offered `_JOB_EITHER`, took branch (b), found no DERIVATION example in the
 prompt (it is attached only for `rank` / `derive`), and put the growth rate
 itself in `derivation`. The fetch was right; the arithmetic above it was not.
 
-Now, for a plan that **varies along `period`**, is **single-concept**, is **not
-`pure`**, and is not `rank` / `derive` (`prompt.wants_period_changes`):
+The first fix (2026-09-25) asked the model for the figures only and added the
+change rows in Python *after* the query ran (`changes.py`). Since 2026-09-26
+that step is gone: a plain series gets its growth computed **in the
+statement**, as an over-time metric shown beside the figures (§4.8,
+`PlanOverTime.replaces = False`, added by the mapper's `_series_growth`). One
+mechanism for the arithmetic, and the verdict now holds the growth rows to the
+plan like any other cell instead of adding them after it.
 
-* the model is given `_JOB_FIGURES_ONLY` — the as-filed example, unchanged, no
-  choice offered;
-* `answer()` runs `add_period_changes` after `execute()`, adding one row per
-  adjacent pair: `(current - prior) / prior`, unit `pure`, derivation
-  `change_from_prior`, labelled with the later period.
-
-Rules it keeps:
-
-* **After the verdict, on top of it.** The row-count equality is judged on the
-  filed rows exactly as before; the change rows are added to both
-  `expected_rows` and `returned_rows`. A result the verdict refuses gets none.
-* **Adjacency comes from the plan**, per element, company and granularity, in
-  `period_end` order. A missing figure leaves both of its steps empty rather
-  than producing a two-period step; annual and quarterly are never compared.
-* **Cites both ends.** Across a tag change the step spans two bindings, and
-  `binding_keys` names both.
-* **No percentage from a zero or negative figure** — a change from a loss has
-  none that means anything — and a `narrower_than_asked` note says which.
+What carried over: only a series along `period`, single-concept, not `pure`,
+not `rank` / `derive`, and — new — never beside a threshold; steps follow the
+series in date order per company and granularity, so annual and quarterly are
+never compared and a tag change cites both bindings. What changed: a growth
+from a zero or negative figure comes back as a NULL-valued growth row rather
+than as an omitted row with a note.
 
 **The same for a plain comparison** (`prompt.wants_side_by_side`): intent
 `compare`, single-concept, not `pure`, and not a series. `_JOB_SIDE_BY_SIDE`
@@ -964,9 +957,17 @@ NVIDIA's four growths across its tag change (61.4%, 0.2%, 125.9%, 114.2%);
 Apple's five-year revenue CAGR 3.28%; Apple's quarterly revenue changes; the
 change in Apple's gross margin — a ratio base, shifted operands — +0.70 points.
 
-§4.7's period-change rows still serve a plain series nobody asked to compute
-("show me revenue over five years"); an over-time metric takes their place
-where the question asks for the movement, and never gets both.
+A plain series nobody asked to compute ("show me revenue over five years")
+gets the same growth *beside* its figures (`replaces = False`, §4.7); a metric
+the question asks to see as its movement gets the growth *instead* of them.
+The rows are told apart by `derivation`, carried in `wanted` so `figures` can
+compute and group each separately.
+
+**The verdict is exact wherever the plan names every row**
+(`executor._verdict_exact`): no ranking or derivation left to the model, so
+rows are matched to plan cells on `(element, company, period, derivation)` —
+a missing growth row is a shortfall, not hidden behind the filed row with the
+same period. The lenient branch remains only for what the model writes.
 
 ## 9. Open
 

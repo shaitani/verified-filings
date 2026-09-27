@@ -709,10 +709,17 @@ def over_time_pairs(
 
 
 class PlanOverTime(_Base):
-    """One metric element answered as its movement over time. See ``OverTime``."""
+    """One metric element's movement over time. See ``OverTime``."""
 
     element_id: str = Field(min_length=1, max_length=32)
     kind: OverTime
+
+    #: ``True`` when the question asked for the movement *instead of* the
+    #: figures ("revenue growth") -- the parser's ``over_time``. ``False`` when
+    #: it is shown *beside* them: the mapper adds a growth to every plain series
+    #: over time ("revenue over five years"), so the change from one period to
+    #: the next reaches the reader with the figures it is computed from.
+    replaces: bool = True
 
 
 class PlanThreshold(_Base):

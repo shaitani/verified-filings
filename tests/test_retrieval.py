@@ -762,7 +762,7 @@ def test_an_over_time_statement_validates_and_carries_its_derivation() -> None:
     cte = prompt_module.emit_cte(plan_cells(plan))
     assert "cell_start, cell_end, span_years" in cte
     figures = emit_figures(plan)
-    assert "THEN 'growth'" in figures and "w.cell_end AS period_end" in figures
+    assert "w.derivation AS derivation" in figures and "w.cell_end AS period_end" in figures
     sql = cte + "," + chr(10) + figures + chr(10) + figures_select(plan)
     assert "value, unit, derivation" in figures_select(plan)
     assert validate(sql) == sql
@@ -778,3 +778,76 @@ def test_the_model_is_asked_only_to_rank_an_over_time_metric() -> None:
     text = build_prompt(_growth_plan(intent="rank"))
     assert "m is its growth" in text and "f.derivation" in text
     assert "operand" not in text and "c0" not in text
+
+
+def test_a_comparison_of_plain_figures_is_asked_for_the_figures_only() -> None:
+    """q008: "compare" pushed the model to compute, with nothing to follow. The
+    figures side by side are the comparison, so no choice is offered."""
+    compare = build_prompt(_plan([_binding()], [_annual()], intent="compare"))
+    assert "side by side ARE the comparison" in compare
+    assert "Decide which of these two" not in compare
+    assert "side by side ARE the comparison" not in build_prompt(
+        _plan([_binding()], [_annual()], intent="lookup")
+    )
+    ratio = _plan([_binding(unit="pure")], [_annual()], intent="compare")
+    assert "side by side ARE the comparison" not in build_prompt(ratio)
+
+
+# --------------------------------------------------------------------------- #
+# growth beside a plain series -- the figures and the change between them
+# --------------------------------------------------------------------------- #
+
+
+def _series_with_growth(years=(2021, 2022, 2023)) -> QueryPlan:
+    from app.schemas.query import PlanOverTime
+
+    plan = _plan([_revenue(years)], [_annual(NVIDIA, y) for y in years], intent="trend")
+    return plan.model_copy(
+        update={"over_time": [PlanOverTime(element_id="m", kind="growth", replaces=False)]}
+    )
+
+
+def test_a_series_keeps_its_figures_and_gains_the_growth_between_them() -> None:
+    cells = plan_cells(_series_with_growth())
+    assert [(c.fiscal_year, c.derivation) for c in cells] == [
+        (2021, None), (2022, None), (2023, None), (2022, "growth"), (2023, "growth"),
+    ]
+
+
+def test_figures_tells_a_growth_row_from_a_filed_row_of_the_same_metric() -> None:
+    from app.retrieval.prompt import emit_figures, figures_select, uses_figures
+    from app.retrieval.validator import validate
+
+    plan = _series_with_growth()
+    assert uses_figures(plan), "Python writes it; the model is not asked"
+    cte = prompt_module.emit_cte(plan_cells(plan))
+    assert "'growth')" in cte and ", NULL)" in cte
+    figures = emit_figures(plan)
+    assert "w.element_id = 'm' AND w.derivation IS NULL THEN" in figures
+    assert "w.element_id = 'm' AND w.derivation = 'growth' THEN" in figures
+    assert "w.derivation AS derivation" in figures and ", w.derivation" in figures
+    sql = cte + "," + chr(10) + figures + chr(10) + figures_select(plan)
+    assert validate(sql) == sql
+
+
+def test_the_verdict_holds_a_series_and_its_growth_to_every_row() -> None:
+    """Exact on (element, company, period, derivation): a missing growth row
+    is a shortfall, not hidden behind the filed row with the same period."""
+    plan = _series_with_growth(years=(2022, 2023))
+
+    def row(year: int, value: str, derivation: str | None) -> AnnotatedRow:
+        period = _annual(NVIDIA, year)
+        return AnnotatedRow(
+            row=ResultRow(
+                element_id="m", company_cik=NVIDIA, fiscal_year=year, fiscal_period="FY",
+                period_start=period.period_start, period_end=period.period_end,
+                is_instant=False, value=Decimal(value),
+                unit="pure" if derivation else "USD", derivation=derivation,
+            ),
+            binding_keys=["b0"],
+        )
+
+    full = [row(2022, "10", None), row(2023, "12", None), row(2023, "0.2", "growth")]
+    assert executor._verdict(full, plan).status == "complete"
+    short = executor._verdict(full[:2], plan)
+    assert short.status == "partial" and not short.is_answerable

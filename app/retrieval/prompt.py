@@ -122,10 +122,10 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     concepts -- produces one cell carrying both ``concept_ids`` and the
     expression. It is still one row of the answer.
     """
-    over_time = {entry.element_id: entry.kind for entry in plan.over_time}
+    replaced = {entry.element_id for entry in plan.over_time if entry.replaces}
     cells: list[PlanCell] = []
     for index, binding in enumerate(plan.bindings):
-        if binding.element_id in over_time:
+        if binding.element_id in replaced:
             continue  # answered as its movement; see _over_time_cells
         concept_ids = tuple(concept.concept_id for concept in binding.concepts)
         for period in _periods_for(binding, plan):
@@ -145,7 +145,7 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
                     binding_index=index,
                 )
             )
-    cells += _over_time_cells(plan, over_time)
+    cells += _over_time_cells(plan)
     if not cells:
         raise UnsupportedPlan("the plan binds nothing, so there is no query to write")
     return cells
@@ -172,7 +172,7 @@ def _shift(expression: str, by: int) -> str:
     return re.sub(r"c(\d+)", lambda m: f"c{int(m.group(1)) + by}", expression)
 
 
-def _over_time_cells(plan: QueryPlan, over_time: dict[str, str]) -> list[PlanCell]:
+def _over_time_cells(plan: QueryPlan) -> list[PlanCell]:
     """The answer cells of every metric asked for as change, growth or CAGR.
 
     Built per cell, not per binding, because the two ends can be bound to
@@ -183,7 +183,7 @@ def _over_time_cells(plan: QueryPlan, over_time: dict[str, str]) -> list[PlanCel
     are bound. Which periods pair up is ``over_time_pairs``, shared with the
     mapper.
     """
-    if not over_time:
+    if not plan.over_time:
         return []
     earlier = {
         (p.company_cik, p.fiscal_year, p.fiscal_period): p for p in plan.filters.support_periods
@@ -198,7 +198,8 @@ def _over_time_cells(plan: QueryPlan, over_time: dict[str, str]) -> list[PlanCel
             return None
 
     cells: list[PlanCell] = []
-    for element_id, kind in over_time.items():
+    for entry in plan.over_time:
+        element_id, kind = entry.element_id, entry.kind
         for current, base in over_time_pairs(kind, plan.filters.periods, earlier):
             now, then = bound(element_id, current), bound(element_id, base)
             if now is None or then is None:
@@ -306,7 +307,12 @@ _CTE_COLUMNS_OPERANDS = (
 #: The same, plus each answer cell's own window and a CAGR's span, used only
 #: when some metric is asked for over time: its operands are read at windows
 #: other than the cell's, so the cell has to be named separately.
-_CTE_COLUMNS_OVER_TIME = (*_CTE_COLUMNS_OPERANDS, "cell_start", "cell_end", "span_years")
+#: `derivation` tells a metric's growth rows from its filed rows when both are
+#: shown (a plain series and the growth beside it), so `figures` can compute
+#: and group each separately.
+_CTE_COLUMNS_OVER_TIME = (
+    *_CTE_COLUMNS_OPERANDS, "cell_start", "cell_end", "span_years", "derivation",
+)
 
 
 def _cte_columns(cells: list[PlanCell]) -> tuple[str, ...]:
@@ -368,7 +374,8 @@ def emit_cte(cells: list[PlanCell]) -> str:
                 f"DATE '{end}'",
                 *(
                     [f"DATE '{cell.period_start}'", f"DATE '{cell.period_end}'",
-                     str(cell.span_years)]
+                     str(cell.span_years),
+                     f"'{cell.derivation}'" if cell.derivation else "NULL"]
                     if over_time
                     else []
                 ),
@@ -392,19 +399,6 @@ def emit_cte(cells: list[PlanCell]) -> str:
 #: branch is not offered at all.
 DERIVING_INTENTS = frozenset({"rank", "derive"})
 
-def wants_period_changes(plan: QueryPlan) -> bool:
-    """Whether the change from each period to the next is computed in Python.
-
-    A series along ``period``, single-concept and not ``pure``: a percentage
-    change of a margin reads as a change in points and is not one. Not for
-    ``rank`` / ``derive``, where the model is asked to compute and its rows
-    are already derived. See ``app/retrieval/changes.py``.
-    """
-    if "period" not in plan.result.axes or plan.intent in DERIVING_INTENTS or plan.over_time:
-        return False
-    return _plain_figures(plan)
-
-
 def _plain_figures(plan: QueryPlan) -> bool:
     """Every binding a single concept, as filed, in a unit that is not ``pure``."""
     return all(len(b.concepts) == 1 and b.unit != "pure" for b in plan.bindings)
@@ -422,17 +416,9 @@ def wants_side_by_side(plan: QueryPlan) -> bool:
     return plan.intent == "compare" and _plain_figures(plan)
 
 
-#: The job for a plan whose period-to-period change is computed afterwards.
-#: One option, not two: q010 ("how fast has NVIDIA's revenue grown") was
-#: offered the choice, took (b) with no DERIVATION example in the prompt, and
-#: put the growth rate in `derivation`. Nothing is left for it to compute.
-_JOB_FIGURES_ONLY = """Reply with the worked example above, unchanged.
-
-The change from one period to the next is computed AFTER your statement runs,
-from the rows it returns. Do not compute it, do not add LAG or any window
-function, and leave `derivation` NULL on every row."""
-
-#: The job for `wants_side_by_side`. Same reasoning as `_JOB_FIGURES_ONLY`.
+#: The job for `wants_side_by_side`: the model is given one option, not two,
+#: because offered the choice it computed something nobody asked for (q036,
+#: q008).
 _JOB_SIDE_BY_SIDE = """Reply with the worked example above, unchanged.
 
 The figures side by side ARE the comparison: the reader sees each company's
@@ -634,12 +620,17 @@ def uses_figures(plan: QueryPlan) -> bool:
     cells = plan_cells(plan)
     if not (plan.thresholds or plan.over_time or any(cell.operands > 1 for cell in cells)):
         return False
-    shape_of: dict[str, tuple[str, str]] = {}
+    shape_of: dict[tuple[str, str | None], tuple[str, str]] = {}
     for cell in cells:
         shape = (cell.expression, cell.result_unit)
-        if shape_of.setdefault(cell.element_id, shape) != shape:
+        if shape_of.setdefault((cell.element_id, cell.derivation), shape) != shape:
             return False
     return True
+
+
+def _carries_derivation(cells: list[PlanCell]) -> bool:
+    """Whether ``figures`` has a ``derivation`` column: some cell is over time."""
+    return any(cell.derivation for cell in cells)
 
 
 def _sql_literal(text: str) -> str:
@@ -660,9 +651,10 @@ def emit_figures(plan: QueryPlan) -> str:
     """
     cells = plan_cells(plan)
     combining = any(cell.operands > 1 for cell in cells)
-    over_time = any(cell.operand_windows for cell in cells)
+    over_time = _carries_derivation(cells)
+    if over_time:
+        return _emit_figures_over_time(plan, cells)
     shape_of = {cell.element_id: (cell.expression, cell.result_unit) for cell in cells}
-    labels = {cell.element_id: cell.derivation for cell in cells if cell.derivation}
 
     def per_element(pick) -> str:
         whens = "".join(
@@ -683,43 +675,13 @@ def emit_figures(plan: QueryPlan) -> str:
         for t in plan.thresholds
         if t.element_id in term
     ]
-    if over_time:
-        # Operands are read at other periods than the cell's, so the cell's
-        # own window comes from `wanted`, and the row is grouped by it.
-        derivation = per_element(
-            lambda element: _sql_literal(labels[element]) if element in labels else "NULL"
-        )
-        head = [
-            f"{FIGURES_NAME} AS (",
-            "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
-            "         w.fiscal_year, w.fiscal_period,",
-            "         CASE WHEN w.is_instant THEN NULL ELSE w.cell_start END AS period_start,",
-            "         w.cell_end AS period_end, w.is_instant,",
-            f"         {value} AS value,",
-            f"         {unit} AS unit,",
-            f"         {derivation} AS derivation",
-        ]
-        group = [
-            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
-            "           w.fiscal_year, w.fiscal_period,",
-            "           w.cell_start, w.cell_end, w.is_instant",
-        ]
-    else:
-        head = [
-            f"{FIGURES_NAME} AS (",
-            "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
-            "         w.fiscal_year, w.fiscal_period,",
-            "         v.period_start, v.period_end, v.is_instant,",
-            f"         {value} AS value,",
-            f"         {unit} AS unit",
-        ]
-        group = [
-            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
-            "           w.fiscal_year, w.fiscal_period,",
-            "           v.period_start, v.period_end, v.is_instant",
-        ]
     lines = [
-        *head,
+        f"{FIGURES_NAME} AS (",
+        "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
+        "         w.fiscal_year, w.fiscal_period,",
+        "         v.period_start, v.period_end, v.is_instant,",
+        f"         {value} AS value,",
+        f"         {unit} AS unit",
         f"  FROM {CTE_NAME} w",
         f"  JOIN {VIEW} v",
         "    ON  v.company_cik = w.company_cik",
@@ -730,10 +692,77 @@ def emit_figures(plan: QueryPlan) -> str:
         "    AND (w.is_instant OR v.period_start = w.window_start)",
     ]
     if combining:
-        lines += group
+        lines += [
+            "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
+            "           w.fiscal_year, w.fiscal_period,",
+            "           v.period_start, v.period_end, v.is_instant",
+        ]
     if conditions:
         keyword = "HAVING" if combining else "WHERE"
         lines.append(f"  {keyword} " + (chr(10) + "    AND ").join(conditions))
+    lines.append(")")
+    return chr(10).join(lines)
+
+
+def _emit_figures_over_time(plan: QueryPlan, cells: list[PlanCell]) -> str:
+    """``figures`` when some metric is asked for, or shown, over time.
+
+    Each row is one answer cell, keyed by ``(element_id, derivation)``: a plain
+    series and the growth beside it are the same element, so the derivation
+    is what tells a filed row (``NULL``) from a growth row. Operands are read
+    at other periods than the cell's, so the cell's own window comes from
+    ``wanted`` and the row is grouped by it.
+    """
+    shape_of = {
+        (cell.element_id, cell.derivation): (cell.expression, cell.result_unit)
+        for cell in cells
+    }
+
+    def which(element: str, derivation: str | None) -> str:
+        label = f"= {_sql_literal(derivation)}" if derivation else "IS NULL"
+        return f"w.element_id = {_sql_literal(element)} AND w.derivation {label}"
+
+    def per_shape(pick) -> str:
+        whens = "".join(
+            f" WHEN {which(element, derivation)} THEN {pick(element, derivation)}"
+            for element, derivation in shape_of
+        )
+        return f"CASE{whens} END"
+
+    value = per_shape(lambda e, d: _operand_terms(shape_of[(e, d)][0]))
+    unit = per_shape(lambda e, d: _sql_literal(shape_of[(e, d)][1]))
+    # A threshold tests its element's rows; a threshold plan has one shape per
+    # element (the mapper adds no growth beside one), so that shape is it.
+    term = {element: _operand_terms(shape_of[(element, d)][0]) for element, d in shape_of}
+    conditions = [
+        f"(w.element_id <> {_sql_literal(t.element_id)} OR ({term[t.element_id]}) "
+        f"{t.operator} {t.value:f})"
+        for t in plan.thresholds
+        if t.element_id in term
+    ]
+    lines = [
+        f"{FIGURES_NAME} AS (",
+        "  SELECT w.element_id, v.company_cik, v.ticker, v.entity_name,",
+        "         w.fiscal_year, w.fiscal_period,",
+        "         CASE WHEN w.is_instant THEN NULL ELSE w.cell_start END AS period_start,",
+        "         w.cell_end AS period_end, w.is_instant,",
+        f"         {value} AS value,",
+        f"         {unit} AS unit,",
+        "         w.derivation AS derivation",
+        f"  FROM {CTE_NAME} w",
+        f"  JOIN {VIEW} v",
+        "    ON  v.company_cik = w.company_cik",
+        "    AND v.concept_id  = w.concept_id",
+        "    AND v.unit        = w.unit",
+        "    AND v.is_instant  = w.is_instant",
+        "    AND v.period_end  = w.window_end",
+        "    AND (w.is_instant OR v.period_start = w.window_start)",
+        "  GROUP BY w.element_id, v.company_cik, v.ticker, v.entity_name,",
+        "           w.fiscal_year, w.fiscal_period,",
+        "           w.cell_start, w.cell_end, w.is_instant, w.derivation",
+    ]
+    if conditions:
+        lines.append("  HAVING " + (chr(10) + "    AND ").join(conditions))
     lines.append(")")
     return chr(10).join(lines)
 
@@ -757,7 +786,7 @@ LIMIT {MAX_ROWS}"""
 
 def figures_select(plan: QueryPlan) -> str:
     """The SELECT over ``figures`` for a plan the model is not asked about."""
-    return FIGURES_SELECT_OVER_TIME if plan.over_time else FIGURES_SELECT
+    return FIGURES_SELECT_OVER_TIME if _carries_derivation(plan_cells(plan)) else FIGURES_SELECT
 
 
 def needs_the_model(plan: QueryPlan) -> bool:
@@ -835,7 +864,7 @@ def _figures_prompt(plan: QueryPlan) -> str:
     job = _FIGURES_JOB_RANK if ranking else _FIGURES_JOB_DERIVE
     example = _FIGURES_EXAMPLE_RANK if ranking else _FIGURES_EXAMPLE_DERIVE
     signature = "unit)"
-    if plan.over_time:
+    if _carries_derivation(cells):
         # The rows already carry what they are ("growth"); a ranking keeps it.
         signature = "unit, derivation)"
         kinds = ", ".join(f"{o.element_id} is its {o.kind}" for o in plan.over_time)
@@ -943,8 +972,6 @@ def build_prompt(plan: QueryPlan) -> str:
     columns = ", ".join(RESULT_COLUMNS)
     if plan.intent in DERIVING_INTENTS:
         job = _JOB_MUST_DERIVE
-    elif wants_period_changes(plan):
-        job = _JOB_FIGURES_ONLY
     elif wants_side_by_side(plan):
         job = _JOB_SIDE_BY_SIDE
     else:
