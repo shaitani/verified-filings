@@ -64,9 +64,14 @@ Reply
                  outcome    answered | asked | refused
                  reason     when refused
                  ask        when asked — see §3
-  answer       AnswerView | null  the figures for the answered parts (§5, §6)
-  notes[]      plan and result notes, verbatim
+  answer       AnswerView | null  the figures for the answered parts, with their
+                                  notes and citations (§5, §6)
 ```
+
+Drafted 2026-09-27: `Reply` and the request and event models in
+`app/api/schemas.py`; `AnswerView` in `app/schemas/answer_view.py`, because
+it is [F]'s contract and [F] must not import the Web Server. Notes travel on the
+answer, not the reply: with no figures there is nothing for them to qualify.
 
 A summary status for a header line is **derived** from the parts, never
 decided separately — a second source of truth is how the two come to disagree.
@@ -234,8 +239,11 @@ The `period_misalignment` note still shows.
   and has nowhere to hang a citation.
 - **Notes sit above the view**, not in a tooltip. A `narrower_than_asked` or
   `partial_coverage` note is part of the answer.
-- **[F] sorts a ranking itself.** Nothing checks that a ranking came back in
-  order (retrieval DESIGN §9), so row order is not trusted.
+- **A ranking is drawn in order or not at all.** Nothing upstream checks the
+  order (retrieval DESIGN §9), so `BarView` refuses bars that are not monotonic
+  in its stated direction. The direction itself is not in the plan — the model
+  writes `ORDER BY` — so for now [F] reads it from the rows; it moves to the
+  parser with the closed list of operations (HANDOFF §6).
 - **`mixed_granularity` splits** into separate series or panels.
 - **Derived rows are their own series**, labelled by `derivation`.
 
