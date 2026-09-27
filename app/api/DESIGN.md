@@ -541,8 +541,12 @@ How the code changes without loosening anything:
 - **Migrate before provisioning.** The web role's grants name `web` tables, so
   `BOOTSTRAP.md` gains that ordering.
 
-**Built 2026-09-27**, except the live tests, which wait for the `web`
-migration: `RoleSpec` (`schema`, `writes`, `read_only`), `WEB`, `--check`
+**Built 2026-09-27**, and proved live on the test database once the `web`
+migration ran there (`tests/test_roles.py`, "The web role"): every allowed cell
+of the grid above, every refused one, FastAPI Users creating a user as this
+role, and a trace written without reading it back — which found that the ORM's
+`INSERT ... RETURNING created_at` needs `SELECT`, so the two write-only models
+turn `eager_defaults` off. Built: `RoleSpec` (`schema`, `writes`, `read_only`), `WEB`, `--check`
 across both schemas, `DATABASE_URL_WEB`. The readers' statements are pinned in
 `tests/fixtures/role_statements.sql` and must stay byte-identical once every
 statement about `web` is removed; the web role's are pinned apart, and only

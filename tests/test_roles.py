@@ -16,15 +16,21 @@ See the module docstring in ``app/db/roles.py``.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import roles
 
-PASSWORDS = {roles.QUERY_MAPPER.name: "mapper-pw", roles.RETRIEVAL.name: "retrieval-pw"}
+PASSWORDS = {
+    roles.QUERY_MAPPER.name: "mapper-pw",
+    roles.RETRIEVAL.name: "retrieval-pw",
+    roles.WEB.name: "web-pw",  # needs the web migration on the test database (ALEMBIC.md)
+}
 
 #: 768 floats, matching the embedding column. A shorter literal fails on
 #: dimension rather than on privilege, which would make the test lie.
@@ -39,7 +45,7 @@ def _role_url(superuser_url: str, role: str) -> str:
 
 @pytest_asyncio.fixture
 async def provisioned(test_db_url):
-    """Both roles, created against the test database.
+    """Every role, created against the test database.
 
     Provisioned here rather than assumed, so these cover ``app/db/roles.py``
     itself and the suite needs no setup step of its own.
@@ -66,7 +72,7 @@ async def test_provisioning_is_idempotent(test_db_url) -> None:
     await roles.provision(test_db_url, PASSWORDS)
 
     report = await roles.describe(test_db_url)
-    for spec in (roles.QUERY_MAPPER, roles.RETRIEVAL):  # the web role waits for its migration
+    for spec in roles.ROLES:
         state = report[spec.name]
         assert state["exists"], spec.name
         assert state["superuser"] is False
@@ -261,6 +267,200 @@ async def test_the_retrieval_role_has_a_connection_cap(provisioned) -> None:
     report = await roles.describe(provisioned)
     assert report[roles.RETRIEVAL.name]["connection_limit"] == roles.RETRIEVAL.connection_limit
     assert report[roles.QUERY_MAPPER.name]["connection_limit"] == -1
+
+
+# --------------------------------------------------------------------------- #
+# The web role -- the one that writes (app/api/DESIGN.md §11)
+# --------------------------------------------------------------------------- #
+
+WEB = roles.WEB.name
+USER_ID = "00000000-0000-0000-0000-00000000000a"
+JOB_ID = "00000000-0000-0000-0000-00000000000b"
+
+#: Rows the statements under test need, inserted as the web role itself --
+#: which is also the proof it may insert them. Every check is rolled back.
+SETUP = [
+    'INSERT INTO "user" (id, email, hashed_password, is_active, is_verified) '
+    f"VALUES ('{USER_ID}', 'zz-roles@example.test', 'x', true, false)",
+    f"INSERT INTO conversation (id, user_id, question) VALUES ('{USER_ID}', '{USER_ID}', 'q')",
+    "INSERT INTO job (id, conversation_id, round, status) "
+    f"VALUES ('{JOB_ID}', '{USER_ID}', 1, 'queued')",
+]
+
+TRACE = (
+    "INSERT INTO job_trace (job_id, code_version, models, model_calls, statements, timings, "
+    f"errors) VALUES ('{JOB_ID}', 'abc', '{{}}', '[]', '[]', '{{}}', '[]')"
+)
+
+
+async def _as_web(url: str, statement: str) -> None:
+    """Run the setup and one statement as the web role, inside a transaction
+    that is rolled back whatever happens."""
+    engine = _engine(url, WEB)
+    try:
+        async with engine.connect() as connection:
+            try:
+                for setup in SETUP:
+                    await connection.execute(text(setup))
+                await connection.execute(text(statement))
+            finally:
+                await connection.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        ("read a user", 'SELECT email, is_superuser FROM "user"'),
+        ("change a password", "UPDATE \"user\" SET hashed_password = 'y'"),
+        ("verify a user", 'UPDATE "user" SET is_verified = true'),
+        (
+            "start a session",
+            "INSERT INTO access_token (token, user_id, created_at) "
+            f"VALUES ('t', '{USER_ID}', now())",
+        ),
+        ("sign out", "DELETE FROM access_token"),
+        ("spend an invite", f"UPDATE invite SET used_at = now(), used_by = '{USER_ID}'"),
+        ("move a job", "UPDATE job SET status = 'parsing'"),
+        ("write a trace", TRACE),
+        (
+            "report a problem",
+            "INSERT INTO job_feedback (id, job_id, user_id, note) "
+            f"VALUES ('{USER_ID}', '{JOB_ID}', '{USER_ID}', 'wrong year')",
+        ),
+    ],
+)
+async def test_the_web_role_can_do_its_job(provisioned, label: str, statement: str) -> None:
+    """The grid's allowed cells (DESIGN §11), exercised as the web role."""
+    await _as_web(provisioned, statement)
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        # Nothing in xbrl, by any route.
+        ("read xbrl facts", "SELECT count(*) FROM xbrl.fact"),
+        ("read the retrieval view", "SELECT count(*) FROM xbrl.reported_fact"),
+        # Its three guard rails of its own (DESIGN §11).
+        ("make an administrator", 'UPDATE "user" SET is_superuser = true'),
+        (
+            "insert an administrator",
+            'INSERT INTO "user" (id, email, hashed_password, is_active, is_verified, '
+            "is_superuser) VALUES (gen_random_uuid(), 'zz-admin@example.test', 'x', true, true, "
+            "true)",
+        ),
+        (
+            "create an invite",
+            "INSERT INTO invite (id, kind, github_account_id) "
+            "VALUES (gen_random_uuid(), 'github', '1')",
+        ),
+        ("read a trace", "SELECT count(*) FROM job_trace"),
+        # Everything else outside the grid.
+        ("rewrite an invite's address", "UPDATE invite SET email = 'x@example.test'"),
+        ("delete a user", 'DELETE FROM "user"'),
+        ("delete a conversation", "DELETE FROM conversation"),
+        ("rewrite a question", "UPDATE conversation SET question = 'other'"),
+        ("delete a job", "DELETE FROM job"),
+        ("rewrite a trace", "UPDATE job_trace SET code_version = 'x'"),
+        ("read feedback", "SELECT count(*) FROM job_feedback"),
+        ("create in web", "CREATE TABLE web.should_not_exist (i int)"),
+        ("create in public", "CREATE TABLE public.should_not_exist (i int)"),
+    ],
+)
+async def test_the_web_role_cannot_leave_its_grid(provisioned, label: str, statement: str) -> None:
+    with pytest.raises(DBAPIError) as caught:
+        await _as_web(provisioned, statement)
+    assert "InsufficientPrivilege" in str(caught.value), label
+
+
+@pytest.mark.parametrize("role", [roles.QUERY_MAPPER.name, roles.RETRIEVAL.name])
+async def test_neither_reader_can_see_web(provisioned, role: str) -> None:
+    engine = _engine(provisioned, role)
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text('SELECT count(*) FROM web."user"'))
+            assert "InsufficientPrivilege" in str(caught.value)
+    finally:
+        await engine.dispose()
+
+
+async def test_the_web_role_is_the_one_that_writes(provisioned) -> None:
+    engine = _engine(provisioned, WEB)
+    try:
+        async with engine.connect() as connection:
+            read_only = await connection.execute(text("SHOW default_transaction_read_only"))
+            path = await connection.execute(text("SHOW search_path"))
+            assert (read_only.scalar_one(), path.scalar_one()) == ("off", "web")
+    finally:
+        await engine.dispose()
+
+
+# --------------------------------------------------------------------------- #
+# The web role through the real code paths, not hand-written SQL
+# --------------------------------------------------------------------------- #
+
+
+@pytest_asyncio.fixture
+async def web_session(provisioned):
+    """An ORM session as the web role; rows it commits are deleted as the owner."""
+    owner = create_async_engine(provisioned)
+
+    async def _clean() -> None:
+        async with owner.begin() as connection:
+            await connection.execute(text("DELETE FROM web.\"user\" WHERE email LIKE 'zz-orm-%'"))
+
+    await _clean()
+    engine = _engine(provisioned, WEB)
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
+        await _clean()
+        await owner.dispose()
+
+
+async def test_the_sign_in_library_creates_a_user_as_the_web_role(web_session) -> None:
+    """FastAPI Users' own create path, which the web role must support without
+    being able to write is_superuser -- the reason it is a database default."""
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+
+    from app.db.web import User
+
+    async with web_session() as session:
+        user = await SQLAlchemyUserDatabase(session, User).create(
+            {"email": "zz-orm-user@example.test", "hashed_password": "x"}
+        )
+        assert user.is_superuser is False and user.created_at is not None
+
+
+async def test_a_trace_and_a_report_are_written_without_reading_back(web_session) -> None:
+    """job_trace and job_feedback grant INSERT and no SELECT. An ORM insert that
+    fetched a server default back (RETURNING created_at) would need SELECT."""
+    from app.db.web import Conversation, Job, JobFeedback, JobTrace, User
+
+    user_id, conversation_id, job_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    async with web_session() as session:
+        session.add(
+            User(
+                id=user_id, email="zz-orm-trace@example.test", hashed_password="x",
+                is_active=True, is_verified=False,
+            )
+        )
+        await session.flush()  # no relationships declared, so parents are flushed first
+        session.add(Conversation(id=conversation_id, user_id=user_id, question="q"))
+        await session.flush()
+        session.add(Job(id=job_id, conversation_id=conversation_id, round=1, status="queued"))
+        await session.flush()
+        session.add(
+            JobTrace(
+                job_id=job_id, code_version="abc", models={}, model_calls=[],
+                statements=[], timings={}, errors=[],
+            )
+        )
+        session.add(JobFeedback(job_id=job_id, user_id=user_id, note="wrong year"))
+        await session.commit()
 
 
 # --------------------------------------------------------------------------- #

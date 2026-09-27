@@ -179,6 +179,9 @@ class JobTrace(WebBase):
     for vf_web_role, so it is written with a plain INSERT and never read back."""
 
     __tablename__ = "job_trace"
+    # No RETURNING of server defaults after an INSERT: fetching created_at back
+    # needs SELECT, which vf_web_role deliberately lacks here (measured: refused).
+    __mapper_args__ = {"eager_defaults": False}
 
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID, ForeignKey("job.id", ondelete="CASCADE"), primary_key=True
@@ -199,6 +202,7 @@ class JobFeedback(WebBase):
     """Report a problem -- how a wrong-looking answer becomes a --flagged job."""
 
     __tablename__ = "job_feedback"
+    __mapper_args__ = {"eager_defaults": False}  # write-only too: see JobTrace
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     job_id: Mapped[uuid.UUID] = mapped_column(

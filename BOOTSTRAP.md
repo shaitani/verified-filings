@@ -68,6 +68,11 @@ sqlalchemy.exc.DBAPIError: schema "xbrl" does not exist
 [SQL: GRANT USAGE ON SCHEMA xbrl TO vf_query_mapper_role]
 ```
 
+The same holds for the `web` schema: `vf_web_role`'s grants name its tables,
+and the test suite provisions all three roles on the test database — so step 3
+must have run the `web` migration there too, or `tests/test_roles.py` fails at
+`GRANT ... ON web."user"`.
+
 **Embedding cannot come before loading.** `app/db/embedder.py` embeds
 `Concept` rows, and the load is what creates them.
 
@@ -107,9 +112,15 @@ Expected: `No new upgrade operations detected.`
 uv run python -m app.db.roles --check
 ```
 
-`vf_retrieval_role` must list **`reported_fact` and nothing else**. If it also
-lists `fact` or `filing`, the narrowing in `app/db/roles.py` did not take, and
-generated SQL can reach around the view (`app/retrieval/DESIGN.md` §6).
+`vf_retrieval_role` must list **`reported_fact` and nothing else**, and
+`schema public: none`. If it also lists `fact` or `filing`, the narrowing in
+`app/db/roles.py` did not take, and generated SQL can reach around the view
+(`app/retrieval/DESIGN.md` §6).
+
+`vf_web_role` says `not configured` until `DATABASE_URL_WEB` is set. Once it is
+provisioned it must show `schema xbrl: none`, **no `SELECT` on `web.job_trace`
+or `web.job_feedback`**, no `INSERT` on `web.invite`, and its `user` grants
+naming columns without `is_superuser` (`app/api/DESIGN.md` §11).
 
 ```bash
 docker compose exec ollama ollama list
@@ -152,7 +163,7 @@ validated statement through it.
 ## 3. A fresh checkout also needs `.env`
 
 `.env` is git-ignored, so a clone has none and `app/config.py` will refuse to
-start. Five variables, all local:
+start. Five variables, all local, and a sixth for the Web Server:
 
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/verified_filings
@@ -160,9 +171,13 @@ DATABASE_URL_TEST=postgresql+asyncpg://postgres:postgres@localhost:5433/verified
 DATABASE_URL_QUERY_MAPPER=postgresql+asyncpg://vf_query_mapper_role:<password>@localhost:5432/verified_filings
 DATABASE_URL_RETRIEVAL=postgresql+asyncpg://vf_retrieval_role:<password>@localhost:5432/verified_filings
 EMBEDDING_URL=http://localhost:11434
+DATABASE_URL_WEB=postgresql+asyncpg://vf_web_role:<password>@localhost:5432/verified_filings
 ```
 
-The two role passwords are yours to choose — **`app/db/roles.py` reads them
+`DATABASE_URL_WEB` is optional until the Web Server runs, and only after the
+`web` migration: `app/db/roles.py` skips a role with no URL.
+
+The role passwords are yours to choose — **`app/db/roles.py` reads them
 back out of these URLs** and provisions exactly those, rather than taking a
 separate variable, so the two cannot drift. A password provisioned that nothing
 connects with is a failure that looks like success.
