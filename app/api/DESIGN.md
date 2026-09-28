@@ -137,21 +137,32 @@ An ambiguity's options are its candidates: `label` is the concept's label
 | ask kind | option names | next round |
 |---|---|---|
 | clarification | a curated metric | `(question, option label)` into `parse_question(answers=)` — built, measured (parser DESIGN §10) |
-| ambiguity | a concept (`ConceptRef`) | a **pin**: `map_query(query, pins=...)` — to build |
+| ambiguity | a concept (`ConceptRef`) | a **pin**: `map_query(query, pins=...)` — built 2026-09-27 |
 
 The pin cannot ride through the parser: the label would go to embedding search
 again with no guarantee of landing on the concept picked, and it cannot go in
 `QueryIn`, which never carries an XBRL identifier (schemas DESIGN §8.1). A
 pinned concept still goes through the coverage check.
 
-*Proposed* for the pin: a round whose answers are all pins skips the parser —
-it re-maps the conversation's stored `QueryIn`, so no model call and no chance
-of the phrase moving. A round mixing pins with clarification answers re-parses
-and matches each pin to its element by phrase; a pin whose phrase does not
-reappear is asked again, never dropped.
+**Built** (2026-09-27, `app/chain.py`): a round whose answers are all pins
+skips the parser — it re-maps the stored `QueryIn` (`Pending.query_in`), so no
+model call and no chance of the phrase moving. A round with a new curated
+answer re-parses with every answer so far and matches each pin to its element
+**by phrase**, because a re-parse may number elements differently; a pin whose
+phrase does not reappear finds nothing, so the phrase is ambiguous again and is
+asked again, never dropped. `ask_again(question, pending, choices, answers=,
+pins=)` holds that rule; it returns every answer and pin so far for the Web
+Server to keep. Measured live: "accounts payable" picked → bound `pinned`, no
+parser call, $68.96B for Apple FY2024; a round mixing "Gross margin" with that
+pick → one re-parse, both parts answered.
 
-The server resolves `option_id` against the options **it** offered (§4) and
-refuses anything else.
+The mapper looks a pinned concept up by `(taxonomy, name)`, never by the id it
+arrived with — the pick comes back from `web.job`, which the web role can
+write — and binds it through the same per-company coverage check as any other
+(`resolved_by = "pinned"`, no similarity bar, no tie to report).
+
+`resolve_choices` accepts an `option_id` only from the options **this round**
+offered (`Pending.asks`) and raises `UnknownChoice` for anything else.
 
 ### Free-text answers — not now, and not boxed out
 

@@ -26,6 +26,7 @@ retrieval role deliberately lacks. See ``app/db/roles.py``.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -93,13 +94,20 @@ _ALIGNMENT_TOLERANCE_DAYS = 30
 
 
 async def map_query(
-    query: QueryIn, *, session_factory: async_sessionmaker = QueryMapperSessionLocal
+    query: QueryIn,
+    *,
+    pins: Mapping[str, ConceptRef] | None = None,
+    session_factory: async_sessionmaker = QueryMapperSessionLocal,
 ) -> QueryPlan:
     """Resolve one parsed question into a plan the SQL step can execute.
 
     Never raises on an unresolvable element -- a partial plan with populated
     ``unresolved`` / ``ambiguous`` is a normal outcome, and the caller decides
     whether to proceed (``plan.is_complete``) or go back to the user.
+
+    ``pins`` maps a metric element's id to the concept the asker chose from
+    its ambiguity (api DESIGN §3). It replaces the search, not the proof:
+    coverage still decides, per company, whether it binds.
     """
     companies = [e for e in query.elements if isinstance(e, CompanyElementIn)]
     groups = [e for e in query.elements if isinstance(e, CompanyGroupElementIn)]
@@ -183,6 +191,7 @@ async def map_query(
             periods=resolved_periods,
             intent=query.intent,
             named=bool(companies),
+            pins=pins,
         )
         if over_time_metrics:
             resolved = await _resolve_metrics(
@@ -195,6 +204,7 @@ async def map_query(
                 ),
                 intent=query.intent,
                 named=bool(companies),
+                pins=pins,
             )
             bindings += resolved[0]
             ambiguous += resolved[1]
@@ -1268,6 +1278,7 @@ async def _resolve_metrics(
     periods: list[ResolvedPeriod],
     intent: Intent,
     named: bool = False,
+    pins: Mapping[str, ConceptRef] | None = None,
 ) -> tuple[list[Binding], list[Ambiguity], list[Unresolved], list[Clarification], list[Note]]:
     """Bind every metric element to concepts that provably have the facts.
 
@@ -1312,8 +1323,34 @@ async def _resolve_metrics(
     notes: list[Note] = []
 
     for element in elements:
-        hit = index.lookup(element.text)
-        if hit is not None and hit.unavailable is not None:
+        pin = (pins or {}).get(element.id)
+        if pin is not None:
+            # The asker chose this concept from the candidates an ambiguity
+            # offered. Looked up by name, not by the id it arrived with: the
+            # choice comes back from web.job, which the web role can write.
+            (slot,) = await _slots_from_refs(session, [[(pin.taxonomy, pin.name)]])
+            if not slot:
+                problems.append(
+                    Unresolved(
+                        element_id=element.id,
+                        reason=f"the concept chosen for {element.text!r} "
+                        f"({pin.taxonomy}:{pin.name}) is not loaded in this database",
+                    )
+                )
+                continue
+            slots = [slot]
+            expression = "c0"
+            signs = ["signed"]
+            caveats = {}
+            display_as = None
+            resolved_by = "pinned"  # not "embedding": no similarity bar, no tie to report
+            source = "the asker's choice"
+            hit = None
+        else:
+            hit = index.lookup(element.text)
+        if pin is not None:
+            pass  # bound below, through the same coverage check as any other
+        elif hit is not None and hit.unavailable is not None:
             # Curated: the term is understood and the dataset has no answer for
             # it. Reaching the resolver ahead of the embedding net is the whole
             # point -- left to similarity, "share price" bound par value and
@@ -1321,21 +1358,26 @@ async def _resolve_metrics(
             # because there is nothing the asker could narrow.
             problems.append(Unresolved(element_id=element.id, reason=hit.unavailable))
             continue
-        if hit is not None and hit.clarify is not None:
+        elif hit is not None and hit.clarify is not None:
             # Curated: the term really is several things, and someone wrote the
             # choices. Ask rather than pick a convention and be quietly wrong.
             clarifications.append(_clarification(element, hit))
             continue
-        asked_as = index.clarify_entry(element.clarify_as) if element.clarify_as else None
-        if hit is None and asked_as is not None:
+        elif (
+            hit is None
+            and element.clarify_as
+            and index.clarify_entry(element.clarify_as) is not None
+        ):
             # The file does not list this phrase, but the parser judged it vague
             # and named the curated question that fits ("bring in" -> money
             # made). Before the embedding search, because a phrase judged vague
             # should be asked about, not bound on similarity -- and this path
             # can only ask: the reader's answer binds through the aliases.
-            clarifications.append(_clarification(element, asked_as))
+            clarifications.append(
+                _clarification(element, index.clarify_entry(element.clarify_as))
+            )
             continue
-        if hit is not None:
+        elif hit is not None:
             slots = await _slots_from_alias(session, hit)
             if any(not slot for slot in slots):
                 problems.append(
@@ -1938,7 +1980,12 @@ async def _slots_from_alias(session: AsyncSession, hit: AliasHit) -> list[list[_
     Keeps the file's preference order and silently drops refs this database
     has never seen -- a slot left empty by that is reported by the caller.
     """
-    refs = {ref for slot in hit.terms for ref in slot}
+    return await _slots_from_refs(session, hit.terms)
+
+
+async def _slots_from_refs(session: AsyncSession, terms) -> list[list[_Candidate]]:
+    """``(taxonomy, name)`` refs, slot by slot, as the loaded concepts they name."""
+    refs = {ref for slot in terms for ref in slot}
     rows = await session.execute(
         select(Concept.id, Concept.taxonomy, Concept.name, Concept.label).where(
             tuple_(Concept.taxonomy, Concept.name).in_(refs)
@@ -1957,7 +2004,7 @@ async def _slots_from_alias(session: AsyncSession, hit: AliasHit) -> list[list[_
             for ref in slot
             if ref in loaded
         ]
-        for slot in hit.terms
+        for slot in terms
     ]
 
 

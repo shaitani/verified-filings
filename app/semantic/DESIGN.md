@@ -382,6 +382,18 @@ and the Presenter shows `0.89×`. Only on an entry that resolves (`terms`); only
 `current_ratio` needs it today. An embedding binding never has one — how to
 read a figure is curated judgment, like a caveat.
 
+## 8g. A pinned concept: the asker's pick
+
+Added 2026-09-27. When an element comes back `ambiguous`, the Web Server asks
+which candidate was meant (api DESIGN §3), and the pick returns as
+`map_query(query, pins={element_id: ConceptRef})`. A pinned element skips the
+alias lookup and the embedding search — the asker has chosen — but not the
+proof: the concept is looked up by `(taxonomy, name)` and bound per company
+through the same coverage check, so a pick with no facts for a filer is still
+reported, never bound on trust. `resolved_by = "pinned"`, which `ResolvedBy`
+gained for it; the similarity bar and the tie report apply only to
+`"embedding"`, so neither can fire on a pick.
+
 ## 8a. Declining, for terms the dataset simply does not hold
 
 `unavailable` carries a sentence of curated reasoning that becomes

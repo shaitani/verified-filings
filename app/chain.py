@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import time
 import traceback
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from pydantic import Field
 
 from app.api.schemas import Ask, Option, Part, Refusal, Reply
 from app.parser import ProposalError, UnacceptableProposal, parse_question
+from app.parser.acceptor import normalize
 from app.presenter import PresentationError, present
 from app.retrieval import GenerationError, InvalidSQL, UnsupportedPlan, answer
 from app.schemas.answer_view import AnswerView
@@ -72,6 +73,19 @@ class AskRecord(_Base):
     options: list[OptionRecord] = Field(min_length=1)
 
 
+class Pending(_Base):
+    """What the next round needs: the parsed question, and what was asked of it.
+    Stored in web.job.asks; a round of candidate picks alone re-maps this
+    ``query_in`` rather than parsing again."""
+
+    query_in: QueryIn
+    asks: list[AskRecord] = Field(min_length=1)
+
+
+class UnknownChoice(ValueError):
+    """An answer naming an ask or an option this round never offered."""
+
+
 class ErrorRecord(_Base):
     stage: str
     type: str
@@ -99,6 +113,12 @@ class Outcome:
     errors: list[ErrorRecord] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
 
+    @property
+    def pending(self) -> Pending | None:
+        if not self.asks or self.query_in is None:
+            return None  # nothing was asked, so there is no next round to prepare
+        return Pending(query_in=self.query_in, asks=self.asks)
+
     def reply(self, conversation_id: UUID, job_id: UUID) -> Reply:
         return Reply(
             conversation_id=conversation_id,
@@ -113,10 +133,17 @@ async def ask(
     question: str,
     *,
     answers: list[tuple[str, str]] | None = None,
+    pins: Mapping[str, ConceptRef] | None = None,
+    query: QueryIn | None = None,
     on_stage: StageHook | None = None,
 ) -> Outcome:
-    """One round of a conversation. ``answers`` are ``(question put, label chosen)``
-    pairs from earlier rounds, handed to the parser as it already expects."""
+    """One round of a conversation.
+
+    ``answers`` -- ``(question put, label chosen)`` for curated questions,
+    handed to the parser as it already expects. ``pins`` -- ambiguous phrase
+    -> the concept chosen for it. ``query`` -- a parsed question to re-map
+    instead of parsing again. ``ask_again`` decides these from a round's picks.
+    """
     outcome = Outcome()
 
     async def stage(name: JobStage) -> None:
@@ -126,24 +153,29 @@ async def ask(
                 await maybe
 
     # -- parse -----------------------------------------------------------------
-    await stage("parsing")
-    with _timed(outcome, "parse"):
-        try:
-            outcome.query_in = await parse_question(question, answers=answers)
-        except (UnacceptableProposal, ProposalError, ValueError) as exc:
-            _record(outcome, "parse", exc)
-            outcome.blocking = Refusal(stage="parse", reason=PARSE_FAILED)
-            return outcome
-        except Exception as exc:
-            _record(outcome, "parse", exc, bug=True)
-            outcome.blocking = Refusal(stage="parse", reason=BUG)
-            return outcome
+    if query is not None:
+        outcome.query_in = query  # a round of picks: the words have not changed
+    else:
+        await stage("parsing")
+        with _timed(outcome, "parse"):
+            try:
+                outcome.query_in = await parse_question(question, answers=answers)
+            except (UnacceptableProposal, ProposalError, ValueError) as exc:
+                _record(outcome, "parse", exc)
+                outcome.blocking = Refusal(stage="parse", reason=PARSE_FAILED)
+                return outcome
+            except Exception as exc:
+                _record(outcome, "parse", exc, bug=True)
+                outcome.blocking = Refusal(stage="parse", reason=BUG)
+                return outcome
 
     # -- map -------------------------------------------------------------------
     await stage("mapping")
     with _timed(outcome, "map"):
         try:
-            outcome.plan = await map_query(outcome.query_in)
+            outcome.plan = await map_query(
+                outcome.query_in, pins=_pins_by_element(outcome.query_in, pins)
+            )
         except Exception as exc:  # the mapper does not raise by design; if it does, a bug
             _record(outcome, "map", exc, bug=True)
             outcome.blocking = Refusal(stage="map", reason=BUG)
@@ -194,6 +226,74 @@ async def ask(
         for e in items
     ]
     return outcome
+
+
+async def ask_again(
+    question: str,
+    pending: Pending,
+    choices: list[tuple[str, str]],
+    *,
+    answers: list[tuple[str, str]] | None = None,
+    pins: Mapping[str, ConceptRef] | None = None,
+    on_stage: StageHook | None = None,
+) -> tuple[Outcome, list[tuple[str, str]], dict[str, ConceptRef]]:
+    """The next round, from ``(ask_id, option_id)`` picks against ``pending``.
+
+    ``answers`` and ``pins`` are every earlier round's; the round's own are
+    added and all of them returned, for the caller to keep. A new curated
+    answer changes the words, so the question is parsed again with it; picks
+    among candidates alone re-map the stored parse (api DESIGN §3). A pin
+    whose phrase a re-parse no longer produces is not lost -- the phrase is
+    ambiguous again and is asked again.
+    """
+    new_answers, new_pins = resolve_choices(pending, choices)
+    all_answers = [*(answers or []), *new_answers]
+    all_pins = {**(pins or {}), **new_pins}
+    outcome = await ask(
+        question,
+        answers=all_answers or None,
+        pins=all_pins,
+        query=None if new_answers else pending.query_in,
+        on_stage=on_stage,
+    )
+    return outcome, all_answers, all_pins
+
+
+def resolve_choices(
+    pending: Pending, choices: list[tuple[str, str]]
+) -> tuple[list[tuple[str, str]], dict[str, ConceptRef]]:
+    """``(ask_id, option_id)`` picks as parser answers and pins. Only an option
+    this round offered is accepted -- stricter than the parser, which takes
+    any answer text (api DESIGN §3)."""
+    by_id = {record.ask_id: record for record in pending.asks}
+    answers: list[tuple[str, str]] = []
+    pins: dict[str, ConceptRef] = {}
+    for ask_id, option_id in choices:
+        record = by_id.get(ask_id)
+        offered = record.options if record else []
+        option = next((o for o in offered if o.option_id == option_id), None)
+        if option is None:
+            raise UnknownChoice(f"no option {option_id!r} was offered for ask {ask_id!r}")
+        if record.kind == "ambiguity":
+            pins[record.element_text] = option.concept
+        else:
+            answers.append((record.question, option.label))
+    return answers, pins
+
+
+def _pins_by_element(
+    query: QueryIn, pins: Mapping[str, ConceptRef] | None
+) -> dict[str, ConceptRef]:
+    """Phrase -> concept, as element id -> concept for this parse. By phrase,
+    because a re-parse may number its elements differently."""
+    if not pins:
+        return {}
+    wanted = {normalize(phrase): concept for phrase, concept in pins.items()}
+    return {
+        element.id: wanted[normalize(element.text)]
+        for element in query.elements
+        if element.kind == "metric" and normalize(element.text) in wanted
+    }
 
 
 async def _answer(

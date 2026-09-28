@@ -51,7 +51,8 @@ Intent = Literal["lookup", "compare", "trend", "rank", "derive"]
 #: Which cascade step produced a binding. Logged per binding so the alias
 #: hit-rate is measurable over time -- as the curated layer absorbs cases, the
 #: share resolved by "embedding" should fall.
-ResolvedBy = Literal["alias", "embedding"]
+#: "pinned": the asker chose this concept from an ambiguity's candidates.
+ResolvedBy = Literal["alias", "embedding", "pinned"]
 
 #: What a question may *ask* for. Deliberately wider than the storage-level
 #: ``FiscalPeriod``: no US filer files a Q4 (the 10-K covers it, so the store

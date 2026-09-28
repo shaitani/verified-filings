@@ -12,6 +12,8 @@ import json
 import uuid
 from pathlib import Path
 
+import pytest
+
 import app.chain as chain
 from app.chain import BUG, EXECUTE_FAILED, PARSE_FAILED, PRESENT_FAILED, ask
 from app.parser import UnacceptableProposal
@@ -33,14 +35,19 @@ def _load(name: str) -> tuple[QueryIn, QueryPlan, ResultSet | None]:
     )
 
 
-def _stub(monkeypatch, name: str, *, plan=None, result=None, parse=None, answer=None) -> None:
-    """Replace the three stages with the fixture's outputs (or with overrides)."""
+def _stub(
+    monkeypatch, name: str, *, plan=None, result=None, parse=None, answer=None
+) -> list[tuple]:
+    """Replace the three stages with the fixture's outputs (or with overrides).
+    Returns the list the fake mapper records its inputs in."""
     query, fixture_plan, fixture_result = _load(name)
+    mapped: list[tuple] = []
 
     async def fake_parse(question, *, answers=None):
         return parse(question) if parse else query
 
-    async def fake_map(_query):
+    async def fake_map(_query, *, pins=None):
+        mapped.append((_query, pins))  # what the mapper was given, for assertions
         return plan or fixture_plan
 
     async def fake_answer(_plan):
@@ -49,6 +56,7 @@ def _stub(monkeypatch, name: str, *, plan=None, result=None, parse=None, answer=
     monkeypatch.setattr(chain, "parse_question", fake_parse)
     monkeypatch.setattr(chain, "map_query", fake_map)
     monkeypatch.setattr(chain, "answer", fake_answer)
+    return mapped
 
 
 def _reply(outcome):
@@ -236,3 +244,77 @@ def test_the_reader_s_sentences_are_the_ones_decided() -> None:
     assert EXECUTE_FAILED.startswith("The figures for this query came back")
     assert PRESENT_FAILED == "Something went wrong attempting to display the results."
     assert BUG.endswith("jk, time to debug.")
+
+
+# --------------------------------------------------------------------------- #
+# The next round: picks become answers or pins (slice 2)
+# --------------------------------------------------------------------------- #
+
+
+async def _pending(monkeypatch, name: str):
+    _stub(monkeypatch, name)
+    return (await ask("q")).pending
+
+
+async def test_only_a_round_that_asked_something_leaves_something_pending(monkeypatch) -> None:
+    _stub(monkeypatch, "q001")
+    assert (await ask("q")).pending is None
+    pending = await _pending(monkeypatch, "ambiguous")
+    assert pending.query_in.elements and [a.kind for a in pending.asks] == ["ambiguity"]
+    assert pending.model_validate_json(pending.model_dump_json()) == pending  # stored as JSON
+
+
+async def test_a_pick_becomes_a_pin_or_an_answer(monkeypatch) -> None:
+    pending = await _pending(monkeypatch, "ambiguous")
+    answers, pins = chain.resolve_choices(pending, [("a1", "o2")])
+    assert answers == [] and pins["accounts payable"].name == "IncreaseDecreaseInAccountsPayable"
+
+    pending = await _pending(monkeypatch, "q046")  # "profit margin": a curated question
+    answers, pins = chain.resolve_choices(pending, [("a1", "o1")])
+    assert pins == {} and answers == [(pending.asks[0].question, "Gross margin")]
+
+
+@pytest.mark.parametrize("choice", [("a9", "o1"), ("a1", "o9")])
+async def test_an_option_never_offered_is_refused(monkeypatch, choice) -> None:
+    pending = await _pending(monkeypatch, "ambiguous")
+    with pytest.raises(chain.UnknownChoice, match="was offered"):
+        chain.resolve_choices(pending, [choice])
+
+
+async def test_a_round_of_picks_alone_re_maps_without_parsing(monkeypatch) -> None:
+    pending = await _pending(monkeypatch, "ambiguous")
+    mapped = _stub(monkeypatch, "ambiguous_round2", parse=_raises(AssertionError("parsed")))
+    stages: list[str] = []
+    outcome, answers, pins = await chain.ask_again(
+        "q", pending, [("a1", "o1")], on_stage=stages.append
+    )
+    assert "parsing" not in stages and "parse" not in outcome.timings
+    ((query, given),) = mapped
+    assert query is pending.query_in  # the stored parse, unchanged
+    assert {eid: c.name for eid, c in given.items()} == {"e2": "AccountsPayableCurrent"}
+    assert outcome.reply(uuid.uuid4(), uuid.uuid4()).status == "answered"
+    assert outcome.answer.citations["b0"].resolved_by == "pinned"
+    assert answers == [] and set(pins) == {"accounts payable"}
+
+
+async def test_a_new_curated_answer_parses_again_and_keeps_earlier_picks(monkeypatch) -> None:
+    pending = await _pending(monkeypatch, "q046")
+    concept = _load("ambiguous_round2")[1].bindings[0].concepts[0]
+    earlier_pin = {"accounts payable": concept}  # a pick from a round before this one
+    seen: list = []
+    _stub(monkeypatch, "q046_round2", parse=lambda q: seen.append(q) or _load("q046_round2")[0])
+    _, answers, pins = await chain.ask_again(
+        "q", pending, [("a1", "o1")], answers=[("earlier?", "Yes")], pins=earlier_pin
+    )
+    assert seen == ["q"]  # parsed again: the words changed
+    assert answers == [("earlier?", "Yes"), (pending.asks[0].question, "Gross margin")]
+    assert set(pins) == {"accounts payable"}  # carried forward, whatever this round did
+
+
+def test_a_pin_finds_its_element_by_phrase_not_by_id() -> None:
+    """A re-parse may number elements differently; the phrase is what persists.
+    A phrase the re-parse no longer produces finds nothing, and so is asked again."""
+    query, _, _ = _load("ambiguous")
+    concept = _load("ambiguous_round2")[1].bindings[0].concepts[0]
+    found = chain._pins_by_element(query, {"  Accounts   PAYABLE ": concept, "vanished": concept})
+    assert found == {"e2": concept}

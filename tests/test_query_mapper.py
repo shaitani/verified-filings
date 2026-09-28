@@ -1788,3 +1788,69 @@ def test_a_plain_series_gets_its_growth_beside_it() -> None:
     assert grow([metric], [binding()], series, "trend", [], [bar]) == []
     taken = [PlanOverTime(element_id="m", kind="growth")]
     assert grow([metric], [binding()], series, "derive", taken, []) == []
+
+
+# --------------------------------------------------------------------------- #
+# A pinned concept -- the asker's pick from an ambiguity (api DESIGN §3)
+# --------------------------------------------------------------------------- #
+
+
+def _pinned_query() -> QueryIn:
+    return _query(
+        {"id": "m", "text": "something nobody curated", "kind": "metric"},
+        {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+        {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+    )
+
+
+async def _no_search(session, text):
+    raise AssertionError("a pinned element must never reach the embedding search")
+
+
+async def test_a_pinned_concept_binds_without_a_search(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    cid, taxonomy, name, label = await _fixture_concept(test_session_factory, "ZzzTestRevenues")
+    monkeypatch.setattr(query_mapper, "_nearest_concepts", _no_search)
+
+    pin = ConceptRef(concept_id=cid, taxonomy=taxonomy, name=name, label=label)
+    plan = await map_query(
+        _pinned_query(), pins={"m": pin}, session_factory=test_session_factory
+    )
+
+    (binding,) = plan.bindings
+    assert (binding.resolved_by, binding.concepts[0].name) == ("pinned", "ZzzTestRevenues")
+    assert "the asker's choice" in binding.rationale
+    assert plan.ambiguous == [] and plan.unresolved == []
+
+
+async def test_a_pin_is_looked_up_by_name_not_by_the_id_it_arrived_with(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    """The pick comes back from web.job, which the web role can write: a wrong
+    id must not choose the concept."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    cid, taxonomy, name, _ = await _fixture_concept(test_session_factory, "ZzzTestRevenues")
+    monkeypatch.setattr(query_mapper, "_nearest_concepts", _no_search)
+
+    wrong_id = ConceptRef(concept_id=cid + 999_999, taxonomy=taxonomy, name=name)
+    plan = await map_query(
+        _pinned_query(), pins={"m": wrong_id}, session_factory=test_session_factory
+    )
+    assert plan.bindings[0].concepts[0].concept_id == cid
+
+
+async def test_a_pin_to_a_concept_not_loaded_is_refused(
+    test_session_factory, clean_fake_company, monkeypatch
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    monkeypatch.setattr(query_mapper, "_nearest_concepts", _no_search)
+
+    ghost = ConceptRef(concept_id=1, taxonomy="us-gaap", name="ZzzTestNeverLoaded")
+    plan = await map_query(
+        _pinned_query(), pins={"m": ghost}, session_factory=test_session_factory
+    )
+    assert plan.bindings == []
+    (problem,) = plan.unresolved
+    assert "us-gaap:ZzzTestNeverLoaded" in problem.reason and "not loaded" in problem.reason
