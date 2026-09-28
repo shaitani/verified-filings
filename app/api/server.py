@@ -84,7 +84,7 @@ def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> 
     # sender (DESIGN §10), and the library's /users/{id} admin routes -- administration
     # is the CLI's (app/api/admin.py), with the owner's credential.
 
-    app.include_router(build_router(auth))  # ask, answer, watch, read back, list, report
+    app.include_router(build_router(auth))  # ask, answer, watch, read back, list, reopen, report
 
     @app.get("/api/health", tags=["ops"])
     async def health(request: Request, response: Response) -> dict[str, str]:

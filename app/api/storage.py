@@ -17,16 +17,22 @@ import uuid
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from pydantic import Field
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.api.schemas import ConversationSummary, JobView, Reply
-from app.chain import Pending, resolve_choices
+from app.api.schemas import (
+    ConversationSummary,
+    ConversationView,
+    GivenAnswer,
+    JobView,
+    Reply,
+    RoundView,
+)
+from app.chain import BUG, Pending, resolve_choices
 from app.db.web import Conversation, Job, JobFeedback
 from app.schemas.job import FINISHED, JobStatus
-from app.schemas.query import ConceptRef, _Base
+from app.schemas.query import ConceptRef
 
 
 class NotFound(LookupError):
@@ -43,16 +49,6 @@ class NothingToAnswer(RuntimeError):
 
 class Conflict(RuntimeError):
     """Another round was started at the same moment (the unique round number)."""
-
-
-class StoredAnswer(_Base):
-    """One answer as ``Job.answers`` keeps it: its text always, the option when
-    there was one -- so free text can arrive later with no change here (§3)."""
-
-    ask_id: str
-    kind: str = "option"
-    option_id: str | None = None
-    text: str = Field(min_length=1)
 
 
 @dataclass
@@ -113,7 +109,7 @@ async def create_round(
             for option in record.options
         }
         stored = [
-            StoredAnswer(ask_id=a, option_id=o, text=labels[(a, o)]).model_dump(mode="json")
+            GivenAnswer(ask_id=a, option_id=o, text=labels[(a, o)]).model_dump(mode="json")
             for a, o in choices
         ]
         job = Job(
@@ -258,6 +254,38 @@ async def conversations(
             )
             for conversation, rounds, status in rows
         ]
+
+
+async def conversation_view(
+    session_factory: async_sessionmaker, user_id: UUID, conversation_id: UUID
+) -> ConversationView:
+    """A past conversation reopened: every round in order, each with what started
+    it and how it ended. ``NotFound`` unless it is this reader's."""
+    async with session_factory() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        if conversation is None or conversation.user_id != user_id:
+            raise NotFound(f"no conversation {conversation_id}")
+        jobs = (
+            await session.scalars(
+                select(Job).where(Job.conversation_id == conversation_id).order_by(Job.round)
+            )
+        ).all()
+    return ConversationView(
+        conversation_id=conversation.id,
+        question=conversation.question,
+        created_at=conversation.created_at,
+        rounds=[
+            RoundView(
+                round=job.round,
+                job_id=job.id,
+                status=job.status,
+                answers=[GivenAnswer.model_validate(a) for a in job.answers or []],
+                reply=Reply.model_validate(job.reply) if job.reply else None,  # re-checked
+                message=BUG if job.status == "failed" else None,  # as the event stream says it
+            )
+            for job in jobs
+        ],
+    )
 
 
 async def _latest_round(session, conversation_id: UUID) -> Job:

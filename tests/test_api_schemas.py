@@ -13,7 +13,9 @@ from app.api.schemas import (
     MAX_QUESTION,
     AnswersIn,
     Ask,
+    ConversationView,
     DoneEvent,
+    GivenAnswer,
     JobEvent,
     JobView,
     NewConversationIn,
@@ -22,6 +24,7 @@ from app.api.schemas import (
     Part,
     Refusal,
     Reply,
+    RoundView,
     StageEvent,
 )
 from app.schemas.answer_view import AnswerRow, AnswerView, CitationView
@@ -239,3 +242,63 @@ def test_a_stored_reply_reads_back_and_its_status_is_rechecked() -> None:
     assert Reply.model_validate_json(stored) == reply
     with pytest.raises(ValidationError, match="disagrees with the parts"):
         Reply.model_validate_json(stored.replace('"status":"answered"', '"status":"refused"'))
+
+
+# --------------------------------------------------------------------------- #
+# A reopened conversation
+# --------------------------------------------------------------------------- #
+
+PICK = GivenAnswer(ask_id="a1", option_id="o2", text="Gross margin")
+
+
+def _round(number: int, **fields) -> RoundView:
+    fields.setdefault("answers", [PICK] if number > 1 else [])
+    return RoundView(round=number, **fields)
+
+
+def test_a_round_carries_its_reply_exactly_when_done() -> None:
+    reply = _reply(blocking=Refusal(stage="parse", reason="r"))
+    assert _round(1, job_id=JOB, status="done", reply=reply).reply
+    with pytest.raises(ValidationError, match="reply is set exactly when done"):
+        _round(1, job_id=JOB, status="done")
+    with pytest.raises(ValidationError, match="reply is set exactly when done"):
+        _round(1, job_id=JOB, status="mapping", reply=reply)
+
+
+def test_a_failed_round_carries_the_readers_sentence() -> None:
+    assert _round(1, job_id=JOB, status="failed", message="Something went wrong.").message
+    with pytest.raises(ValidationError, match="message is set exactly when failed"):
+        _round(1, job_id=JOB, status="failed")
+
+
+def test_only_the_first_round_starts_without_answers() -> None:
+    with pytest.raises(ValidationError, match="every round but the first"):
+        _round(1, job_id=JOB, status="queued", answers=[PICK])
+    with pytest.raises(ValidationError, match="every round but the first"):
+        _round(2, job_id=JOB, status="queued", answers=[])
+
+
+def test_a_round_cannot_carry_another_jobs_reply() -> None:
+    reply = _reply(blocking=Refusal(stage="parse", reason="r"))
+    with pytest.raises(ValidationError, match="another job's reply"):
+        _round(1, job_id=uuid.uuid4(), status="done", reply=reply)
+
+
+def test_rounds_run_in_order_from_one() -> None:
+    def view(*numbers: int) -> ConversationView:
+        rounds = [_round(n, job_id=uuid.uuid4(), status="queued") for n in numbers]
+        return ConversationView(
+            conversation_id=CONVERSATION, question="q", created_at="2026-09-28T00:00:00Z",
+            rounds=rounds,
+        )
+
+    assert len(view(1, 2).rounds) == 2
+    for numbers in [(2,), (1, 3), (2, 1)]:
+        with pytest.raises(ValidationError, match="1, 2, 3"):
+            view(*numbers)
+
+
+def test_a_given_answer_keeps_its_words() -> None:
+    assert PICK.model_dump(mode="json") == {
+        "ask_id": "a1", "kind": "option", "option_id": "o2", "text": "Gross margin",
+    }

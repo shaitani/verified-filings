@@ -191,6 +191,56 @@ class ConversationSummary(_Base):
     status: JobStatus  # of the latest round
 
 
+class GivenAnswer(_Base):
+    """One answer a round was started with -- as ``Job.answers`` stores it, and as
+    the thread shows it. Its text is always kept, so free text needs no change (§3)."""
+
+    ask_id: str = Field(min_length=1, max_length=32)
+    kind: Literal["option"] = "option"  # "text" joins with free-text answers
+    option_id: str | None = Field(default=None, max_length=32)  # None only for free text
+    text: str = Field(min_length=1)  # what the reader chose, in words: the option's label
+
+
+class RoundView(_Base):
+    """One round of a reopened conversation."""
+
+    round: int = Field(ge=1)  # 1 is the question itself
+    job_id: UUID
+    status: JobStatus  # not finished: watch /api/jobs/{job_id}/events for the rest
+    answers: list[GivenAnswer] = Field(default_factory=list)  # what started it; none for round 1
+    reply: Reply | None = None  # set exactly when done
+    message: str | None = Field(default=None, max_length=512)  # set exactly when failed
+
+    @model_validator(mode="after")
+    def _consistent(self) -> RoundView:
+        if (self.reply is not None) != (self.status == "done"):
+            raise ValueError(f"round {self.round}: reply is set exactly when done")
+        if (self.message is not None) != (self.status == "failed"):
+            raise ValueError(f"round {self.round}: message is set exactly when failed")
+        if bool(self.answers) != (self.round > 1):
+            raise ValueError(f"round {self.round}: every round but the first answers the last")
+        if self.reply is not None and self.reply.job_id != self.job_id:
+            raise ValueError(f"round {self.round} carries another job's reply")
+        return self
+
+
+class ConversationView(_Base):
+    """``GET /api/conversations/{id}`` -- a past conversation, reopened as its thread."""
+
+    conversation_id: UUID
+    question: str
+    created_at: datetime
+    rounds: list[RoundView] = Field(min_length=1)  # in order; the last may still be running
+
+    @model_validator(mode="after")
+    def _consistent(self) -> ConversationView:
+        if [r.round for r in self.rounds] != list(range(1, len(self.rounds) + 1)):
+            raise ValueError("rounds must run 1, 2, 3 ... in order")
+        if any(r.reply and r.reply.conversation_id != self.conversation_id for r in self.rounds):
+            raise ValueError("a round carries another conversation's reply")
+        return self
+
+
 class JobCreated(_Base):
     conversation_id: UUID
     job_id: UUID

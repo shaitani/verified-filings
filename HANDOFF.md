@@ -657,8 +657,9 @@ Put the plan and these questions to the user before building:
   swapped by rewriting that component (DESIGN §5). Tables: Angular Material.
 - **Types from `/openapi.json`**, generated with `openapi-typescript`
   (decided), never hand-written (DESIGN §9).
-- **Slice 0 first** (server): a route to reopen a past conversation — the
-  history list carries no job ids and nothing returns a conversation's rounds.
+- **Slice 0 done** (server, 2026-09-28): `GET /api/conversations/{id}`
+  reopens a past conversation as its thread (DESIGN §4), and `/openapi.json`
+  publishes the event stream's types (DESIGN §9). Next: slice 1, `web/`.
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie

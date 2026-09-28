@@ -5,6 +5,7 @@ model and XBRL stages are stood in for, by the captures in tests/fixtures/chain/
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
 import httpx
@@ -12,7 +13,7 @@ import pytest
 from sqlalchemy import text
 
 import app.chain as chain
-from app.api import admin
+from app.api import admin, storage
 from app.api.server import create_app
 from app.db import roles
 from app.schemas.query import QueryIn, QueryPlan
@@ -252,6 +253,46 @@ async def test_a_reader_s_history_is_theirs_newest_first(server) -> None:
     assert [c["status"] for c in listed] == ["done", "done"]
 
 
+async def test_a_past_conversation_reopens_as_its_thread(server) -> None:
+    signed_in, _, _ = server
+    http = await signed_in("a")
+    conversation, first_job, frames = await _ask(http, "Apple's profit margin?")
+    ask = frames[-1][1]["reply"]["parts"][0]["ask"]
+    gross = next(o for o in ask["options"] if o["label"] == "Gross margin")
+    pick = {"kind": "option", "ask_id": ask["ask_id"], "option_id": gross["option_id"]}
+    path = f"/api/conversations/{conversation}"
+    answered = await http.post(f"{path}/answers", json={"answers": [pick]})
+    second_job = answered.json()["job_id"]
+    await http.get(f"/api/jobs/{second_job}/events")  # let it finish
+
+    thread = (await http.get(path)).json()
+    assert thread["question"] == "Apple's profit margin?"
+    first, second = thread["rounds"]
+    assert (first["round"], first["job_id"], first["answers"]) == (1, first_job, [])
+    assert first["reply"]["parts"][0]["outcome"] == "asked"
+    assert second["job_id"] == second_job
+    assert [a["text"] for a in second["answers"]] == ["Gross margin"]  # the pick, in words
+    assert second["reply"]["answer"]["rows"][0]["display"] == "46.9%"
+
+
+async def test_a_reopened_round_still_running_says_so(server, monkeypatch) -> None:
+    signed_in, app, _ = server
+    http = await signed_in("a")
+
+    async def never_runs(job_id):
+        return None
+
+    monkeypatch.setattr(app.state.runner, "submit", never_runs)
+    created = (await http.post("/api/conversations", json={"question": "Apple's balances?"})).json()
+    thread = f"/api/conversations/{created['conversation_id']}"
+    (queued,) = (await http.get(thread)).json()["rounds"]
+    assert (queued["status"], queued["reply"], queued["message"]) == ("queued", None, None)
+
+    await storage.fail(app.state.web, uuid.UUID(created["job_id"]))
+    (failed,) = (await http.get(thread)).json()["rounds"]
+    assert failed["status"] == "failed" and failed["message"] == chain.BUG  # as the stream says it
+
+
 async def test_reporting_a_problem_flags_the_job_for_the_owner(server) -> None:
     signed_in, _, owner = server
     http = await signed_in("a")
@@ -275,6 +316,7 @@ async def test_another_reader_s_rounds_do_not_exist(server) -> None:
     mine, theirs = await signed_in("a"), await signed_in("b")
     conversation, job, _ = await _ask(mine, "Apple's profit margin?")
     answer = {"answers": [{"kind": "option", "ask_id": "a1", "option_id": "o1"}]}
+    assert (await theirs.get(f"/api/conversations/{conversation}")).status_code == 404
     assert (await theirs.get(f"/api/jobs/{job}")).status_code == 404
     assert (await theirs.get(f"/api/jobs/{job}/events")).status_code == 404
     assert (await theirs.post(f"/api/jobs/{job}/feedback", json={})).status_code == 404
@@ -287,6 +329,7 @@ async def test_another_reader_s_rounds_do_not_exist(server) -> None:
     [
         ("POST", "/api/conversations"),
         ("GET", "/api/conversations"),
+        ("GET", "/api/conversations/00000000-0000-0000-0000-000000000000"),
         ("POST", "/api/conversations/00000000-0000-0000-0000-000000000000/answers"),
         ("GET", "/api/jobs/00000000-0000-0000-0000-000000000000"),
         ("GET", "/api/jobs/00000000-0000-0000-0000-000000000000/events"),

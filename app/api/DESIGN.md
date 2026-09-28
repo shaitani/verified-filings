@@ -205,8 +205,19 @@ POST /api/conversations/{id}/answers       {answers[]}        → {job_id}
 GET  /api/jobs/{job_id}/events             text/event-stream
 GET  /api/jobs/{job_id}                    the Reply, once done (reconnects, reloads)
 GET  /api/conversations                    the signed-in user's history
+GET  /api/conversations/{id}               one reopened: every round, its picks, its reply
 POST /api/jobs/{job_id}/feedback           {note}             "report a problem" (§8)
 ```
+
+**Reopening (step 4, slice 0, 2026-09-28).** The history list carries no job
+ids, so without `GET /api/conversations/{id}` the client could list a past
+question but never open it. It returns a `ConversationView`: the question, then
+each round in order with its `job_id`, status, the picks that started it
+(`GivenAnswer`, in words — the option's label) and its reply. A failed round
+carries the same fixed sentence the event stream sends, so the client never
+writes one; a round not yet finished is watched on its events route as usual.
+`GivenAnswer` is also what `Job.answers` stores, so the stored and the shown
+answer are one class.
 
 **Built (slice 7, 2026-09-27)**, `app/api/routes.py`. Every route needs a
 signed-in reader and touches only their conversations; another reader's reads

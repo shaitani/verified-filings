@@ -1,4 +1,4 @@
-"""The question routes (DESIGN §4): ask, answer, watch, read back, list, report.
+"""The question routes (DESIGN §4): ask, answer, watch, read back, list, reopen, report.
 
 Every route needs a signed-in reader and touches only that reader's
 conversations -- another reader's reads as 404, never 403, so an id tells a
@@ -23,6 +23,7 @@ from app.api.schemas import (
     JOB_EVENT_REF,
     AnswersIn,
     ConversationSummary,
+    ConversationView,
     FeedbackIn,
     JobCreated,
     JobView,
@@ -77,6 +78,18 @@ def build_router(auth: Auth) -> APIRouter:
     async def history(request: Request, reader: Reader) -> list[ConversationSummary]:
         """The reader's past questions, newest first."""
         return await storage.conversations(request.app.state.web, reader.id)
+
+    @router.get("/conversations/{conversation_id}")
+    async def conversation(
+        conversation_id: uuid.UUID, request: Request, reader: Reader
+    ) -> ConversationView:
+        """A past conversation reopened: every round, in order, as the thread shows it."""
+        try:
+            return await storage.conversation_view(
+                request.app.state.web, reader.id, conversation_id
+            )
+        except storage.NotFound as exc:
+            raise _refused(exc) from exc
 
     @router.get("/jobs/{job_id}")
     async def job(job_id: uuid.UUID, request: Request, reader: Reader) -> JobView:
