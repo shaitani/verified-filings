@@ -1,5 +1,11 @@
 # Handoff — read this first
 
+**Status, 2026-09-27.** Steps 1–3 are done: the question-to-answer chain, the
+Presenter, and the Web Server (FastAPI, sign-in, job queue, its own
+container). **Next is step 4, the Angular Web Client** — its plan and open
+decisions are in §11, and the user wants the plan and questions put to them
+*before* any building starts, as step 3's were. The web end at a glance: §10.
+
 Orientation for a fresh session. Not a permanent doc: everything here either
 points at a `DESIGN.md` next to the code, or is forward plan that lives
 nowhere else. Where this file and a `DESIGN.md` disagree, the `DESIGN.md` is
@@ -51,9 +57,11 @@ ResultSet                rows + citations + verdict + notes + ResultSpec
    ↓  web/               [A] Web Client       Angular                  NOT BUILT
 ```
 
-Everything from a question string to a `ResultSet` is built and works end to
-end: `parse_question(text)` → `map_query(query_in)` → `answer(plan)`. Nothing
-yet calls the three in sequence — see §6. 410 tests pass.
+Everything from a question string to a reply is built and works end to end:
+`app/chain.py`'s `ask()` runs `parse_question` → `map_query` → `answer` →
+`present`, and the Web Server runs it once per job (§10). `evals/run.py`
+still calls the first three itself — moving it onto `ask()` is deferred to
+the user's testing update (§11). 815 tests pass.
 
 ### Block names
 
@@ -94,7 +102,9 @@ up — the roles and the models do **not** come back with the schema.
 
 Both ends used to be out of scope, on the grounds that they belonged to a
 user-facing LLM this project did not own. That changed when the decision was
-made to put a web front end on it (§2's block table). One end is now built.
+made to put a web front end on it (§2's block table). Both are now built on
+the server side: [C] the parser, and [B]/[F] the Web Server and Presenter.
+Only [A], the browser client, remains (§11).
 
 **[C] Query Parser is built** — `app/parser/`, 2026-09-20. Read
 [`app/parser/DESIGN.md`](app/parser/DESIGN.md) before touching it. The
@@ -306,7 +316,9 @@ In rough order of how much they matter.
   ordering, a derivation — has no structural check behind it.
 - **The eval set has a runner but no full-run number yet.**
   `evals/run.py` is [B] with the browser, the state and [F] taken out: it
-  calls `parse_question` → `map_query` → `answer` over the 56 questions and
+  calls `parse_question` → `map_query` → `answer` over the 56 questions (its
+  own copy of the chain — `app/chain.ask` is the one readers get; moving the
+  evals onto it is deferred, §11) and
   scores the *decision* — did it answer, and was answering the right call. It
   does not check the figure.
 
@@ -525,8 +537,22 @@ has caused real friction.
   confidence and will call it out — correctly.
 - Terse output. No long explanations unless asked.
 
-Run everything through `uv run`. Tests: `uv run pytest -q` (478 passing).
+Run everything through `uv run`. Tests: `uv run pytest -q` (815 passing,
+2026-09-27) — it needs `db-test` up, migrated to head (the `web` schema
+included: `ALEMBIC.md` step 5), and provisions all three roles itself.
 Lint: `uv run ruff check app/ tests/ evals/`.
+
+- **Tooling on this Windows machine.** Escapes are lost through layers: a
+  script sent through the Bash tool that writes Python source through a string
+  literal turned `\b` and `\n` into control characters in a test file
+  (2026-09-27), and `$'\r'` did not expand. Write such scripts to a scratch
+  file with the Write tool, or edit with the Edit tool; check line endings
+  with `file`, not `grep -c $'\r'`.
+- **The user prefers explicit names to conventions** — `api.Dockerfile`
+  named in `docker-compose.yml`, not a default `Dockerfile` found by
+  magic. Where a tool cannot be told a name, say so in a comment.
+- **Explain infrastructure plainly.** The user is not steeped in Docker or
+  Linux; say what a thing is and why before how.
 
 ## 8. Verifying things yourself
 
@@ -566,7 +592,7 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 |---|---|
 | [`BOOTSTRAP.md`](BOOTSTRAP.md) | bringing everything up from nothing, and what a volume wipe destroys |
 | [`PITFALLS.md`](PITFALLS.md) | every known data hazard, measured, and whether it is handled |
-| [`app/api/DESIGN.md`](app/api/DESIGN.md) | [A] [B] [F], the web end — designed, not built: the reply's parts, jobs and conversations, what to draw, logging |
+| [`app/api/DESIGN.md`](app/api/DESIGN.md) | [A] [B], the web end — [B] built (step 3's eight slices, §12a), [A] designed: the reply's parts, questions back, jobs, what to draw, the trace, sign-in, the `web` schema and its role, the container |
 | [`app/presenter/DESIGN.md`](app/presenter/DESIGN.md) | [F] the Presenter — display strings, views by shape, what it refuses |
 | [`app/retrieval/DESIGN.md`](app/retrieval/DESIGN.md) | the result contract, the view, the validator, and §4.3's catalogue of prompt failures |
 | [`app/parser/DESIGN.md`](app/parser/DESIGN.md) | [C] the Query Parser — the faithfulness gate, its measured failures, and what is deliberately not done |
@@ -580,3 +606,106 @@ gross margin 0.462063; free cash flow 108,807,000,000.
 | [`evals/run.py`](evals/run.py) | the runner — a tally and one line per question |
 | [`evals/walkthrough.py`](evals/walkthrough.py) | the same run, written out per question in full |
 | [`sec-retriever.md`](sec-retriever.md) | the original project brief |
+
+## 10. The web end (step 3), at a glance
+
+Built 2026-09-27 in eight slices, each committed on its own; every decision is
+in [`app/api/DESIGN.md`](app/api/DESIGN.md) (§12a lists the user's answers).
+
+| piece | what it is |
+|---|---|
+| `app/chain.py` | `ask()` / `ask_again()`: one round, parse → map → answer → present, every outcome from any stage a reply part; the reader's four fixed failure sentences; `Pending`, what the next round needs |
+| `app/presenter/` | [F] `ResultSet → AnswerView`, no model; its own `DESIGN.md` |
+| `app/api/storage.py` | conversations and jobs as `vf_web_role`; rounds chain through their stored picks |
+| `app/api/jobs.py` | `JobRunner`: one job at a time, stages saved and streamed (SSE), trace always written |
+| `app/trace.py`, `app/api/trace.py` | the per-job trace — collected while it runs, written write-only, read with the owner's CLI |
+| `app/api/auth.py`, `server.py`, `routes.py`, `admin.py` | sign-in by invitation (FastAPI Users), `create_app()`, the question routes, the owner's CLI |
+| `app/api/schemas.py`, `app/schemas/answer_view.py` | the wire contract the Angular types will be generated from |
+| `app/db/web.py`, migration `70e7ca6e7347` | the `web` schema, applied to both databases |
+| `app/db/roles.py` `WEB`, `session.web_sessionmaker()` | `vf_web_role` — writes `web` only, never falls back to the owner |
+| `api.Dockerfile`, `docker-compose.yml` `api` | the container, behind the `web` profile |
+
+**Running it.** On the host (reloads on edits):
+
+```bash
+uv run uvicorn app.api.server:create_app --factory --host 127.0.0.1 --port 8000 --reload
+```
+
+Or as it will be deployed:
+
+```bash
+CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose --profile web up -d --build api
+```
+
+Then `http://localhost:8000/docs`. Sign-up is by invitation:
+`uv run python -m app.api.admin invite --email <address>` prints a code once.
+
+**Debugging a reader's question.** Every job leaves a trace — full prompts, raw
+replies, every SQL statement, timings, errors — that only the owner can read:
+`uv run python -m app.api.trace <job_id>`, `--flagged` (a reader pressed
+"report a problem"), `--failed`. The real `web` tables were empty at handoff:
+every live check used the test database or a user deleted afterwards.
+
+## 11. Where to pick up — remaining steps
+
+### Step 4: the Angular Web Client ([A]) — next
+
+Put the plan and these questions to the user before building:
+
+- **Chart library.** The contract is library-free (`AnswerView`: a table that
+  always ships, and `stat` / `line` / `bar` views that point into it). Needs a
+  real time axis, several series, gaps, custom tooltips and tick formatting.
+  Recommended then: Apache ECharts via `ngx-echarts`; the table in Angular
+  Material or AG Grid Community. Not yet decided.
+- **Types from `/openapi.json`**, generated, never hand-written (DESIGN §9).
+- **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
+  cookie and the event stream need nothing extra.
+- **GitHub's redirect**: today it returns to the API, which sets the cookie
+  and shows a blank page. With a client it should land on a client page that
+  calls the API's callback — change `GITHUB_OAUTH_REDIRECT_URL` and add that
+  URL to the GitHub OAuth app (up to 10 are allowed); no code change.
+- **What the client must render faithfully**: parts (answered / asked /
+  refused) and a blocking refusal; asks as questions with option buttons and
+  an **"ambiguous" tag** on `kind: ambiguity`; `notes` above the views and
+  `conditions` stated; citations with every answer (flag `resolved_by:
+  embedding` as unreviewed); `display` strings for every figure (the client
+  formats only axis ticks, by `unit_kind`); live stages from
+  `EventSource('/api/jobs/{id}/events')`; history; "report a problem".
+- **Sign-in pages**: login, register with an invite code, GitHub.
+
+### The deployment step (DigitalOcean) — after step 4
+
+Recorded in DESIGN §12 and §13; none of it is done:
+
+- a **production compose override**: publish only the reverse proxy's 443
+  (and 80 to redirect) — `docker-compose.yml` publishes db and Ollama on
+  loopback, which a server must not; drop `db-test` and `pgadmin`; replace
+  the committed `postgres`/`postgres` and pgAdmin's `admin1234`; secrets from a
+  secret store rather than readable with `docker inspect`;
+- a **reverse proxy** (nginx or Caddy, with TLS) serving the Angular bundle
+  and proxying `/api`, response buffering off for the event stream;
+- a **second GitHub OAuth app** for production, with the `https` callback;
+- **rate limiting, including login brute-force protection — required before
+  the site is reachable from outside** (deferred until now by the user);
+- a shorter `AUTH_SESSION_DAYS` (the user expects to change 30);
+- a **GPU** for Ollama on the server — Qwen on a CPU is an order of
+  magnitude slower (BOOTSTRAP §2);
+- optionally an **email sender**, which turns on verification and reset.
+
+### Deferred by the user, to pick up when they ask
+
+- **Evals onto `app/chain.ask`**, in their testing update — until then the
+  evals measure their own copy of the chain.
+- **Retire Qwen as a SQL writer** (§6 TODO): averages and other derivations
+  are still Qwen's; the Presenter guards the average's display meanwhile.
+- **The questions that come back wrong** (§6 table). Two had task chips in the
+  previous chat, which will not carry over — their details are in that table:
+  q057's dropped year, and "by quarter" with a year range widening to every
+  year.
+- **The 10-K/A gap** (below): not to be reopened unprompted.
+
+### Small and stale
+
+- `BOOTSTRAP.md` §2 says "324 passing"; it is 815.
+- Mapper refusal wording written for a developer reaches readers verbatim
+  (q028, q049 in the §6 table).

@@ -157,7 +157,7 @@ so nothing has to be installed on the host.
 uv run pytest -q
 ```
 
-324 passing. This is the real end-to-end check: the suite provisions roles
+All passing (815 on 2026-09-27). This is the real end-to-end check: the suite provisions roles
 against the test database, asserts the view's exact column list, and runs a
 validated statement through it.
 
