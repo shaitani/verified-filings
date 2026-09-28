@@ -1,0 +1,15 @@
+<mat-toolbar>Verified Filings</mat-toolbar>
+
+<main>
+  <p class="server">
+    Web Server:
+    @if (health.isLoading()) {
+      checking…
+    } @else if (health.hasValue()) {
+      {{ health.value().status }}
+    } @else {
+      unreachable
+    }
+  </p>
+  <router-outlet />
+</main>

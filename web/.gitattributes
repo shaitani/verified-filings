@@ -1,0 +1,4 @@
+# The Angular CLI writes CRLF on Windows; the repository is LF. Scoped to web/
+# because the root has one deliberately-CRLF file (LOADER.md).
+* text=auto eol=lf
+*.ico binary
