@@ -111,4 +111,13 @@ export class ApiService {
       .get<GitHubAuthorize>(apiPath('/api/auth/github/authorize'))
       .pipe(map((response) => response.authorization_url));
   }
+
+  /**
+   * Finish a GitHub sign-in: hand the server everything GitHub put on the return address
+   * (`code`, `state`). It checks them and sets the session cookie; nothing comes back.
+   */
+  gitHubSignIn(fromGitHub: Readonly<Record<string, string>>): Observable<void> {
+    const params = new HttpParams({ fromObject: fromGitHub });
+    return this.http.get<void>(apiPath('/api/auth/github/callback'), { params });
+  }
 }

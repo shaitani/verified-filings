@@ -1,6 +1,14 @@
-<mat-toolbar>Verified Filings</mat-toolbar>
+<mat-toolbar>
+  <span>Verified Filings</span>
+  <span class="spacer"></span>
+  @if (auth.user(); as user) {
+    <span class="who">{{ user.email }}</span>
+    <button mat-button type="button" (click)="signOut()">Sign out</button>
+  }
+</mat-toolbar>
 
 <main>
+  <router-outlet />
   <p class="server">
     Web Server:
     @if (health.isLoading()) {
@@ -11,5 +19,4 @@
       unreachable
     }
   </p>
-  <router-outlet />
 </main>

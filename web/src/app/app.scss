@@ -2,6 +2,15 @@ main {
   padding: 16px;
 }
 
+.spacer {
+  flex: 1;
+}
+
+.who {
+  font: var(--mat-sys-body-medium);
+  margin-right: 8px;
+}
+
 .server {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);

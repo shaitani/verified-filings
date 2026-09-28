@@ -615,6 +615,29 @@ and live on `.env`.
   change of `GITHUB_OAUTH_REDIRECT_URL` and one added callback URL on the
   GitHub app, not of code.
 
+### The client's side (step 4, slice 3, 2026-09-28)
+
+`web/src/app/auth/`. The client holds no credential: the session is the
+httpOnly cookie, and `AuthStore` knows only what `/api/me` last said. Pages:
+login (email and password, or GitHub), register (email, password, invite
+code), and `/auth/github/callback` — the page `GITHUB_OAUTH_REDIRECT_URL` now
+names, which passes GitHub's `code` and `state` to the API's callback and goes
+home. Three rules worth keeping:
+
+- **`returnTo` is only ever a path on this site** (`safeReturnTo`), so a
+  crafted `/login?returnTo=https://elsewhere` cannot bounce a reader off it.
+- **The server's rules stay the server's.** The register page checks only that
+  the fields are filled; password length and the invitation are refused by the
+  server, and its sentence is shown (`auth-errors.ts` maps FastAPI Users' codes
+  and passes `REGISTER_INVALID_PASSWORD`'s own reason through).
+- **A 401 from a question route means the session ended**: forget the user and
+  sign in again, back to the same page. `/api/me` and `/api/auth/*` handle
+  their own 401s, or the check itself would loop.
+
+The browser must use the host `GITHUB_OAUTH_REDIRECT_URL` names (`localhost`,
+not `127.0.0.1`): the OAuth CSRF cookie belongs to the host the sign-in began
+on, and the callback is refused without it.
+
 ## 11. What Postgres gains — proposed, not built
 
 **Shown to the user before any migration is written.** Approved in outline

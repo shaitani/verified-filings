@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { App } from './app';
 
@@ -10,7 +11,7 @@ describe('App', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     http = TestBed.inject(HttpTestingController);
   });
@@ -38,5 +39,10 @@ describe('App', () => {
       request.flush({ status: 'database unreachable' }, { status: 503, statusText: 'Unavailable' }),
     );
     expect(text).toContain('Web Server: unreachable');
+  });
+
+  it('offers no sign-out to nobody', async () => {
+    const text = await rendered((request) => request.flush({ status: 'ok' }));
+    expect(text).not.toContain('Sign out');
   });
 });

@@ -668,7 +668,15 @@ Put the plan and these questions to the user before building:
   (pytest checks it is current), TypeScript types generated from it
   (`npm run api:types`, checked by `npm test`), and `ApiService` — one typed
   method per route, URLs only from the contract (DESIGN §9, `web/README.md`).
-  Next: slice 3, sign-in.
+- **Slice 3 done** (2026-09-28): sign-in in `web/src/app/auth/` — `AuthStore`
+  (ngrx/signals: who is signed in, one `/api/me` however many ask), login,
+  register-by-invite and GitHub-return pages, guards (`returnTo` only ever a
+  path on this site), and a 401 handler that sends an expired session back to
+  sign in. The guard test caught `inject()` after `await`, which would have
+  broken every redirect. **For GitHub to use the client page**, set
+  `GITHUB_OAUTH_REDIRECT_URL=http://localhost:4200/auth/github/callback` in
+  `.env` and add that URL to the GitHub OAuth App (`.env.example`). Next:
+  slice 4, asking a question.
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie

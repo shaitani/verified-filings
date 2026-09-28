@@ -1,0 +1,27 @@
+// Shared by the login, register and GitHub-return pages.
+.panel {
+  max-width: 420px;
+  margin: 48px auto;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.problem {
+  color: var(--mat-sys-error);
+  margin: 0 0 12px;
+}
+
+.or {
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.hint {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}

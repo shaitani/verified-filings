@@ -1,0 +1,19 @@
+<mat-card class="panel" appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Signing in with GitHub</mat-card-title>
+  </mat-card-header>
+
+  <mat-card-content>
+    @if (problem(); as sentence) {
+      <p class="problem" role="alert">{{ sentence }}</p>
+    } @else {
+      <p>One moment…</p>
+    }
+  </mat-card-content>
+
+  @if (problem()) {
+    <mat-card-actions>
+      <a mat-button routerLink="/login">Back to sign in</a>
+    </mat-card-actions>
+  }
+</mat-card>
