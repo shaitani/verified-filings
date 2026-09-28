@@ -1,0 +1,44 @@
+@if (reply().blocking; as blocking) {
+  <!-- A refusal that sank the whole question: shown first, and alone in what it says. -->
+  <p class="blocking" role="alert">
+    <mat-icon aria-hidden="true">block</mat-icon>
+    {{ blocking.reason }}
+  </p>
+}
+
+<ul class="parts">
+  @for (part of reply().parts; track part.part_id) {
+    <li [class]="part.outcome">
+      <span class="phrase">{{ part.text }}</span>
+
+      @switch (part.outcome) {
+        @case ('answered') {
+          <ul class="figures">
+            @for (row of rowsFor(part); track $index) {
+              <li>{{ row.company }} · {{ row.period_label }}: {{ row.display }}</li>
+            }
+          </ul>
+        }
+        @case ('refused') {
+          <span class="reason">{{ part.reason }}</span>
+        }
+        @case ('asked') {
+          @if (part.ask; as ask) {
+            <vf-ask-view
+              [ask]="ask"
+              [picked]="pickedFor(ask)"
+              [answerable]="answerable() && !busy()"
+              (picks)="pick(ask, $event)"
+            />
+          }
+        }
+      }
+    </li>
+  }
+</ul>
+
+@if (answerable() && asks().length) {
+  <button mat-flat-button type="button" [disabled]="!complete() || busy()" (click)="send()">
+    Continue
+  </button>
+}

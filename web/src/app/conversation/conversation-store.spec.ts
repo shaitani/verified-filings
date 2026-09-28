@@ -4,7 +4,14 @@ import { TestBed } from '@angular/core/testing';
 
 import type { JobEvent } from '../api/types';
 import { ConversationStore, MAX_DROPS, RETRY_MS } from './conversation-store';
-import { DONE_REPLY, FakeEventSource, conversation, fakeEventSource, round } from './testing';
+import {
+  DONE_REPLY,
+  FakeEventSource,
+  REPLIES,
+  conversation,
+  fakeEventSource,
+  round,
+} from './conversation.testing';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve));
 
@@ -82,6 +89,43 @@ describe('ConversationStore', () => {
     }
     FakeEventSource.last().drop();
     expect(store.problem()).toContain('Lost touch with the server');
+  });
+
+  it('sends picks, then follows the round they started', async () => {
+    await opened(round({ status: 'done', reply: REPLIES.clarification }));
+    const pick = { kind: 'option', ask_id: 'a1', option_id: 'o2' } as const;
+    const sent = store.answer([pick]);
+
+    const request = http.expectOne({ method: 'POST', url: '/api/conversations/c1/answers' });
+    expect(request.request.body).toEqual({ answers: [pick] });
+    request.flush({ conversation_id: 'c1', job_id: 'j2' });
+    await settle();
+    http
+      .expectOne('/api/conversations/c1')
+      .flush(
+        conversation(
+          round({ status: 'done', reply: REPLIES.clarification }),
+          round({ round: 2, job_id: 'j2', status: 'queued', answers: [{ ...pick, text: 'x' }] }),
+        ),
+      );
+    await sent;
+    expect(store.running()?.job_id).toBe('j2');
+    expect(FakeEventSource.last().url).toBe('/api/jobs/j2/events');
+    expect(store.answering()).toBe(false);
+  });
+
+  it("keeps the server's reason when an answer is refused", async () => {
+    await opened(round({ status: 'done', reply: REPLIES.clarification }));
+    const sent = store.answer([{ kind: 'option', ask_id: 'a1', option_id: 'o9' }]);
+    http
+      .expectOne('/api/conversations/c1/answers')
+      .flush({ detail: 'UNKNOWN_CHOICE' }, { status: 400, statusText: 'Bad Request' });
+    await settle();
+    http
+      .expectOne('/api/conversations/c1')
+      .flush(conversation(round({ status: 'done', reply: REPLIES.clarification })));
+    await sent;
+    expect(store.problem()).toBe('That choice is no longer on offer. Please reload the page.');
   });
 
   it('says so when the conversation is not the reader’s', async () => {

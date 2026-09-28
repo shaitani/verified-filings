@@ -2,3 +2,5 @@
 # what produced them (pytest checks openapi.json, `npm run api:check` the types).
 openapi.json
 src/app/api/openapi.d.ts
+# Written by `uv run python -m tests.web_replies`; pytest checks it is current.
+src/app/conversation/fixtures/replies.json

@@ -164,6 +164,20 @@ write — and binds it through the same per-company coverage check as any other
 `resolve_choices` accepts an `option_id` only from the options **this round**
 offered (`Pending.asks`) and raises `UnknownChoice` for anything else.
 
+**The client's side (step 4, slice 5, 2026-09-28)** — `ReplyView` and `AskView`
+in `web/src/app/conversation/`. A blocking refusal comes first, as an alert;
+then each part: answered, refused with its reason, or asked. An ask is a radio
+list of its options, an ambiguity's carrying the **"ambiguous"** tag, and the
+latest round's asks are answered together: **"Continue" waits for a pick on
+every one.** The server would take some and ask the rest again next round; the
+client does not let that happen by accident. An earlier round's asks stay on
+the page, closed, with the option that was picked — read from the next round's
+`answers`. A refused answer's reason (`UNKNOWN_CHOICE`, `ROUND_CONFLICT`, …) is
+shown in the reader's words. Tested against **real replies**: `tests/web_replies.py`
+runs the chain and the Presenter over the captured runs in `tests/fixtures/chain/`
+and writes `web/src/app/conversation/fixtures/replies.json`; a pytest keeps it
+current, the same way as `openapi.json`.
+
 ### Free-text answers — not now, and not boxed out
 
 **Decided: options only for now.** The case for free text is real: the reader

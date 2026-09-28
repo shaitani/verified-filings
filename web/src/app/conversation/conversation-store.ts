@@ -11,7 +11,7 @@ import {
 import { Subscription, firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../api/api.service';
-import type { ConversationView, JobStatus, StageEvent } from '../api/types';
+import type { AnswerIn, ConversationView, JobStatus, StageEvent } from '../api/types';
 import { JobEvents } from './job-events';
 
 const FINISHED: readonly JobStatus[] = ['done', 'failed'];
@@ -24,7 +24,28 @@ interface ConversationState {
   conversationId: string | null;
   conversation: ConversationView | null; // as GET /api/conversations/{id} last said
   stage: StageEvent | null; // the running round's latest stage, live
+  answering: boolean; // picks on their way to the server
   problem: string | null;
+}
+
+// Why an answer was refused (app/api/routes.py REFUSALS), in the reader's words.
+const ANSWER_REFUSED: Readonly<Record<string, string>> = {
+  UNKNOWN_CHOICE: 'That choice is no longer on offer. Please reload the page.',
+  ROUND_STILL_RUNNING: 'The last round is still running; its questions are not settled yet.',
+  NOTHING_TO_ANSWER: 'There is no question waiting for an answer here.',
+  ROUND_CONFLICT: 'Another answer to this conversation arrived first.',
+};
+
+/** Why picks could not be sent. */
+export function answerProblem(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const detail: unknown = error.error?.detail;
+    if (typeof detail === 'string' && detail in ANSWER_REFUSED) return ANSWER_REFUSED[detail];
+    if (error.status === 0 || error.status >= 500) {
+      return 'The server could not be reached. Please try again in a moment.';
+    }
+  }
+  return 'That answer could not be sent. Please try again.';
 }
 
 /**
@@ -37,6 +58,7 @@ export const ConversationStore = signalStore(
     conversationId: null,
     conversation: null,
     stage: null,
+    answering: false,
     problem: null,
   }),
   withComputed(({ conversation }) => ({
@@ -110,6 +132,21 @@ export const ConversationStore = signalStore(
         drops = 0;
         patchState(store, { conversationId, conversation: null, stage: null, problem: null });
         await reload();
+      },
+
+      /** Answer the last round's questions: the server starts the next round, which is followed. */
+      async answer(picks: readonly AnswerIn[]): Promise<void> {
+        const id = store.conversationId();
+        if (id === null || store.answering()) return;
+        patchState(store, { answering: true, problem: null });
+        let refused: string | null = null;
+        try {
+          await firstValueFrom(api.answer(id, picks));
+        } catch (error) {
+          refused = answerProblem(error);
+        }
+        await reload(); // the new round, or -- after a refusal -- the conversation as it now is
+        patchState(store, { answering: false, ...(refused ? { problem: refused } : {}) });
       },
       stop,
     };

@@ -1,0 +1,28 @@
+.question {
+  margin: 0 0 8px;
+}
+
+.tag {
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
+  border-radius: 8px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  cursor: help;
+}
+
+mat-radio-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  display: block;
+}
+
+.description {
+  display: block;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}

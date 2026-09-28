@@ -1,6 +1,19 @@
-// Shared by the conversation tests. Not imported by the app.
-import type { ConversationView, RoundView } from '../api/types';
+// Shared by the conversation tests; `.testing.ts` keeps it out of the app build.
+import type { ConversationView, Reply, RoundView } from '../api/types';
+import replies from './fixtures/replies.json';
 import { OPEN_EVENT_SOURCE } from './job-events';
+
+/**
+ * Real replies: the chain and the Presenter over captured runs, written by
+ * `uv run python -m tests.web_replies` (pytest keeps them current).
+ */
+export const REPLIES = {
+  answered: replies.q001.reply as Reply, // one figure
+  partial: replies.q052.reply as Reply, // five figures and a refused goodwill
+  clarification: replies.q046.reply as Reply, // "Which profit margin?"
+  ambiguity: replies.ambiguous.reply as Reply, // accounts payable, candidates offered
+  blocking: replies.q028.reply as Reply, // a period out of range sinks the question
+};
 
 /** Stands in for the browser's EventSource: the test sends frames and drops the line. */
 export class FakeEventSource {

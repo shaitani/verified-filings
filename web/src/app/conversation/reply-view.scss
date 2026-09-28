@@ -1,0 +1,36 @@
+.blocking {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--mat-sys-error);
+  margin: 0 0 12px;
+}
+
+.parts {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+
+  > li {
+    padding: 8px 0;
+  }
+}
+
+.phrase {
+  font: var(--mat-sys-title-small);
+  margin-right: 8px;
+}
+
+.refused .reason {
+  color: var(--mat-sys-error);
+}
+
+.figures {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.asked vf-ask-view {
+  display: block;
+  margin-top: 4px;
+}

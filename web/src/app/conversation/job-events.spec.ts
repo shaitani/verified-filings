@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { JobEvent } from '../api/types';
 import { JobEvents } from './job-events';
-import { FakeEventSource, fakeEventSource } from './testing';
+import { FakeEventSource, fakeEventSource } from './conversation.testing';
 
 describe('JobEvents', () => {
   let seen: JobEvent[];

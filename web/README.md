@@ -35,6 +35,12 @@ by hand. `src/app/api/types.ts` gives the generated shapes short names, and
 `apiPath()` accepts only routes the contract names, so a renamed route stops
 compiling here rather than failing in the browser.
 
+**Test replies are real.** `src/app/conversation/fixtures/replies.json` is
+written by `uv run python -m tests.web_replies` (from the repository root): the
+chain and the Presenter over captured runs, no model or database needed. A
+pytest fails while it is out of date. Test-only helpers end in `.testing.ts`,
+which `tsconfig.app.json` keeps out of the app build.
+
 **The TypeScript override.** `openapi-typescript` 7.13 declares TypeScript 5;
 Angular 22 is on TypeScript 6. `package.json`'s `overrides` lets the generator
 use the workspace's TypeScript 6 — checked 2026-09-28: its output is

@@ -4,7 +4,13 @@ import { TestBed } from '@angular/core/testing';
 
 import type { JobEvent } from '../api/types';
 import { ThreadPage } from './thread-page';
-import { DONE_REPLY, FakeEventSource, conversation, fakeEventSource, round } from './testing';
+import {
+  DONE_REPLY,
+  FakeEventSource,
+  conversation,
+  fakeEventSource,
+  round,
+} from './conversation.testing';
 
 describe('ThreadPage', () => {
   let http: HttpTestingController;
