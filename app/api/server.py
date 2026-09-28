@@ -3,7 +3,7 @@
     uv run uvicorn app.api.server:create_app --factory --reload
 
 One worker only: the job queue and its watchers live in the process (DESIGN §4).
-Routes so far: sign-in (slice 6). The question routes are slice 7.
+Routes: sign-in (``auth.py``) and the questions (``routes.py``).
 """
 
 # No `from __future__ import annotations`: FastAPI resolves a dependency's
@@ -25,6 +25,7 @@ from app.api.auth import (
     purge_expired_sessions,
 )
 from app.api.jobs import JobRunner
+from app.api.routes import build_router
 from app.config import settings
 from app.db.session import web_sessionmaker
 from app.db.web import User
@@ -79,6 +80,8 @@ def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> 
     # Deliberately not mounted: verification and forgot-password wait for an email
     # sender (DESIGN §10), and the library's /users/{id} admin routes -- administration
     # is the CLI's (app/api/admin.py), with the owner's credential.
+
+    app.include_router(build_router(auth))  # ask, answer, watch, read back, list, report
 
     @app.get("/api/me", response_model=UserRead, tags=["auth"])
     async def me(user: Annotated[User, Depends(auth.current_user)]) -> User:

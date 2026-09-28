@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.schemas import ConversationSummary, JobView, Reply
 from app.chain import Pending, resolve_choices
-from app.db.web import Conversation, Job
+from app.db.web import Conversation, Job, JobFeedback
 from app.schemas.job import FINISHED, JobStatus
 from app.schemas.query import ConceptRef, _Base
 
@@ -276,3 +276,14 @@ async def _update(session_factory: async_sessionmaker, job_id: UUID, **values) -
         await session.commit()
     if moved.rowcount == 0:
         raise NotFound(f"no unfinished job {job_id}")
+
+
+async def add_feedback(
+    session_factory: async_sessionmaker, user_id: UUID, job_id: UUID, note: str | None
+) -> None:
+    """Report a problem on one of this reader's jobs (DESIGN §8). Written, never read
+    back by the web role -- it makes the job a ``--flagged`` one for the owner's CLI."""
+    await job_view(session_factory, user_id, job_id)  # NotFound unless it is theirs
+    async with session_factory() as session:
+        session.add(JobFeedback(id=uuid.uuid4(), job_id=job_id, user_id=user_id, note=note))
+        await session.commit()

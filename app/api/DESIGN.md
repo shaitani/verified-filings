@@ -205,7 +205,23 @@ POST /api/conversations/{id}/answers       {answers[]}        → {job_id}
 GET  /api/jobs/{job_id}/events             text/event-stream
 GET  /api/jobs/{job_id}                    the Reply, once done (reconnects, reloads)
 GET  /api/conversations                    the signed-in user's history
+POST /api/jobs/{job_id}/feedback           {note}             "report a problem" (§8)
 ```
+
+**Built (slice 7, 2026-09-27)**, `app/api/routes.py`. Every route needs a
+signed-in reader and touches only their conversations; another reader's reads
+as **404, never 403**, so an id tells a guesser nothing. Refusals on the wire:
+an option never offered 400 `UNKNOWN_CHOICE`; answering a round still running,
+one that asked nothing, or losing a race for the round number 409
+`ROUND_STILL_RUNNING` / `NOTHING_TO_ANSWER` / `ROUND_CONFLICT`. The events route
+checks ownership **before** it opens the stream — once streaming starts, a 404
+can no longer be sent (a test fails without the check). A job is queued before
+its id is returned, so no stream can miss its start. CSRF: the cookie is
+`SameSite=Lax` and every write takes JSON, which a cross-site page can neither
+send with the cookie nor post without a CORS preflight this server never
+grants. Measured live over HTTP with the real models: register with a CLI
+invite, sign in, ask "Apple's accounts payable in 2024?", stream to an
+ambiguity, pick one, stream to $68.96B in 0.3 s, and see it in the history.
 
 Events: `queued` → `parsing` → `mapping` → `fetching` → `presenting` → `done`
 (carrying the `Reply`) or `failed`. `queued` is real, not decoration: model
