@@ -20,9 +20,12 @@ which is the point of putting the model call behind one function.
 
 from __future__ import annotations
 
+import time
+
 import httpx
 from ollama import AsyncClient
 
+from app import trace
 from app.config import settings
 from app.parser.wire import WIRE_SCHEMA
 
@@ -91,29 +94,38 @@ async def propose(prompt: str, *, model: str = PARSER_MODEL) -> str:
     full generation re-learning what the first one already showed.
     """
     client = AsyncClient(host=settings.embedding_url, timeout=REQUEST_TIMEOUT)
+    started, raw, error = time.monotonic(), None, None
     try:
-        response = await client.generate(
-            model=model,
-            prompt=prompt,
-            stream=False,
-            format=WIRE_SCHEMA,
-            options={
-                "temperature": TEMPERATURE,
-                "num_ctx": CONTEXT_TOKENS,
-                "num_predict": MAX_OUTPUT_TOKENS,
-            },
-        )
-    except httpx.TimeoutException as exc:
-        raise ProposalError(f"{model} did not reply within {REQUEST_TIMEOUT:.0f}s") from exc
+        try:
+            response = await client.generate(
+                model=model,
+                prompt=prompt,
+                stream=False,
+                format=WIRE_SCHEMA,
+                options={
+                    "temperature": TEMPERATURE,
+                    "num_ctx": CONTEXT_TOKENS,
+                    "num_predict": MAX_OUTPUT_TOKENS,
+                },
+            )
+        except httpx.TimeoutException as exc:
+            raise ProposalError(f"{model} did not reply within {REQUEST_TIMEOUT:.0f}s") from exc
+        raw = response.get("response")
 
-    if response.get("done_reason") == "length":
-        raise ProposalError(
-            f"{model} hit the {MAX_OUTPUT_TOKENS}-token ceiling without finishing "
-            f"the object. The reply is truncated, so there is nothing to judge; "
-            f"a question needing more than this is one the model has lost track of."
-        )
+        if response.get("done_reason") == "length":
+            raise ProposalError(
+                f"{model} hit the {MAX_OUTPUT_TOKENS}-token ceiling without finishing "
+                f"the object. The reply is truncated, so there is nothing to judge; "
+                f"a question needing more than this is one the model has lost track of."
+            )
 
-    reply = response.get("response") or ""
-    if not reply.strip():
-        raise ProposalError(f"{model} returned an empty response")
-    return reply
+        reply = raw or ""
+        if not reply.strip():
+            raise ProposalError(f"{model} returned an empty response")
+        return reply
+    except ProposalError as exc:
+        error = str(exc)
+        raise
+    finally:
+        # Every exit, including a truncated reply: that is the one worth reading.
+        trace.model_call("parse", model, prompt, raw, time.monotonic() - started, error)

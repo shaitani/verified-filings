@@ -303,19 +303,28 @@ grep.
 Prompts are stored whole, not rebuilt from the revision: a dirty tree cannot
 be rebuilt. Measured 2026-09-27, the parser prompt is ~20 KB and the SQL prompt
 ~6 KB, so a job with a retry is ~30–50 KB before Postgres compresses it.
+Measured on a real job the same day: q040 (an average over 14 filers, so a
+large plan and result) came to ~53 KB — parser prompt 20 KB, SQL prompt 3.6 KB.
 
 ### How it is collected — without changing the chain
 
-A small collector, `app/trace.py`, holds the current job's trace in a context
-variable. The three places that already see the raw material append to it
-**when one is set**: `propose()` in the parser and `generate()` in retrieval
-(prompt and reply), and `execute()`'s `_log` (statement, verdict, error). When
+**Built 2026-09-27.** A small collector, `app/trace.py`, holds the current
+job's trace in a context variable, so concurrent jobs cannot see each other's
+(tested). The places that already see the raw material append to it **when one
+is set**: `propose()` in the parser and `_ask()` in the generator (prompt and
+raw reply on every exit — a truncated or empty reply is the one worth reading),
+`execute()`'s `_log` (statement, verdict, error), and `answer()` for a
+statement `validate()` **rejected**, which never reached the executor's log
+and so was written down nowhere before. When
 none is set — the evals, the CLI, every test — they do exactly what they do
 today. No signature changes, and `data/retrieval_log.jsonl` keeps being
 written, gaining the job id when there is one.
 
-[B] opens the trace when a job starts and writes the row once, in a `finally`,
-whether the job answered, refused or crashed. A job cut off by a restart has
+[B] opens the trace when a job starts (`trace.collecting(job_id)` around
+`chain.ask`) and writes the row once, in a `finally`, whether the job
+answered, refused or crashed: `app/api/trace.write_trace` — one INSERT, never
+read back. `code_version` is `CODE_VERSION` when set (the container has no
+`.git`), else the git revision with `+dirty`. A job cut off by a restart has
 no trace; its `web.job` row is marked `failed` at startup (§4).
 
 ### Who can read it

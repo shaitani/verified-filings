@@ -25,10 +25,12 @@ Decide it deliberately; nothing here retries today.
 from __future__ import annotations
 
 import re
+import time
 
 import httpx
 from ollama import AsyncClient
 
+from app import trace
 from app.config import settings
 from app.retrieval.prompt import (
     UnsupportedPlan,
@@ -170,32 +172,41 @@ async def generate(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> str:
 async def _ask(plan: QueryPlan, model: str) -> str:
     """The model's SELECT for ``plan``, extracted from its reply."""
     client = AsyncClient(host=settings.embedding_url, timeout=REQUEST_TIMEOUT)
+    prompt = build_prompt(plan)
+    started, raw, error = time.monotonic(), None, None
     try:
-        response = await client.generate(
-            model=model,
-            prompt=build_prompt(plan),
-            stream=False,
-            options={
-                "temperature": TEMPERATURE,
-                "num_ctx": CONTEXT_TOKENS,
-                "num_predict": MAX_OUTPUT_TOKENS,
-            },
-        )
-    except httpx.TimeoutException as exc:
-        raise GenerationError(
-            f"{model} did not finish the SQL within {REQUEST_TIMEOUT:.0f}s"
-        ) from exc
+        try:
+            response = await client.generate(
+                model=model,
+                prompt=prompt,
+                stream=False,
+                options={
+                    "temperature": TEMPERATURE,
+                    "num_ctx": CONTEXT_TOKENS,
+                    "num_predict": MAX_OUTPUT_TOKENS,
+                },
+            )
+        except httpx.TimeoutException as exc:
+            raise GenerationError(
+                f"{model} did not finish the SQL within {REQUEST_TIMEOUT:.0f}s"
+            ) from exc
+        raw = response.get("response")
 
-    if response.get("done_reason") == "length":
-        raise GenerationError(
-            f"{model} hit the {MAX_OUTPUT_TOKENS}-token ceiling without finishing the "
-            f"statement, so what it wrote is truncated and will not be run"
-        )
+        if response.get("done_reason") == "length":
+            raise GenerationError(
+                f"{model} hit the {MAX_OUTPUT_TOKENS}-token ceiling without finishing the "
+                f"statement, so what it wrote is truncated and will not be run"
+            )
 
-    reply = response.get("response") or ""
-    if not reply.strip():
-        raise GenerationError(f"{model} returned an empty response")
-    return extract_sql(reply)
+        reply = raw or ""
+        if not reply.strip():
+            raise GenerationError(f"{model} returned an empty response")
+        return extract_sql(reply)
+    except GenerationError as exc:
+        error = str(exc)
+        raise
+    finally:
+        trace.model_call("generate", model, prompt, raw, time.monotonic() - started, error)
 
 
 def _begins_at_select(select: str) -> str:

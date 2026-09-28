@@ -27,6 +27,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from app import trace
 from app.db.session import RetrievalSessionLocal
 from app.retrieval.prompt import needs_the_model, over_time_bases, plan_cells
 from app.schemas.query import Note, QueryPlan
@@ -62,13 +63,16 @@ def _log(
     the one most worth reading, and it used to be the only one never written
     down.
     """
+    verdict_json = verdict.model_dump(mode="json") if verdict else None
+    trace.statement(sql, verdict=verdict_json, error=error)  # the job's trace, when there is one
     try:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         entry = {
             "at": datetime.now(UTC).isoformat(),
+            "job_id": trace.job_id(),  # joins this line to web.job_trace; None outside a job
             "question": plan.question,
             "sql": sql,
-            "verdict": verdict.model_dump(mode="json") if verdict else None,
+            "verdict": verdict_json,
             "error": error,
         }
         with LOG_PATH.open("a", encoding="utf-8", newline="\n") as handle:

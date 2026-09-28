@@ -33,6 +33,7 @@ output directly is the mistake this package exists to prevent.
 See ``app/retrieval/DESIGN.md``.
 """
 
+from app import trace
 from app.retrieval.executor import execute
 from app.retrieval.generator import GENERATION_MODEL, GenerationError, generate
 from app.retrieval.prompt import UnsupportedPlan, build_prompt, plan_cells
@@ -73,4 +74,12 @@ async def answer(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> ResultSet
     check ``is_answerable`` -- because that is a judgement about the *data*,
     not about whether the machinery worked.
     """
-    return await execute(validate(await generate(plan, model=model)), plan)
+    sql = await generate(plan, model=model)
+    try:
+        checked = validate(sql)
+    except InvalidSQL as exc:
+        # Refused before it ran, so the executor's log never sees it -- and a
+        # refused statement is the one a debugging session wants first.
+        trace.statement(sql, error=f"{type(exc).__name__}: {exc}")
+        raise
+    return await execute(checked, plan)
