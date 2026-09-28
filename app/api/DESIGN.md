@@ -435,6 +435,28 @@ names taken from FastAPI Users' long operation ids) and `@hey-api/openapi-ts`
 (not yet 1.0). The event stream is hand-written whatever the generator, since
 OpenAPI cannot describe a stream as a sequence of typed messages.
 
+**Built (step 4, slice 2, 2026-09-28).** `uv run python -m app.api.openapi`
+writes the contract to `web/openapi.json`, committed, and a pytest fails while
+that file differs from what the server would publish. `npm run api:types`
+generates `web/src/app/api/openapi.d.ts` from it, committed too, and
+`npm run api:check` — part of `npm test` — fails while the two disagree. So a
+model changed on the server fails pytest, then the client's tests, then its
+build at every line that no longer fits. Two generator settings matter:
+`--immutable` (every server type read-only: the client renders, it does not
+edit) and `--default-non-nullable false` (a request field with a default stays
+optional — without it `UserCreate` demanded `is_superuser` from the browser).
+The GitHub routes are always in the contract: the writer builds the app with a
+describe-only config rather than this machine's `.env`.
+
+**The generator runs on TypeScript 6 by override, and that is re-checked.**
+`openapi-typescript` 7.13 declares TypeScript 5; Angular 22 needs 6.0. The
+user's call (2026-09-28): keep it, via `package.json` `overrides`, but
+**every time the types are regenerated or either package is upgraded,
+regenerate under TypeScript 5.9.3 and require a byte-identical file** — the
+two commands are in `web/README.md`. Alternatives considered and set aside:
+running the generator in its own package on TypeScript 5, or switching to
+`@hey-api/openapi-ts` (declares 6, not yet 1.0).
+
 **Two things `/openapi.json` needed first** (2026-09-28, `tests/test_openapi.py`):
 
 - **The stream's events were unpublished.** FastAPI cannot see a streamed

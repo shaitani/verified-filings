@@ -6,7 +6,7 @@
     @if (health.isLoading()) {
       checking…
     } @else if (health.hasValue()) {
-      {{ health.value().status }}
+      {{ health.value()['status'] }}
     } @else {
       unreachable
     }

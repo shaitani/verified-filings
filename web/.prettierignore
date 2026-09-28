@@ -1,0 +1,4 @@
+# Generated: prettier would reformat them, and then they would no longer match
+# what produced them (pytest checks openapi.json, `npm run api:check` the types).
+openapi.json
+src/app/api/openapi.d.ts

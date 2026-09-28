@@ -663,8 +663,12 @@ Put the plan and these questions to the user before building:
 - **Slice 1 done** (2026-09-28): `web/` — Angular 22 (standalone, zoneless,
   strict), Material, ESLint, Vitest, `@ngrx/signals`, ApexCharts pinned; the
   dev proxy `web/proxy.dev.json`; a first page showing the Web Server's health
-  through it. Commands in [`web/README.md`](web/README.md). Next: slice 2,
-  generated types and the API service.
+  through it. Commands in [`web/README.md`](web/README.md).
+- **Slice 2 done** (2026-09-28): the contract committed as `web/openapi.json`
+  (pytest checks it is current), TypeScript types generated from it
+  (`npm run api:types`, checked by `npm test`), and `ApiService` — one typed
+  method per route, URLs only from the contract (DESIGN §9, `web/README.md`).
+  Next: slice 3, sign-in.
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie

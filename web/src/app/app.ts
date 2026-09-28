@@ -3,6 +3,9 @@ import { Component } from '@angular/core';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterOutlet } from '@angular/router';
 
+import { apiPath } from './api/api.service';
+import type { Health } from './api/types';
+
 @Component({
   imports: [MatToolbarModule, RouterOutlet],
   selector: 'vf-root',
@@ -10,7 +13,6 @@ import { RouterOutlet } from '@angular/router';
   templateUrl: './app.html',
 })
 export class App {
-  // Same-origin /api, forwarded by proxy.dev.json in development. The inline type
-  // gives way to the generated one in slice 2.
-  protected readonly health = httpResource<{ status: string }>(() => '/api/health');
+  // Same-origin /api, forwarded by proxy.dev.json in development.
+  protected readonly health = httpResource<Health>(() => apiPath('/api/health'));
 }

@@ -1,0 +1,2212 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Verified Filings",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Auth:Cookie.Login",
+        "operationId": "auth_cookie_login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_auth_cookie_login_api_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                },
+                "examples": {
+                  "LOGIN_BAD_CREDENTIALS": {
+                    "summary": "Bad credentials or the user is inactive.",
+                    "value": {
+                      "detail": "LOGIN_BAD_CREDENTIALS"
+                    }
+                  },
+                  "LOGIN_USER_NOT_VERIFIED": {
+                    "summary": "The user is not verified.",
+                    "value": {
+                      "detail": "LOGIN_USER_NOT_VERIFIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Auth:Cookie.Logout",
+        "operationId": "auth_cookie_logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing token or inactive user."
+          },
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register:Register",
+        "operationId": "register_register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                },
+                "examples": {
+                  "REGISTER_USER_ALREADY_EXISTS": {
+                    "summary": "A user with this email already exists.",
+                    "value": {
+                      "detail": "REGISTER_USER_ALREADY_EXISTS"
+                    }
+                  },
+                  "REGISTER_INVALID_PASSWORD": {
+                    "summary": "Password validation failed.",
+                    "value": {
+                      "detail": {
+                        "code": "REGISTER_INVALID_PASSWORD",
+                        "reason": "Password should beat least 3 characters"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/github/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Oauth:Github.Cookie.Authorize",
+        "operationId": "oauth_github_cookie_authorize_api_auth_github_authorize_get",
+        "parameters": [
+          {
+            "name": "scopes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Scopes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuth2AuthorizeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/github/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Oauth:Github.Cookie.Callback",
+        "description": "The response varies based on the authentication backend used.",
+        "operationId": "oauth_github_cookie_callback_api_auth_github_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "code_verifier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code Verifier"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "INVALID_STATE_TOKEN": {
+                    "summary": "Invalid state token."
+                  },
+                  "LOGIN_BAD_CREDENTIALS": {
+                    "summary": "User is inactive.",
+                    "value": {
+                      "detail": "LOGIN_BAD_CREDENTIALS"
+                    }
+                  },
+                  "ACCESS_TOKEN_DECODE_ERROR": {
+                    "summary": "Access token is error.",
+                    "value": {
+                      "detail": "ACCESS_TOKEN_DECODE_ERROR"
+                    }
+                  },
+                  "ACCESS_TOKEN_ALREADY_EXPIRED": {
+                    "summary": "Access token is already expired.",
+                    "value": {
+                      "detail": "ACCESS_TOKEN_ALREADY_EXPIRED"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "History",
+        "description": "The reader's past questions, newest first.",
+        "operationId": "history_api_conversations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationSummary"
+                  },
+                  "type": "array",
+                  "title": "Response History Api Conversations Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Ask",
+        "description": "A new question: its conversation and first round, queued.",
+        "operationId": "ask_api_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewConversationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/conversations/{conversation_id}/answers": {
+      "post": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Answer",
+        "description": "Answers to the last round's questions: the next round, queued.",
+        "operationId": "answer_api_conversations__conversation_id__answers_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswersIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Conversation",
+        "description": "A past conversation reopened: every round, in order, as the thread shows it.",
+        "operationId": "conversation_api_conversations__conversation_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Job",
+        "description": "One round as it stands -- for a reload or a dropped stream.",
+        "operationId": "job_api_jobs__job_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/events": {
+      "get": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Events",
+        "description": "Server-sent events: each stage, then ``done`` (with the reply) or ``failed``.",
+        "operationId": "events_api_jobs__job_id__events_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEvent"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/feedback": {
+      "post": {
+        "tags": [
+          "questions"
+        ],
+        "summary": "Feedback",
+        "description": "Report a problem: the job becomes a ``--flagged`` one in the owner's trace CLI.",
+        "operationId": "feedback_api_jobs__job_id__feedback_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Health",
+        "description": "Up, and able to reach the database as vf_web_role. No sign-in: it says\nnothing a reader could use, and Docker's health check calls it.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerRow": {
+        "properties": {
+          "element_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Element Id"
+          },
+          "metric": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Metric"
+          },
+          "company_cik": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Cik"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Company"
+          },
+          "companies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Companies"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Fiscal Year"
+          },
+          "fiscal_period": {
+            "type": "string",
+            "enum": [
+              "FY",
+              "Q1",
+              "Q2",
+              "Q3",
+              "Q4"
+            ],
+            "title": "Fiscal Period"
+          },
+          "period_label": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Period Label"
+          },
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "annual",
+              "quarterly"
+            ],
+            "title": "Granularity"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Period End"
+          },
+          "is_instant": {
+            "type": "boolean",
+            "title": "Is Instant"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "display": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Display"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "unit_kind": {
+            "type": "string",
+            "enum": [
+              "money",
+              "ratio",
+              "multiple",
+              "per_share",
+              "count"
+            ],
+            "title": "Unit Kind"
+          },
+          "derivation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derivation"
+          },
+          "compared_with": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compared With"
+          },
+          "citations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Citations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "element_id",
+          "metric",
+          "company_cik",
+          "company",
+          "companies",
+          "fiscal_year",
+          "fiscal_period",
+          "period_label",
+          "granularity",
+          "period_start",
+          "period_end",
+          "is_instant",
+          "value",
+          "display",
+          "unit",
+          "unit_kind",
+          "derivation",
+          "compared_with",
+          "citations"
+        ],
+        "title": "AnswerRow",
+        "description": "One figure: a row of the table, and a point or bar in any view."
+      },
+      "AnswerView": {
+        "properties": {
+          "shape": {
+            "type": "string",
+            "enum": [
+              "scalar",
+              "series",
+              "table",
+              "ranking"
+            ],
+            "title": "Shape"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerRow"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rows"
+          },
+          "views": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/StatView"
+                },
+                {
+                  "$ref": "#/components/schemas/LineView"
+                },
+                {
+                  "$ref": "#/components/schemas/BarView"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "bar": "#/components/schemas/BarView",
+                  "line": "#/components/schemas/LineView",
+                  "stat": "#/components/schemas/StatView"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Views"
+          },
+          "citations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CitationView"
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Citations"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array",
+            "title": "Notes"
+          },
+          "conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Conditions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shape",
+          "rows",
+          "views",
+          "citations",
+          "notes",
+          "conditions"
+        ],
+        "title": "AnswerView",
+        "description": "Everything the Web Client draws for the answered parts of a reply."
+      },
+      "AnswersIn": {
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/OptionAnswerIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Answers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answers"
+        ],
+        "title": "AnswersIn"
+      },
+      "Ask": {
+        "properties": {
+          "ask_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Ask Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "clarification",
+              "ambiguity"
+            ],
+            "title": "Kind"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ask_id",
+          "kind",
+          "question",
+          "options"
+        ],
+        "title": "Ask",
+        "description": "A question back to the asker (§3)."
+      },
+      "BarView": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "bar",
+            "title": "Kind",
+            "default": "bar"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "unit_kind": {
+            "type": "string",
+            "enum": [
+              "money",
+              "ratio",
+              "multiple",
+              "per_share",
+              "count"
+            ],
+            "title": "Unit Kind"
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "descending",
+              "ascending"
+            ],
+            "title": "Order"
+          },
+          "rows": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "title",
+          "unit_kind",
+          "order",
+          "rows"
+        ],
+        "title": "BarView"
+      },
+      "Body_auth_cookie_login_api_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_auth_cookie_login_api_auth_login_post"
+      },
+      "CitationView": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Key"
+          },
+          "concepts": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptRef"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Concepts"
+          },
+          "expression": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Expression"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "resolved_by": {
+            "type": "string",
+            "enum": [
+              "alias",
+              "embedding",
+              "pinned"
+            ],
+            "title": "Resolved By"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "concepts",
+          "expression",
+          "unit",
+          "resolved_by",
+          "notes"
+        ],
+        "title": "CitationView",
+        "description": "What one binding contributed, for the \"answered as\" panel (§6)."
+      },
+      "ConceptRef": {
+        "properties": {
+          "concept_id": {
+            "type": "integer",
+            "title": "Concept Id"
+          },
+          "taxonomy": {
+            "type": "string",
+            "enum": [
+              "dei",
+              "us-gaap",
+              "srt"
+            ],
+            "title": "Taxonomy"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "concept_id",
+          "taxonomy",
+          "name",
+          "label"
+        ],
+        "title": "ConceptRef",
+        "description": "One resolved ``Concept``, denormalized enough that the SQL step never\nhas to look it up to know what it is."
+      },
+      "ConversationSummary": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "rounds": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Rounds"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "mapping",
+              "fetching",
+              "presenting",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "question",
+          "created_at",
+          "rounds",
+          "status"
+        ],
+        "title": "ConversationSummary",
+        "description": "One line of \"my past questions\"."
+      },
+      "ConversationView": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/RoundView"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rounds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "question",
+          "created_at",
+          "rounds"
+        ],
+        "title": "ConversationView",
+        "description": "``GET /api/conversations/{id}`` -- a past conversation, reopened as its thread."
+      },
+      "ErrorModel": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorModel"
+      },
+      "FeedbackIn": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FeedbackIn",
+        "description": "Report a problem on one job (§8)."
+      },
+      "GivenAnswer": {
+        "properties": {
+          "ask_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Ask Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "option",
+            "title": "Kind",
+            "default": "option"
+          },
+          "option_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Id"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ask_id",
+          "kind",
+          "option_id",
+          "text"
+        ],
+        "title": "GivenAnswer",
+        "description": "One answer a round was started with -- as ``Job.answers`` stores it, and as\nthe thread shows it. Its text is always kept, so free text needs no change (§3)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobCreated": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "job_id"
+        ],
+        "title": "JobCreated"
+      },
+      "JobView": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "mapping",
+              "fetching",
+              "presenting",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reply"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "conversation_id",
+          "status",
+          "reply"
+        ],
+        "title": "JobView",
+        "description": "``GET /api/jobs/{id}`` -- for a reload or a dropped stream."
+      },
+      "LineView": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "line",
+            "title": "Kind",
+            "default": "line"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "unit_kind": {
+            "type": "string",
+            "enum": [
+              "money",
+              "ratio",
+              "multiple",
+              "per_share",
+              "count"
+            ],
+            "title": "Unit Kind"
+          },
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "annual",
+              "quarterly"
+            ],
+            "title": "Granularity"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/Series"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Series"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "title",
+          "unit_kind",
+          "granularity",
+          "series"
+        ],
+        "title": "LineView"
+      },
+      "NewConversationIn": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "NewConversationIn"
+      },
+      "Note": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "concept_switch",
+              "unverified_switch",
+              "partial_coverage",
+              "period_misalignment",
+              "mixed_granularity",
+              "narrower_than_asked",
+              "incomplete_result"
+            ],
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "Note",
+        "description": "A caveat that must survive all the way to the reader.\n\nDistinct from ``Unresolved``: the binding *works*, but presenting its\nnumbers without this sentence would mislead. The user-facing model is\nexpected to pass these on rather than summarize them away."
+      },
+      "OAuth2AuthorizeResponse": {
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "title": "Authorization Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authorization_url"
+        ],
+        "title": "OAuth2AuthorizeResponse"
+      },
+      "Option": {
+        "properties": {
+          "option_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Option Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "option_id",
+          "label",
+          "description"
+        ],
+        "title": "Option"
+      },
+      "OptionAnswerIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "option",
+            "title": "Kind",
+            "default": "option"
+          },
+          "ask_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Ask Id"
+          },
+          "option_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Option Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ask_id",
+          "option_id"
+        ],
+        "title": "OptionAnswerIn"
+      },
+      "Part": {
+        "properties": {
+          "part_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Part Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "asked",
+              "refused"
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "ask": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ask"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "part_id",
+          "text",
+          "outcome",
+          "reason",
+          "ask"
+        ],
+        "title": "Part",
+        "description": "One thing the question asked for, and what became of it (§1)."
+      },
+      "Refusal": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "parse",
+              "map",
+              "execute"
+            ],
+            "title": "Stage"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage",
+          "reason"
+        ],
+        "title": "Refusal",
+        "description": "A refusal that sinks the whole question: no part is answered."
+      },
+      "Reply": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "blocking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Refusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part"
+            },
+            "type": "array",
+            "title": "Parts"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnswerView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "partial",
+              "asked",
+              "refused"
+            ],
+            "title": "Status",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "job_id",
+          "blocking",
+          "parts",
+          "answer",
+          "status"
+        ],
+        "title": "Reply",
+        "description": "Everything one job sends back. Parts may mix answered, asked and refused."
+      },
+      "RoundView": {
+        "properties": {
+          "round": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Round"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "mapping",
+              "fetching",
+              "presenting",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/GivenAnswer"
+            },
+            "type": "array",
+            "title": "Answers"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reply"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "round",
+          "job_id",
+          "status",
+          "answers",
+          "reply",
+          "message"
+        ],
+        "title": "RoundView",
+        "description": "One round of a reopened conversation."
+      },
+      "Series": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "rows": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "rows"
+        ],
+        "title": "Series",
+        "description": "One line of a line view."
+      },
+      "StatView": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "stat",
+            "title": "Kind",
+            "default": "stat"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "title",
+          "row"
+        ],
+        "title": "StatView"
+      },
+      "UserCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "default": true
+          },
+          "is_superuser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Superuser",
+            "default": false
+          },
+          "is_verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Verified",
+            "default": false
+          },
+          "invite_code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 12,
+            "title": "Invite Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "invite_code"
+        ],
+        "title": "UserCreate"
+      },
+      "UserRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "is_superuser": {
+            "type": "boolean",
+            "title": "Is Superuser",
+            "default": false
+          },
+          "is_verified": {
+            "type": "boolean",
+            "title": "Is Verified",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "UserRead"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "DoneEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "done",
+            "default": "done",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/Reply"
+          }
+        },
+        "required": [
+          "kind",
+          "reply"
+        ],
+        "title": "DoneEvent",
+        "type": "object"
+      },
+      "FailedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "failed",
+            "default": "failed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "FailedEvent",
+        "type": "object"
+      },
+      "StageEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "stage",
+            "default": "stage",
+            "title": "Kind",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "queued",
+              "parsing",
+              "mapping",
+              "fetching",
+              "presenting"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "seconds": {
+            "minimum": 0,
+            "title": "Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "stage",
+          "seconds"
+        ],
+        "title": "StageEvent",
+        "type": "object"
+      },
+      "JobEvent": {
+        "discriminator": {
+          "mapping": {
+            "done": "#/components/schemas/DoneEvent",
+            "failed": "#/components/schemas/FailedEvent",
+            "stage": "#/components/schemas/StageEvent"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StageEvent"
+          },
+          {
+            "$ref": "#/components/schemas/DoneEvent"
+          },
+          {
+            "$ref": "#/components/schemas/FailedEvent"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "APIKeyCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "vf_session"
+      }
+    }
+  }
+}
