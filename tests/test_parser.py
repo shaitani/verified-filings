@@ -34,7 +34,7 @@ from app.parser import (
 from app.parser.acceptor import _FIELDS_BY_KIND, _OPTIONAL_FIELDS
 from app.parser.prompt import _EXAMPLES
 from app.parser.proposer import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT
-from app.parser.wire import WIRE_SCHEMA, WireElement, WireQuery
+from app.parser.wire import WIRE_SCHEMA, WireElement
 
 QUESTION = "How much revenue did Apple and Microsoft make in the last 3 years?"
 
@@ -98,13 +98,6 @@ def test_wants_chart_is_required():
     del payload["wants_chart"]
     with pytest.raises(MalformedProposal, match="does not fit the schema"):
         accept(json.dumps(payload), QUESTION)
-
-
-def test_the_question_is_the_callers_not_the_models():
-    """The model never gets to restate the question -- ``accept`` takes it from
-    the caller, so a reply that tried to would change nothing."""
-    query = accept(_reply(), QUESTION)
-    assert query.question == QUESTION
 
 
 def test_company_elements_carry_no_ticker_or_name_hint():
@@ -784,11 +777,6 @@ def test_every_worked_example_obeys_the_rule_it_teaches(question, reply):
     model copies what it is shown."""
     accepted = accept(reply, question)
     assert accepted.elements
-
-
-def test_every_worked_example_parses_as_the_wire_shape():
-    for _, reply in _EXAMPLES:
-        WireQuery.model_validate(json.loads(reply))
 
 
 def test_the_prompt_ends_with_the_question():

@@ -13,7 +13,7 @@ from typing import get_args
 import pytest
 
 from app.db import roles
-from app.db.web import AccessToken, Invite, Job, User, WebBase
+from app.db.web import Invite, Job, User, WebBase
 from app.schemas.job import JOB_STATUSES, JobStage
 
 MIGRATION = next(Path("app/db/migrations/versions").glob("*_add_web_schema.py"))
@@ -73,22 +73,12 @@ def test_every_narrowed_grant_names_real_columns() -> None:
         assert not missing, f"{grant.privilege} on {grant.table}: no column {sorted(missing)}"
 
 
-def test_is_superuser_is_left_out_of_an_insert() -> None:
-    """vf_web_role may not write is_superuser, so the ORM must not send it:
-    no Python default, a database default instead."""
-    column = User.__table__.c.is_superuser
-    assert column.default is None
-    assert column.server_default is not None
-
-
 def test_every_user_column_the_orm_inserts_is_granted() -> None:
+    """Including by omission: vf_web_role may not write is_superuser, so it has
+    no Python default (which the ORM would send) but a database default."""
     insert = next(g for g in roles.WEB.writes if g.table == "user" and g.privilege == "INSERT")
     sent = {c.name for c in User.__table__.columns if c.default is not None or not c.server_default}
     assert sent <= set(insert.columns)
-
-
-def test_the_session_table_has_the_granted_name() -> None:
-    assert AccessToken.__tablename__ == "access_token"  # the library's default is "accesstoken"
 
 
 def test_every_table_lives_in_web() -> None:

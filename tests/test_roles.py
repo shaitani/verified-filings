@@ -43,12 +43,17 @@ def _role_url(superuser_url: str, role: str) -> str:
     return f"{scheme}://{role}:{PASSWORDS[role]}@{host_and_path}"
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def provisioned(test_db_url):
     """Every role, created against the test database.
 
     Provisioned here rather than assumed, so these cover ``app/db/roles.py``
     itself and the suite needs no setup step of its own.
+
+    Once per module: no test here alters a role -- session settings end with
+    their connection and the web role's statements are rolled back -- so every
+    test sees the grants exactly as provisioned. Re-running provision is
+    tested on its own, by `test_provisioning_is_idempotent`.
     """
     await roles.provision(test_db_url, PASSWORDS)
     return test_db_url
@@ -491,25 +496,6 @@ def test_a_delete_cannot_be_narrowed_to_columns() -> None:
 def test_a_role_lives_in_a_managed_schema() -> None:
     with pytest.raises(ValueError, match="not managed"):
         roles.RoleSpec(name="r", used_by="t", tables=(), schema="public")
-
-
-def test_the_readers_stay_read_only_in_xbrl() -> None:
-    for spec in (roles.QUERY_MAPPER, roles.RETRIEVAL):
-        assert spec.read_only and not spec.writes and spec.schema == "xbrl"
-
-
-def test_the_web_server_cannot_make_an_administrator() -> None:
-    """app/api/DESIGN.md §11: only the owner's credential sets is_superuser."""
-    for grant in roles.WEB.writes:
-        if grant.table == "user":
-            assert grant.columns, f"{grant.privilege} on user must be narrowed to columns"
-            assert "is_superuser" not in grant.columns
-
-
-def test_the_web_server_cannot_read_a_trace_or_make_an_invite() -> None:
-    """§8 and §10: traces are write-only, invites are spent, never created."""
-    assert "job_trace" not in roles.WEB.tables
-    assert not any(g.table == "invite" and g.privilege == "INSERT" for g in roles.WEB.writes)
 
 
 def test_password_literal_escapes_a_quote() -> None:

@@ -84,18 +84,6 @@ async def test_get_submissions_reports_mixed_cache_hits_and_requests(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_get_submissions_single_identifier_still_works(tmp_path: Path):
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"cik": "0000320193"})
-
-    client = SECClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    async with client:
-        result = await get_submissions(["AAPL"], client=client)
-
-    assert result == {"AAPL": {"cik": "0000320193"}}
-
-
-@pytest.mark.asyncio
 async def test_get_submissions_duplicate_identifier_collapses_to_one_fetch(tmp_path: Path):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"cik": "0000320193"})

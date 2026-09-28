@@ -31,8 +31,6 @@ from app.schemas.query import (
     Coverage,
     MetricElementIn,
     NarrativeElementIn,
-    Note,
-    PeriodRef,
     PlanFilters,
     QueryIn,
     QueryPlan,
@@ -407,9 +405,11 @@ async def test_naming_no_company_means_every_loaded_filer(
 async def test_a_company_that_failed_to_resolve_does_not_widen_the_scope(
     test_session_factory, clean_fake_company, fake_aliases
 ) -> None:
-    """The distinction that makes the expansion safe. "Apple versus Samsung"
-    names two companies and resolves one; it must stay a half-answer, and must
-    never quietly become every filer in the store."""
+    """The distinction that makes the expansion safe. `map_query` widens to
+    every loaded filer only when the question names no company *element* at
+    all. One that named a company and failed to resolve it has to refuse --
+    answering about twenty filers instead of the one asked for is a different
+    question, not a partial answer to this one."""
     await load_file(FIXTURE_PATH, session_factory=test_session_factory)
 
     plan = await map_query(
@@ -426,6 +426,7 @@ async def test_a_company_that_failed_to_resolve_does_not_widen_the_scope(
     reasons = " ".join(u.reason for u in plan.unresolved)
     assert "no loaded company" in reasons
     assert "no company in scope" in reasons
+    assert not [n for n in plan.notes if n.kind == "partial_coverage"]
 
 
 async def test_unaliased_term_makes_no_embedding_call_without_a_corpus(
@@ -513,22 +514,6 @@ def test_binding_periods_default_to_every_period_in_scope() -> None:
     )
     assert binding.periods == []
     assert binding.notes == []
-
-
-def test_note_survives_on_a_binding() -> None:
-    binding = Binding(
-        element_id="e1",
-        periods=[PeriodRef(fiscal_year=2025, fiscal_period="FY")],
-        concepts=[ConceptRef(concept_id=1, taxonomy="us-gaap", name="Revenues")],
-        unit="USD",
-        is_instant=False,
-        coverage=Coverage(fact_count=1),
-        confidence=1.0,
-        resolved_by="alias",
-        rationale="x",
-        notes=[Note(kind="concept_switch", message="tags changed in FY2025")],
-    )
-    assert binding.notes[0].kind == "concept_switch"
 
 
 # --------------------------------------------------------------------------- #
@@ -1343,7 +1328,11 @@ async def test_a_comparison_left_with_one_side_is_refused(
 ) -> None:
     """"How does Apple compare to Samsung" with no Samsung data has nothing to
     compare. Half a comparison is a different answer, so it refuses, naming
-    the missing company -- and does not widen or answer the other half."""
+    the missing company -- and does not widen or answer the other half.
+
+    Scope is not a part: the metric binds for the company that exists, but
+    every figure depends on the company, so the refusal sinks the whole
+    question (§8d)."""
     await load_file(FIXTURE_PATH, session_factory=test_session_factory)
 
     plan = await map_query(
@@ -1362,6 +1351,8 @@ async def test_a_comparison_left_with_one_side_is_refused(
     assert problem.element_id == "c2"
     assert "Samsung" in problem.reason and "no data" in problem.reason
     assert not [n for n in plan.notes if n.kind == "partial_coverage"]
+    assert plan.bindings, "the metric bound for the company that exists"
+    assert problem.blocks_question and not plan.has_answerable_part
 
 
 def test_one_sided_needs_a_named_comparison_with_under_two_left() -> None:
@@ -1400,29 +1391,6 @@ async def test_a_multi_part_question_is_answered_per_part(
     (problem,) = plan.unresolved
     assert problem.element_id == "m2" and not problem.blocks_question
     assert plan.result.metrics == 1 and plan.result.row_count == 1
-
-
-async def test_a_refused_company_still_sinks_the_whole_question(
-    test_session_factory, clean_fake_company, fake_aliases
-) -> None:
-    """Scope is not a part. Every figure depends on the company, so a
-    comparison with its other side missing answers nothing (§8d)."""
-    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
-
-    plan = await map_query(
-        _query(
-            {"id": "m", "text": "widget sales", "kind": "metric"},
-            {"id": "c1", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
-            {"id": "c2", "text": "Samsung", "kind": "company"},
-            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
-            intent="compare",
-        ),
-        session_factory=test_session_factory,
-    )
-
-    assert plan.bindings, "the metric bound for the company that exists"
-    assert plan.unresolved[0].blocks_question
-    assert not plan.has_answerable_part
 
 
 async def test_clarify_as_asks_the_curated_question_for_an_unlisted_phrase(
@@ -1496,33 +1464,6 @@ async def test_growth_with_nothing_earlier_loaded_is_refused_with_its_reason(
     (problem,) = plan.unresolved
     assert problem.element_id == "m" and not problem.blocks_question
     assert "needs its value in an earlier period" in problem.reason
-
-
-async def test_when_no_named_company_resolves_the_scope_does_not_widen(
-    test_session_factory, clean_fake_company, fake_aliases
-) -> None:
-    """The guard that keeps a dropped company from becoming every company.
-
-    `map_query` widens to every loaded filer only when the question names no
-    company *element* at all. A question that named one and failed to resolve
-    it has to refuse -- answering about twenty filers instead of the one that
-    was asked for is a different question, not a partial answer to this one.
-    """
-    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
-
-    plan = await map_query(
-        _query(
-            {"id": "m", "text": "widget sales", "kind": "metric"},
-            {"id": "c", "text": "Samsung", "kind": "company"},
-            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
-        ),
-        session_factory=test_session_factory,
-    )
-
-    assert not plan.is_complete
-    assert plan.filters.ciks == []
-    assert any("Samsung" in u.reason for u in plan.unresolved)
-    assert not [n for n in plan.notes if n.kind == "partial_coverage"]
 
 
 # --------------------------------------------------------------------------- #

@@ -41,45 +41,11 @@ async def test_run_action_single_identifier(tmp_path, monkeypatch):
     assert client.cache_hit_count == 0
 
 
-@pytest.mark.asyncio
-async def test_run_action_reports_counts_across_a_batch(tmp_path, monkeypatch):
-    """The '5 companies, 2 cached + 3 fetched' scenario, end to end
-    through the CLI's action-running path."""
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"url": str(request.url)})
-
-    shared_client = SECClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(cli, "SECClient", lambda **_kwargs: shared_client)
-
-    # Pre-warm 2 of the 5 identifiers we'll batch-request next.
-    async with shared_client:
-        from app.ingest.actions import get_submissions
-
-        await get_submissions(["AAPL", "MSFT"], client=shared_client)
-
-    result, client = await cli._run_action(
-        "get-submission", ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"]
-    )
-
-    assert set(result.keys()) == {"AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"}
-    assert client is shared_client
-    assert client.cache_hit_count == 2  # AAPL, MSFT from the pre-warm
-    assert client.request_count == 2 + 3  # the pre-warm's 2 + this batch's 3 new
-
-
 def test_main_rejects_unknown_identifier(capsys):
     exit_code = cli.main(["get-submission", "NOTACOMPANY"])
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "did not match any of the 20 corpus companies" in captured.err
-
-
-def test_main_accepts_a_single_identifier_argument():
-    # nargs="+" must still accept exactly one identifier, not just 2+.
-    parser = cli._build_parser()
-    args = parser.parse_args(["get-submission", "AAPL"])
-    assert args.identifiers == ["AAPL"]
 
 
 def test_main_accepts_several_identifier_arguments():

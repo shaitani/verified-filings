@@ -33,11 +33,10 @@ def _fixture(name: str):
     )
 
 
-def _stages(monkeypatch, name: str, *, round2: str | None = None, parse=None):
-    """The chain's three outside stages, from a capture. With ``round2``, a
-    mapping given pins answers from that capture instead -- the second round."""
+def _stages(monkeypatch, name: str, *, parse=None):
+    """The chain's three outside stages, from a capture. (A second round of
+    picks is exercised end to end in test_routes.py.)"""
     query, plan, result = _fixture(name)
-    later = _fixture(round2) if round2 else None
     parsed: list[str] = []
 
     async def fake_parse(question, *, answers=None):
@@ -47,10 +46,10 @@ def _stages(monkeypatch, name: str, *, round2: str | None = None, parse=None):
         return query
 
     async def fake_map(q, *, pins=None):
-        return later[1] if (later and pins) else plan
+        return plan
 
     async def fake_answer(p):
-        return later[2] if (later and p is later[1]) else result
+        return result
 
     monkeypatch.setattr(chain, "parse_question", fake_parse)
     monkeypatch.setattr(chain, "map_query", fake_map)
@@ -161,28 +160,6 @@ async def test_a_broken_runner_fails_the_job_and_still_writes_its_trace(
     kept = (await show_job(owner, job))["trace"]
     assert kept["errors"][-1]["stage"] == "runner"
     assert "the database went away" in kept["errors"][-1]["message"]
-
-
-async def test_a_second_round_of_picks_alone_runs_without_parsing(running, monkeypatch) -> None:
-    """Round 1 asks which "accounts payable"; round 2 picks one. The runner must
-    replay the round's inputs and re-map the stored parse (chain.ask_again)."""
-    runner, web, owner = running
-    parsed = _stages(monkeypatch, "ambiguous", round2="ambiguous_round2")
-    user = await _user(owner)
-    conversation, first = await storage.create_conversation(web, user, "Apple's accounts payable?")
-    await runner.submit(first)
-    asked = (await _collect(runner, first))[-1]
-    assert asked.reply.status == "asked" and asked.reply.parts[0].ask.kind == "ambiguity"
-
-    parsed.clear()
-    second = await storage.create_round(web, user, conversation, [("a1", "o1")])
-    await runner.submit(second)
-    events = await _collect(runner, second)
-
-    assert parsed == []  # a round of picks alone does not parse
-    assert "parsing" not in [e.stage for e in events if isinstance(e, StageEvent)]
-    reply = events[-1].reply
-    assert reply.status == "answered" and reply.answer.rows[0].display == "$68.96B"
 
 
 # --------------------------------------------------------------------------- #

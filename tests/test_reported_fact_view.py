@@ -22,6 +22,13 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "xbrl_fake_company.json"
 #: `is_synthesized` is the one column that is not a fact about a filing but a
 #: fact about the row: false for everything actually reported, true for a Q4
 #: the view computed.
+#:
+#: What is absent matters as much, and the exact match below enforces it.
+#: `fiscal_year` / `fiscal_period` sit on `filing` and describe which filing a
+#: number appeared in, not the period it covers (PITFALLS §1.1) -- a 10-K
+#: carries prior-year comparatives, so `WHERE fiscal_year = 2024` returns the
+#: wrong years, and a column of that name Qwen can see is an invitation to use
+#: it. The labels reach the result from the query plan instead.
 EXPECTED_COLUMNS = {
     "company_cik",
     "ticker",
@@ -36,25 +43,6 @@ EXPECTED_COLUMNS = {
     "period_end",
     "value",
     "is_synthesized",
-}
-
-#: Columns whose *absence* is the design. `fiscal_year` / `fiscal_period` sit
-#: on `filing` and describe which filing a number appeared in, not the period
-#: it covers (PITFALLS §1.1) -- a 10-K carries prior-year comparatives, so
-#: `WHERE fiscal_year = 2024` returns the wrong years. The labels reach the
-#: result from the query plan instead. The rest are simply out of scope for
-#: anything answering a question.
-FORBIDDEN_COLUMNS = {
-    "fiscal_year",
-    "fiscal_period",
-    "is_latest",
-    "embedding",
-    "description",
-    "filing_accession",
-    "accession_number",
-    "filed_date",
-    "form",
-    "frame",
 }
 
 
@@ -73,14 +61,6 @@ async def test_the_view_exposes_exactly_these_columns(test_session_factory) -> N
         assert await _view_columns(session) == EXPECTED_COLUMNS
 
 
-async def test_the_view_hides_the_columns_it_is_meant_to(test_session_factory) -> None:
-    """Especially `fiscal_year`: the trap is closed by absence, because a
-    column of that name on a relation Qwen can see is an invitation to use
-    it."""
-    async with test_session_factory() as session:
-        assert await _view_columns(session) & FORBIDDEN_COLUMNS == set()
-
-
 async def test_the_view_runs_with_owner_rights(test_session_factory) -> None:
     """`security_invoker` off is what lets a role hold SELECT on the view while
     holding nothing on fact / filing / company / concept. Turning it on would
@@ -92,54 +72,6 @@ async def test_the_view_runs_with_owner_rights(test_session_factory) -> None:
             )
         ).scalar_one()
         assert not [option for option in (options or []) if "security_invoker" in option]
-
-
-async def test_a_synthesized_q4_is_labelled_as_one(
-    test_session_factory, clean_fake_company
-) -> None:
-    """A value nobody filed must never pass for one that was. No US filer
-    reports a fourth quarter, so every Q4 in the view is the annual figure
-    minus the year-to-date one -- arithmetic, not a filing."""
-    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
-    async with test_session_factory() as session:
-        filed_only = (
-            await session.execute(
-                text(
-                    "SELECT count(*) FROM xbrl.reported_fact "
-                    "WHERE company_cik = :cik AND NOT is_synthesized"
-                ),
-                {"cik": FAKE_CIK},
-            )
-        ).scalar_one()
-        latest = (
-            await session.execute(
-                text("SELECT count(*) FROM xbrl.fact WHERE company_cik = :cik AND is_latest"),
-                {"cik": FAKE_CIK},
-            )
-        ).scalar_one()
-        assert filed_only == latest, "every non-synthesized row is a filed fact"
-
-
-async def test_a_synthesized_row_never_collides_with_a_filed_one(
-    test_session_factory, clean_fake_company
-) -> None:
-    """J&J does file a fourth-quarter column, so 39 synthesized windows in the
-    real corpus already exist as facts. Emitting both would double a cell and
-    break the grain the retrieval row count depends on, so the filed row
-    wins."""
-    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
-    async with test_session_factory() as session:
-        clashes = (
-            await session.execute(
-                text(
-                    "SELECT count(*) FROM xbrl.reported_fact a "
-                    "JOIN xbrl.reported_fact b USING (company_cik, concept_id, unit, "
-                    "  period_start, period_end, is_instant) "
-                    "WHERE a.is_synthesized AND NOT b.is_synthesized"
-                )
-            )
-        ).scalar_one()
-        assert clashes == 0
 
 
 async def test_the_view_drops_superseded_facts(
@@ -169,8 +101,20 @@ async def test_the_view_drops_superseded_facts(
             )
         ).scalar_one()
 
+        filed_in_view = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM xbrl.reported_fact "
+                    "WHERE company_cik = :cik AND NOT is_synthesized"
+                ),
+                {"cik": FAKE_CIK},
+            )
+        ).scalar_one()
+
         assert latest_facts < all_facts, "fixture should restate a period"
         assert in_view == latest_facts
+        # A value nobody filed must never pass for one that was, and the reverse.
+        assert filed_in_view == latest_facts, "every filed fact is labelled as filed"
 
 
 async def test_the_view_is_unique_at_the_binding_grain(

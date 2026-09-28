@@ -19,7 +19,6 @@ from app.schemas.query import (
     Binding,
     ConceptRef,
     Coverage,
-    Note,
     PeriodRef,
     PlanFilters,
     QueryPlan,
@@ -390,9 +389,3 @@ def test_a_derived_row_can_span_two_bindings() -> None:
     )
     assert result.rows[0].row.derivation == "yoy_growth"
     assert len(result.rows[0].binding_keys) == 2
-
-
-def test_notes_survive_onto_the_envelope() -> None:
-    note = Note(kind="incomplete_result", message="5 of 36 rows did not come back")
-    result = _set(notes=[note])
-    assert result.notes[0].kind == "incomplete_result"

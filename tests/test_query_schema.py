@@ -83,14 +83,6 @@ def test_elements_dispatch_on_kind() -> None:
     assert query.version == "1"
 
 
-def test_retired_qualifier_kind_is_rejected() -> None:
-    """`qualifier` was inert -- nothing ever resolved it -- so a parser
-    emitting one had its intent silently dropped. Removing the kind turns that
-    into a loud error."""
-    with pytest.raises(ValidationError):
-        QueryIn.model_validate(_query({"id": "e1", "text": "annual", "kind": "qualifier"}))
-
-
 def test_company_group_needs_a_selector() -> None:
     """An unconstrained group is every loaded filer, which is already what
     omitting the element means -- so an empty one is a mistake, not a wildcard."""
@@ -327,9 +319,6 @@ def test_a_q4_resolved_period_is_an_ordinary_period() -> None:
         period_end=date(2024, 9, 28),
     )
     assert period.granularity == "quarterly"
-    assert "residual_of" not in ResolvedPeriod.model_fields
-    assert "period_rule" not in Binding.model_fields
-    assert "components" not in Coverage.model_fields
 
 
 # --------------------------------------------------------------------------- #

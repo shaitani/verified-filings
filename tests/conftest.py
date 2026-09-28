@@ -55,10 +55,11 @@ class _TestDBSettings(BaseSettings):
     database_url_test: str
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_db_url() -> str:
     """The test database URL as a superuser. Tests that provision roles or
-    open their own engine need the string, not a session factory."""
+    open their own engine need the string, not a session factory. Only reads
+    .env, so one per session serves module-scoped fixtures too."""
     return _TestDBSettings().database_url_test
 
 

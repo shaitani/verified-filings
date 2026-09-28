@@ -160,29 +160,6 @@ async def test_a_question_over_the_parser_s_limit_is_refused(server) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_a_curated_question_is_answered_in_the_next_round(server) -> None:
-    signed_in, _, _ = server
-    http = await signed_in("a")
-    conversation, _, frames = await _ask(http, "Apple's profit margin?")
-    (part,) = frames[-1][1]["reply"]["parts"]
-    ask = part["ask"]
-    assert part["outcome"] == "asked" and ask["kind"] == "clarification"
-    gross = next(o for o in ask["options"] if o["label"] == "Gross margin")
-
-    answered = await http.post(
-        f"/api/conversations/{conversation}/answers",
-        json={
-            "answers": [
-                {"kind": "option", "ask_id": ask["ask_id"], "option_id": gross["option_id"]}
-            ]
-        },
-    )
-    assert answered.status_code == 201
-    stream = await http.get(f"/api/jobs/{answered.json()['job_id']}/events")
-    reply = _frames(stream.text)[-1][1]["reply"]
-    assert reply["status"] == "answered" and reply["answer"]["rows"][0]["display"] == "46.9%"
-
-
 async def test_an_ambiguity_is_answered_by_picking_a_candidate(server) -> None:
     signed_in, _, _ = server
     http = await signed_in("a")
@@ -253,17 +230,24 @@ async def test_a_reader_s_history_is_theirs_newest_first(server) -> None:
     assert [c["status"] for c in listed] == ["done", "done"]
 
 
-async def test_a_past_conversation_reopens_as_its_thread(server) -> None:
+async def test_a_curated_question_is_answered_and_the_thread_reopens(server) -> None:
+    """Round 1 asks which profit margin; round 2 answers it; the conversation
+    then reads back as both rounds, the pick in words."""
     signed_in, _, _ = server
     http = await signed_in("a")
     conversation, first_job, frames = await _ask(http, "Apple's profit margin?")
-    ask = frames[-1][1]["reply"]["parts"][0]["ask"]
+    (part,) = frames[-1][1]["reply"]["parts"]
+    ask = part["ask"]
+    assert part["outcome"] == "asked" and ask["kind"] == "clarification"
     gross = next(o for o in ask["options"] if o["label"] == "Gross margin")
     pick = {"kind": "option", "ask_id": ask["ask_id"], "option_id": gross["option_id"]}
     path = f"/api/conversations/{conversation}"
     answered = await http.post(f"{path}/answers", json={"answers": [pick]})
+    assert answered.status_code == 201
     second_job = answered.json()["job_id"]
-    await http.get(f"/api/jobs/{second_job}/events")  # let it finish
+    stream = await http.get(f"/api/jobs/{second_job}/events")  # let it finish
+    reply = _frames(stream.text)[-1][1]["reply"]
+    assert reply["status"] == "answered" and reply["answer"]["rows"][0]["display"] == "46.9%"
 
     thread = (await http.get(path)).json()
     assert thread["question"] == "Apple's profit margin?"

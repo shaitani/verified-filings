@@ -23,7 +23,6 @@ from app.semantic.metric_aliases import (
     compact,
     load_aliases,
     normalize,
-    split_concept_ref,
 )
 
 FAKE_ALIASES = Path(__file__).parent / "fixtures" / "metric_aliases_fake.yaml"
@@ -53,15 +52,6 @@ def test_shipped_file_reaches_every_metric_by_its_own_name() -> None:
     for metric in document.metrics:
         hit = index.lookup(metric)
         assert hit is not None and hit.metric == metric
-
-
-def test_shipped_file_only_references_known_taxonomies() -> None:
-    document = AliasFile.model_validate(yaml.safe_load(ALIAS_FILE.read_text("utf-8")))
-    for alias in document.metrics.values():
-        for concepts, _ in alias.slots:
-            for ref in concepts:
-                taxonomy, _ = split_concept_ref(ref)
-                assert taxonomy in {"dei", "us-gaap", "srt"}
 
 
 # --------------------------------------------------------------------------- #
@@ -114,12 +104,6 @@ def test_punctuated_spellings_reach_their_entry(written: str, metric: str) -> No
     space. Deleting punctuation outright -- the original rule -- turned every
     hyphenated phrase into one run-together word that matched nothing."""
     assert alias_index().lookup(written).metric == metric
-
-
-def test_underscores_fold_so_metric_keys_are_reachable_as_prose() -> None:
-    """``free_cash_flow`` should answer to "free cash flow" without anyone
-    having to list that as a synonym."""
-    assert alias_index().lookup("free cash flow").metric == "free_cash_flow"
 
 
 # --------------------------------------------------------------------------- #

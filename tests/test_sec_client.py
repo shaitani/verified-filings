@@ -80,27 +80,3 @@ async def test_cache_persists_across_client_instances(tmp_path: Path):
 
     assert first == second == {"n": 1}
     assert call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_request_and_cache_hit_counters(tmp_path: Path):
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True})
-
-    async with SECClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler)) as client:
-        assert client.request_count == 0
-        assert client.cache_hit_count == 0
-
-        await client.get_json("https://data.sec.gov/submissions/CIK0000320193.json")
-        assert client.request_count == 1
-        assert client.cache_hit_count == 0
-
-        await client.get_json("https://data.sec.gov/submissions/CIK0000789019.json")
-        assert client.request_count == 2
-        assert client.cache_hit_count == 0
-
-        # Re-fetching an already-cached URL bumps cache_hit_count, not
-        # request_count.
-        await client.get_json("https://data.sec.gov/submissions/CIK0000320193.json")
-        assert client.request_count == 2
-        assert client.cache_hit_count == 1

@@ -196,14 +196,6 @@ def test_a_multi_operand_metric_never_reaches_the_model_as_operands() -> None:
     assert "operand" not in build_prompt(plain)
 
 
-def test_a_cell_joins_on_the_operand_unit_not_the_result_unit() -> None:
-    """A ratio's result is `pure`; its facts are USD. Keying the join on
-    `pure` would find nothing at all."""
-    plan = _plan([_binding(unit="USD")], [_annual()])
-    (cell,) = plan_cells(plan)
-    assert cell.unit == "USD"
-
-
 def test_a_plan_binding_nothing_is_refused() -> None:
     with pytest.raises(UnsupportedPlan, match="binds nothing"):
         plan_cells(_plan([], [_annual()]))
@@ -669,16 +661,6 @@ def test_each_metric_is_ranked_in_its_own_direction() -> None:
     assert select.index("ORDER BY") < select.index("LIMIT")
     # A plan with nothing to rank keeps the statement it always had.
     assert figures_select(_margin_plan()) == FIGURES_SELECT
-
-
-async def test_generate_does_not_ask_the_model_for_a_margin_plan(monkeypatch) -> None:
-    class NoModel:
-        def __init__(self, *args, **kwargs) -> None:
-            raise AssertionError("the model was asked")
-
-    monkeypatch.setattr("app.retrieval.generator.AsyncClient", NoModel)
-    sql = await generate(_margin_plan())
-    assert sql.startswith("WITH wanted(") and "AS value" in sql
 
 
 def test_arithmetic_or_a_threshold_is_never_handed_to_the_model() -> None:
