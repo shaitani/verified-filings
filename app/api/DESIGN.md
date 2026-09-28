@@ -675,7 +675,7 @@ step 5).
 
 *Decided:* the Web Server runs in its own container in `docker-compose.yml`.
 
-**Built (slice 8, 2026-09-27)** — `Dockerfile`, `.dockerignore`, the `api`
+**Built (slice 8, 2026-09-27)** — `api.Dockerfile`, `api.Dockerfile.dockerignore`, the `api`
 service:
 
 - **`api`** — Python 3.13-slim with `uv`, a frozen install from `uv.lock`,
@@ -693,7 +693,8 @@ service:
 - **`DATABASE_HOST=db:5432`** points every database URL at the compose
   service while keeping its login (`app/config.py`), so `.env` stays written
   for Python on the host and no password is written twice.
-- **Nothing secret in the image** — `.dockerignore` keeps `.env`, `data/`,
+- **Nothing secret in the image** — `api.Dockerfile.dockerignore` (Docker pairs
+  it with the Dockerfile by name) keeps `.env`, `data/`,
   `.venv` and `.git` out (checked in the built image). `CODE_VERSION` is a
   build argument, the git revision, since there is no `.git` inside to ask.
   `./data` is mounted, so `retrieval_log.jsonl` survives the container.

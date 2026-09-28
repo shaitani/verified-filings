@@ -1,3 +1,6 @@
+# What api.Dockerfile's build never sees. Docker pairs an ignore file with a
+# Dockerfile by name (<dockerfile>.dockerignore); it cannot be pointed at.
+#
 # Never in the image: secrets, data, local environments, history.
 .env
 .env.*

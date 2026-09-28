@@ -103,7 +103,7 @@ services:
       retries: 60
       start_period: 10s
 
-  # The Web Server ([B], app/api/). Built from ./Dockerfile; one worker, because
+  # The Web Server ([B], app/api/). Built from ./api.Dockerfile; one worker, because
   # its job queue lives in the process (app/api/DESIGN.md §4).
   #
   # Credentials come from .env by name, below -- never the whole file. The owner
@@ -119,7 +119,8 @@ services:
   api:
     profiles: ["web"]
     build:
-      context: .
+      context: .                  # the repository root: what the build can see
+      dockerfile: api.Dockerfile  # named, not the default "Dockerfile"
       args:
         CODE_VERSION: ${CODE_VERSION:-unknown}
     depends_on:
