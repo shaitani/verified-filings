@@ -23,5 +23,20 @@ class Settings(BaseSettings):
     #: after the `web` migration: its grants name those tables.
     database_url_web: str | None = None
 
+    #: Sign-in (app/api/DESIGN.md §10). The three secrets sign tokens -- reset,
+    #: verification, the GitHub sign-in's state -- and the server will not start
+    #: without them. GitHub is optional: without both values it is not offered.
+    auth_reset_secret: str | None = None
+    auth_verify_secret: str | None = None
+    auth_oauth_state_secret: str | None = None
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: str | None = None
+    #: Where GitHub sends the browser back. One of the app's registered callbacks.
+    github_oauth_redirect_url: str = "http://localhost:8000/api/auth/github/callback"
+    #: How long a sign-in lasts, from signing in (DESIGN §12a). Shorten before deploying.
+    auth_session_days: int = 30
+    #: Secure cookies: sent over https only -- browsers treat localhost as secure.
+    auth_cookie_secure: bool = True
+
 
 settings = Settings()

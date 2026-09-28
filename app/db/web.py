@@ -31,7 +31,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.db.models import NAMING_CONVENTION
 from app.schemas.job import JOB_STATUSES
@@ -75,6 +75,9 @@ class User(SQLAlchemyBaseUserTableUUID, WebBase):
         Boolean, server_default=text("false"), nullable=False
     )
     created_at: Mapped[datetime] = _now()
+
+    # The library's GitHub sign-in reads this; loaded with the user, no schema change.
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship("OAuthAccount", lazy="joined")
 
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, WebBase):

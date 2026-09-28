@@ -180,6 +180,30 @@ DATABASE_URL_WEB=postgresql+asyncpg://vf_web_role:<password>@localhost:5432/veri
 `DATABASE_URL_WEB` is optional until the Web Server runs, and only after the
 `web` migration: `app/db/roles.py` skips a role with no URL.
 
+The Web Server also needs three signing secrets, and optionally GitHub —
+`.env.example` lists them, with the command that generates the secrets. It
+refuses to start without `DATABASE_URL_WEB` (or with it pointing at any login
+but `vf_web_role`), without the secrets, or with a secret under 32
+characters.
+
+Running it, and letting yourself in — sign-up is by invitation only:
+
+```bash
+uv run uvicorn app.api.server:create_app --factory --host 127.0.0.1 --port 8000 --reload
+```
+
+```bash
+uv run python -m app.api.admin invite --email you@example.com
+```
+
+The invite command prints a code once. Register with it at
+`http://127.0.0.1:8000/docs` (`POST /api/auth/register`), then, if you want
+to be the administrator:
+
+```bash
+uv run python -m app.api.admin make-admin you@example.com
+```
+
 The role passwords are yours to choose — **`app/db/roles.py` reads them
 back out of these URLs** and provisions exactly those, rather than taking a
 separate variable, so the two cannot drift. A password provisioned that nothing

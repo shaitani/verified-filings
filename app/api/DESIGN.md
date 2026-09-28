@@ -487,6 +487,46 @@ reset from the CLI. The invitation code is what stands in for proof of the
 address. The hooks the library calls to send mail (`on_after_request_verify`,
 `on_after_forgot_password`) are where a sender plugs in later.
 
+### Built (slice 6, 2026-09-27)
+
+`app/api/auth.py`, `server.py`, `admin.py`; proved against the test database
+and live on `.env`.
+
+- **Invitations are claimed with one atomic `UPDATE ... RETURNING`** on both
+  registration and a new GitHub account, so two sign-ups racing for one
+  code make one account (tested); a claim is released if the account then
+  fails to be made — a short password, an address already registered. A
+  missing, wrong, spent, expired or other-address code all read the same,
+  `INVITE_REQUIRED`, telling a guesser nothing. Codes are hashed with
+  SHA-256, not a password hash: they are random, not chosen, and the lookup
+  is one comparison. Case, dashes and spaces are forgiven.
+- **Found in the library: `/authorize` passes any `scopes` the caller sends
+  on to GitHub**, so `?scopes=repo` would have asked for write access to a
+  person's repositories. `NarrowGitHub` asks for `read:user` and `user:email`
+  whatever is sent (tested, and checked live).
+- **The GitHub callback forces `associate_by_email` and
+  `is_verified_by_default` off** inside the user manager, whatever the router
+  is configured with. A GitHub email matching an existing account is refused
+  rather than joined to it (tested).
+- **Registration ignores `is_superuser` and `is_verified`** in the request
+  (tested); the database would refuse the first anyway (§11).
+- **Passwords need 12 characters.** Signing secrets need 32, checked at
+  startup (RFC 7518 §3.2), as are all three being present.
+- **Sessions**: an httpOnly `SameSite=Lax` cookie, `vf_session`, for 30 days,
+  backed by a `web.access_token` row that sign-out deletes (tested: an old
+  cookie replayed afterwards gets 401). Expired rows are purged at startup
+  and every six hours — the library never removes them.
+- **Mounted**: login, logout, register, GitHub authorize and callback,
+  `GET /api/me`. **Not**: verification, forgot/reset password (no sender),
+  and the library's `/users/{id}` admin routes — administration is the
+  owner's CLI (`python -m app.api.admin invite | make-admin | reset-password`).
+  A reset password is generated and printed once, never typed.
+- **For step 4:** GitHub's callback currently returns to the API itself,
+  which sets the cookie and shows an empty page. With a browser client the
+  redirect should land on a client page that calls the API's callback — a
+  change of `GITHUB_OAUTH_REDIRECT_URL` and one added callback URL on the
+  GitHub app, not of code.
+
 ## 11. What Postgres gains — proposed, not built
 
 **Shown to the user before any migration is written.** Approved in outline

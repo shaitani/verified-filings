@@ -123,6 +123,12 @@ async def web_factory(test_db_url):
     async def clean() -> None:
         async with owner_engine.begin() as connection:
             await connection.execute(text("DELETE FROM web.\"user\" WHERE email LIKE 'zz-%'"))
+            await connection.execute(
+                text(
+                    "DELETE FROM web.invite "
+                    "WHERE email LIKE 'zz-%' OR github_account_id LIKE 'zz-%'"
+                )
+            )
 
     await clean()
     try:
