@@ -235,6 +235,20 @@ asked nothing (`NothingToAnswer`), and for a pick it never offered
 round number get one round and a `Conflict`. A job moves only while
 unfinished: `done` and `failed` are final.
 
+**The queue built (slice 5)**, `app/api/jobs.py`. `JobRunner`: one worker, so one
+job at a time (a test fails the moment two overlap), in the order submitted.
+Each job rebuilds its round (`storage.round_inputs`), runs `chain.ask` or
+`chain.ask_again` inside `trace.collecting`, saves and publishes every stage,
+and ends `done` with its reply and pending questions — or `failed` with the bug
+sentence if the machinery itself broke. Its trace is written in a `finally`,
+so the failed job is never the one without a record. A late watcher is sent
+the events it missed, then live ones; a finished job's stream is its end, read
+from the database, so a reload always gets the answer; a job unfinished yet
+unknown to this process is orphaned and failed rather than waited on forever.
+`event_stream()` yields the text/event-stream frames the route will send.
+Measured with the real models and data: a first round that asks, then a round
+of one pick answered in under half a second with no model call ($68.96B).
+
 **A known property, not a bug.** Ollama's prompt cache changes replies
 (HANDOFF §6), so with several askers an answer can depend on what the previous
 one asked. Unloading between jobs would remove it at a cost in latency.

@@ -60,6 +60,7 @@ class RoundInputs:
     """What running one round needs; ``chain.ask`` / ``chain.ask_again`` take it from here."""
 
     question: str
+    conversation_id: UUID
     round: int
     pending: Pending | None = None  # the previous round's questions; None for round 1
     choices: list[tuple[str, str]] = field(default_factory=list)  # this round's picks
@@ -146,7 +147,9 @@ async def round_inputs(session_factory: async_sessionmaker, job_id: UUID) -> Rou
                 )
             ).all()
         )
-    inputs = RoundInputs(question=conversation.question, round=job.round)
+    inputs = RoundInputs(
+        question=conversation.question, conversation_id=conversation.id, round=job.round
+    )
     for earlier, later in zip(rounds, rounds[1:], strict=False):
         pending = Pending.model_validate(earlier.asks)
         choices = [(a["ask_id"], a["option_id"]) for a in later.answers or []]
