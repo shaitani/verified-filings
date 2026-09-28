@@ -20,6 +20,7 @@ from app.api import storage
 from app.api.auth import Auth
 from app.api.jobs import event_stream
 from app.api.schemas import (
+    JOB_EVENT_REF,
     AnswersIn,
     ConversationSummary,
     FeedbackIn,
@@ -88,7 +89,11 @@ def build_router(auth: Auth) -> APIRouter:
     @router.get(
         "/jobs/{job_id}/events",
         response_class=StreamingResponse,
-        responses={200: {"content": {"text/event-stream": {}}}},
+        # Each frame is "event: <kind>" then "data: <one JobEvent as JSON>"; the
+        # schema is published by server._publish_stream_events.
+        responses={
+            200: {"content": {"text/event-stream": {"schema": {"$ref": JOB_EVENT_REF}}}}
+        },
     )
     async def events(job_id: uuid.UUID, request: Request, reader: Reader) -> StreamingResponse:
         """Server-sent events: each stage, then ``done`` (with the reply) or ``failed``."""

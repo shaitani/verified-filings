@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response, status
+from pydantic import TypeAdapter
 from sqlalchemy import text
 
 from app.api.auth import (
@@ -27,6 +28,7 @@ from app.api.auth import (
 )
 from app.api.jobs import JobRunner
 from app.api.routes import build_router
+from app.api.schemas import JOB_EVENT_REF, JobEvent
 from app.config import settings
 from app.db.session import web_sessionmaker
 from app.db.web import User
@@ -101,7 +103,42 @@ def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> 
     async def me(user: Annotated[User, Depends(auth.current_user)]) -> User:
         return user
 
+    _publish_stream_events(app)
     return app
+
+
+def _publish_stream_events(app: FastAPI) -> None:
+    """Add ``JobEvent`` and its members to /openapi.json, so the client's generated
+    types cover the event stream too (DESIGN §9)."""
+    generate = app.openapi
+
+    def openapi() -> dict:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        spec = generate()  # FastAPI caches this dict; adding to it updates the cache
+        events = TypeAdapter(JobEvent).json_schema(
+            mode="serialization", ref_template="#/components/schemas/{model}"
+        )
+        components = spec.setdefault("components", {}).setdefault("schemas", {})
+        for name, schema in events.pop("$defs").items():
+            # A model FastAPI already published (Reply, AnswerView...) must mean the
+            # same both ways, or the client would get two meanings for one name.
+            # FastAPI drops "default" from response fields (always sent), so ignore it.
+            known = components.setdefault(name, schema)
+            if _without_defaults(known) != _without_defaults(schema):
+                raise RuntimeError(f"openapi: {name} differs between FastAPI and JobEvent")
+        components[JOB_EVENT_REF.rsplit("/", 1)[-1]] = events
+        return spec
+
+    app.openapi = openapi
+
+
+def _without_defaults(schema):
+    if isinstance(schema, dict):
+        return {k: _without_defaults(v) for k, v in schema.items() if k != "default"}
+    if isinstance(schema, list):
+        return [_without_defaults(v) for v in schema]
+    return schema
 
 
 async def _purge_forever(web, lifetime: int) -> None:

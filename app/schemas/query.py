@@ -175,7 +175,13 @@ class _Base(BaseModel):
     shown and asked to correct.
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        # Output schemas mark a defaulted field required, because it is always sent:
+        # the client's generated types then see `kind: "stage"`, not `kind?`.
+        json_schema_serialization_defaults_required=True,
+    )
 
 
 # --------------------------------------------------------------------------- #

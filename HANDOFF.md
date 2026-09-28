@@ -652,12 +652,13 @@ every live check used the test database or a user deleted afterwards.
 
 Put the plan and these questions to the user before building:
 
-- **Chart library.** The contract is library-free (`AnswerView`: a table that
-  always ships, and `stat` / `line` / `bar` views that point into it). Needs a
-  real time axis, several series, gaps, custom tooltips and tick formatting.
-  Recommended then: Apache ECharts via `ngx-echarts`; the table in Angular
-  Material or AG Grid Community. Not yet decided.
-- **Types from `/openapi.json`**, generated, never hand-written (DESIGN §9).
+- **Chart library — decided: ApexCharts 7.6.1, pinned exactly, behind one
+  chart component** that nothing else in the client bypasses, so it can be
+  swapped by rewriting that component (DESIGN §5). Tables: Angular Material.
+- **Types from `/openapi.json`**, generated with `openapi-typescript`
+  (decided), never hand-written (DESIGN §9).
+- **Slice 0 first** (server): a route to reopen a past conversation — the
+  history list carries no job ids and nothing returns a conversation's rounds.
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie
@@ -673,9 +674,13 @@ Put the plan and these questions to the user before building:
   `EventSource('/api/jobs/{id}/events')`; history; "report a problem".
 - **Sign-in pages**: login, register with an invite code, GitHub.
 
-### The deployment step (DigitalOcean) — after step 4
+### The deployment step — after step 4, host not decided
 
-Recorded in DESIGN §12 and §13; none of it is done:
+DigitalOcean is likely but **not decided**, and the user is not ready to be
+walked through deployment. Until then, keep it in mind as a constraint:
+flag anything built now that would not run on a rented Linux VM with Docker
+(a DigitalOcean Droplet or similar). Recorded in DESIGN §12 and §13; none of
+it is done:
 
 - a **production compose override**: publish only the reverse proxy's 443
   (and 80 to redirect) — `docker-compose.yml` publishes db and Ollama on

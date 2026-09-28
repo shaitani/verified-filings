@@ -300,6 +300,25 @@ The `period_misalignment` note still shows.
 - **`mixed_granularity` splits** into separate series or panels.
 - **Derived rows are their own series**, labelled by `derivation`.
 
+### The chart library, and swapping it
+
+**Decided (2026-09-28): ApexCharts, via `ng-apexcharts`, pinned to an exact
+version** — `"apexcharts": "7.6.1"`, never `^7.6.1` — so an update is always a
+deliberate edit, never a side effect of an install. Chosen by eye from five
+libraries drawing the same three real answers (ECharts, AG Charts, Chart.js,
+ApexCharts, Highcharts). Tables are Angular Material.
+
+**One component draws charts, and nothing else in the client imports the
+library.** It takes one `StatView` / `LineView` / `BarView` and the
+`AnswerView` rows it points into, and turns them into the library's options;
+everything around it — the table, notes, citations, the reply's parts — is
+plain Angular reading the contract. So replacing the library means rewriting
+that one component: `AnswerView` already names nothing library-specific, and
+every display string arrives made by [F], so the component formats only axis
+ticks, by `unit_kind`. ECharts is the nearest alternative (Apache-2.0, a native
+time axis); the comparison showed it draws the same three answers with the
+same inputs.
+
 ## 6. Citations with every answer
 
 *Decided.* Every answer shows what it was answered *as*: per binding, the
@@ -397,6 +416,26 @@ refusals and wrong numbers worth debugging are the ones a person noticed.
 *Decided.* The Angular types are generated from FastAPI's OpenAPI schema, not
 written by hand. `app/schemas` is the single source of truth (`sec-retriever.md`
 §3), and two hand-kept copies of one contract drift.
+
+**The generator is `openapi-typescript`** (decided 2026-09-28): types only, no
+generated runtime code; a small hand-written service makes the calls with
+Angular's `HttpClient`. Chosen over ng-openapi-gen (generated services, method
+names taken from FastAPI Users' long operation ids) and `@hey-api/openapi-ts`
+(not yet 1.0). The event stream is hand-written whatever the generator, since
+OpenAPI cannot describe a stream as a sequence of typed messages.
+
+**Two things `/openapi.json` needed first** (2026-09-28, `tests/test_openapi.py`):
+
+- **The stream's events were unpublished.** FastAPI cannot see a streamed
+  body's type, so `StageEvent`, `DoneEvent` and `FailedEvent` never reached the
+  schema. `server._publish_stream_events` adds `JobEvent` (a union on `kind`)
+  and the events route points at it. A model FastAPI already published must
+  mean the same both ways, or startup fails.
+- **Always-sent fields read as optional.** A field with a default — every
+  `kind`, `Reply.blocking` — was optional in the output schema, so the
+  generated types would have said `kind?:` and TypeScript could not narrow a
+  union on it. `_Base` sets `json_schema_serialization_defaults_required`,
+  which changes output schemas only: a request may still leave `kind` out.
 
 What the browser sends is named with an `In` suffix (`NewConversationIn`,
 `AnswersIn`), the repo's mark for inbound, validated input (schemas DESIGN

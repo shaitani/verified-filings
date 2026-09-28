@@ -214,6 +214,10 @@ class FailedEvent(_Base):
 
 JobEvent = Annotated[StageEvent | DoneEvent | FailedEvent, Field(discriminator="kind")]
 
+#: Where /openapi.json publishes JobEvent. FastAPI cannot see a streamed body's
+#: type, so server.py adds it by hand and the events route points here.
+JOB_EVENT_REF = "#/components/schemas/JobEvent"
+
 
 class JobView(_Base):
     """``GET /api/jobs/{id}`` -- for a reload or a dropped stream."""
