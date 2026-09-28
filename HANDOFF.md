@@ -675,8 +675,12 @@ Put the plan and these questions to the user before building:
   sign in. The guard test caught `inject()` after `await`, which would have
   broken every redirect. **For GitHub to use the client page**, set
   `GITHUB_OAUTH_REDIRECT_URL=http://localhost:4200/auth/github/callback` in
-  `.env` and add that URL to the GitHub OAuth App (`.env.example`). Next:
-  slice 4, asking a question.
+  `.env` and add that URL to the GitHub OAuth App (`.env.example`).
+- **Slice 4 done** (2026-09-28): asking — a question box on `/`, the thread
+  page `/c/:conversationId`, live stages over `EventSource`, and resuming after
+  a reload or a dropped stream by re-reading the conversation (DESIGN §4). A
+  finished round shows only a list of its parts. Next: slice 5, the reply
+  rendered properly and questions back answered.
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie

@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.question {
+  font: var(--mat-sys-headline-small);
+  margin: 8px 0 16px;
+}
+
+.round {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding: 16px 0;
+}
+
+.picked {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 8px;
+}
+
+.problem,
+.refused {
+  color: var(--mat-sys-error);
+}
+
+.loading {
+  color: var(--mat-sys-on-surface-variant);
+}

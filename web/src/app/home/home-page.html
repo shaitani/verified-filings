@@ -1,0 +1,19 @@
+<form class="ask" [formGroup]="form" (ngSubmit)="ask()">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Ask about the filings</mat-label>
+    <textarea
+      matInput
+      cdkTextareaAutosize
+      cdkAutosizeMinRows="2"
+      formControlName="question"
+      placeholder="e.g. What was Apple's revenue in fiscal 2024?"
+      (keydown.enter)="onEnter($event)"
+    ></textarea>
+  </mat-form-field>
+
+  @if (problem(); as sentence) {
+    <p class="problem" role="alert">{{ sentence }}</p>
+  }
+
+  <button mat-flat-button type="submit" [disabled]="busy() || form.invalid">Ask</button>
+</form>

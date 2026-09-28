@@ -32,6 +32,9 @@ export type GivenAnswer = Schemas['GivenAnswer'];
 export type JobCreated = Schemas['JobCreated'];
 export type JobView = Schemas['JobView'];
 export type JobEvent = Schemas['JobEvent'];
+export type StageEvent = Schemas['StageEvent'];
+export type JobStage = StageEvent['stage']; // queued, parsing, mapping, fetching, presenting
+export type JobStatus = RoundView['status']; // the stages, then done or failed
 
 // What the browser sends.
 export type NewConversationIn = Schemas['NewConversationIn'];

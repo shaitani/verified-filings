@@ -2,14 +2,14 @@ import { httpResource } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { Router, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 
 import { apiPath } from './api/api.service';
 import type { Health } from './api/types';
 import { AuthStore } from './auth/auth-store';
 
 @Component({
-  imports: [MatButtonModule, MatToolbarModule, RouterOutlet],
+  imports: [MatButtonModule, MatToolbarModule, RouterLink, RouterOutlet],
   selector: 'vf-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',

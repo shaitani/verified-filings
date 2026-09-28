@@ -219,6 +219,18 @@ writes one; a round not yet finished is watched on its events route as usual.
 `GivenAnswer` is also what `Job.answers` stores, so the stored and the shown
 answer are one class.
 
+**The client's side (step 4, slice 4, 2026-09-28)** — `web/src/app/conversation/`.
+Asking creates the conversation and opens `/c/<id>`; the thread page reads it
+with the route above and, if its last round is still running, follows that
+round's stages over `EventSource`. **The database is the record**: when a round
+ends, or the stream drops, the page re-reads the conversation rather than piece
+the round together from events, then re-attaches if it is still running (three
+drops in a row and the reader is told). The browser's own silent reconnect is
+switched off by closing the source on error. So a reload mid-round resumes by
+construction. Measured through the dev proxy: each stage arrived when the
+server stamped it (mapping 5.1 s / 5.1 s, fetching 5.3 s / 5.3 s) — no
+buffering — and a watcher that connects late is replayed the stages it missed.
+
 **Built (slice 7, 2026-09-27)**, `app/api/routes.py`. Every route needs a
 signed-in reader and touches only their conversations; another reader's reads
 as **404, never 403**, so an id tells a guesser nothing. Refusals on the wire:

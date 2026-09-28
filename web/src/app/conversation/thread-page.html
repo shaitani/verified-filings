@@ -1,0 +1,39 @@
+@if (store.problem(); as problem) {
+  <p class="problem" role="alert">{{ problem }}</p>
+}
+
+@if (store.conversation(); as conversation) {
+  <h1 class="question">{{ conversation.question }}</h1>
+
+  @for (round of conversation.rounds; track round.job_id) {
+    <section class="round">
+      @if (round.answers.length) {
+        <p class="picked">You chose: {{ picks(round) }}</p>
+      }
+
+      @switch (round.status) {
+        @case ('done') {
+          @if (round.reply; as reply) {
+            <!-- Slice 5 renders the reply properly; for now, each part and its outcome. -->
+            <ul class="parts">
+              @if (reply.blocking; as blocking) {
+                <li class="refused">{{ blocking.reason }}</li>
+              }
+              @for (part of reply.parts; track part.part_id) {
+                <li>{{ part.text }} — {{ part.outcome }}</li>
+              }
+            </ul>
+          }
+        }
+        @case ('failed') {
+          <p class="problem">{{ round.message }}</p>
+        }
+        @default {
+          <vf-stage-line [stage]="stageOf(round)" [elapsed]="store.stage()?.seconds ?? null" />
+        }
+      }
+    </section>
+  }
+} @else if (!store.problem()) {
+  <p class="loading">Opening the conversation…</p>
+}

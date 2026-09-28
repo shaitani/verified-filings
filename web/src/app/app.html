@@ -1,7 +1,8 @@
 <mat-toolbar>
-  <span>Verified Filings</span>
+  <a class="title" routerLink="/">Verified Filings</a>
   <span class="spacer"></span>
   @if (auth.user(); as user) {
+    <a mat-button routerLink="/">New question</a>
     <span class="who">{{ user.email }}</span>
     <button mat-button type="button" (click)="signOut()">Sign out</button>
   }

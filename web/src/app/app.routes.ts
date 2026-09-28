@@ -24,5 +24,10 @@ export const routes: Routes = [
     canActivate: [signedInGuard],
     loadComponent: () => import('./home/home-page').then((m) => m.HomePage),
   },
+  {
+    path: 'c/:conversationId', // a conversation, reopenable by its address
+    canActivate: [signedInGuard],
+    loadComponent: () => import('./conversation/thread-page').then((m) => m.ThreadPage),
+  },
   { path: '**', redirectTo: '' },
 ];
