@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -178,6 +179,16 @@ class FeedbackIn(_Base):
 
 # JobStage and JobStatus live in app/schemas/job.py: the ORM column and its
 # CHECK read the same list, so a status cannot be spelled two ways.
+
+
+class ConversationSummary(_Base):
+    """One line of "my past questions"."""
+
+    conversation_id: UUID
+    question: str
+    created_at: datetime
+    rounds: int = Field(ge=1)
+    status: JobStatus  # of the latest round
 
 
 class JobCreated(_Base):

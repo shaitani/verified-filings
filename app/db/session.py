@@ -8,25 +8,28 @@ engine. For a unit of work that commits on success and rolls back on error::
     async with SessionLocal.begin() as session:
         session.add(obj)
 
-Three factories, one per role, because three different things connect:
+Four factories, one per role, because four different things connect:
 
-=========================  =========================  ==========================
-factory                    role                       used by
-=========================  =========================  ==========================
-``SessionLocal``           ``postgres`` (superuser)   loader, embedder, Alembic
+===========================  =========================  ========================
+factory                      role                       used by
+===========================  =========================  ========================
+``SessionLocal``             ``postgres`` (superuser)   loader, embedder, Alembic
 ``QueryMapperSessionLocal``  ``vf_query_mapper_role``   app/semantic/query_mapper
-``RetrievalSessionLocal``  ``vf_retrieval_role``      app/retrieval (not built)
-=========================  =========================  ==========================
+``RetrievalSessionLocal``    ``vf_retrieval_role``      app/retrieval
+``web_sessionmaker()``       ``vf_web_role``            app/api (the Web Server)
+===========================  =========================  ========================
 
-Only the first can write. See ``app/db/roles.py`` for what each read-only role
-can reach and why they differ.
+The owner and the web role write; the other two read. See ``app/db/roles.py``
+for what each role can reach and why they differ.
 """
 
 import warnings
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
+from app.db.roles import WEB
 
 #: One per process: a managed pool of connections to PostgreSQL.
 engine = create_async_engine(settings.database_url)
@@ -83,3 +86,28 @@ QueryMapperSessionLocal = async_sessionmaker(query_mapper_engine, expire_on_comm
 #: Executes SQL written by a language model. Narrower on purpose: no
 #: ``concept.embedding``, no ``load_run``, capped connections.
 RetrievalSessionLocal = async_sessionmaker(retrieval_engine, expire_on_commit=False)
+
+
+class WebRoleMissing(RuntimeError):
+    """The Web Server has no credential of its own, and will not borrow one."""
+
+
+def web_sessionmaker(url: str | None = None) -> async_sessionmaker:
+    """The Web Server's factory: ``vf_web_role`` and nothing else.
+
+    A function rather than an import-time engine, so the evals and the CLI --
+    which never need it -- do not need ``DATABASE_URL_WEB`` either. And no
+    fallback, unlike the readers above: the owner can do everything this
+    role's grants exist to prevent (make an administrator, read a trace).
+    """
+    url = url if url is not None else settings.database_url_web
+    if not url:
+        raise WebRoleMissing(
+            "DATABASE_URL_WEB is not set. The Web Server runs only as vf_web_role -- "
+            "see BOOTSTRAP.md for the .env line and `uv run python -m app.db.roles`."
+        )
+    user = make_url(url).username
+    if user != WEB.name:
+        # Pointing it at the owner by mistake would quietly undo every grant.
+        raise WebRoleMissing(f"DATABASE_URL_WEB logs in as {user!r}, not {WEB.name!r}")
+    return async_sessionmaker(create_async_engine(url), expire_on_commit=False)

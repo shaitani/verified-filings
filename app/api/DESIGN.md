@@ -222,6 +222,19 @@ The gate and the event streams live in the process, so **the Web Server runs
 one worker**. A job found unfinished at startup was cut off by a restart and is
 marked `failed`, not left `queued` forever.
 
+**Storage built (slice 4, 2026-09-27)**, `app/api/storage.py`, as `vf_web_role`
+through `web_sessionmaker()` — which refuses to start without
+`DATABASE_URL_WEB`, and refuses a URL that logs in as anyone else (pointing it
+at the owner would undo every grant). How rounds chain: round *n* stores the
+picks made against round *n-1*'s questions, round *n-1* stores what it asked
+(a `chain.Pending`), and `round_inputs` replays every earlier round's picks —
+so the answers and pins so far are rebuilt from the rows, never kept twice. A
+new round is refused while the last is still running (`NotReady`), when it
+asked nothing (`NothingToAnswer`), and for a pick it never offered
+(`UnknownChoice`, before anything is written); two answers racing for the same
+round number get one round and a `Conflict`. A job moves only while
+unfinished: `done` and `failed` are final.
+
 **A known property, not a bug.** Ollama's prompt cache changes replies
 (HANDOFF §6), so with several askers an answer can depend on what the previous
 one asked. Unloading between jobs would remove it at a cost in latency.

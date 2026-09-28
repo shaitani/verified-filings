@@ -95,3 +95,39 @@ async def clean_fake_company(test_session_factory):
     await _delete()
     yield
     await _delete()
+
+
+#: The web role's password on the test database only. Provisioned here, never
+#: read from .env, so the suite needs no DATABASE_URL_WEB of its own.
+TEST_WEB_PASSWORD = "web-pw"
+
+
+@pytest_asyncio.fixture
+async def web_factory(test_db_url):
+    """``(web_role_factory, owner_factory)`` on the test database, and a clean
+    slate: every user whose email starts ``zz-`` is deleted before and after,
+    taking their conversations, jobs and traces with them (ON DELETE CASCADE).
+
+    Tests that need users make them as the owner with such an email."""
+    from sqlalchemy import text
+
+    from app.db import roles
+    from app.db.session import web_sessionmaker
+
+    await roles.provision(test_db_url, {roles.WEB.name: TEST_WEB_PASSWORD})
+    scheme, rest = test_db_url.split("://", 1)
+    web_url = f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
+    owner_engine = create_async_engine(test_db_url)
+    web = web_sessionmaker(web_url)
+
+    async def clean() -> None:
+        async with owner_engine.begin() as connection:
+            await connection.execute(text("DELETE FROM web.\"user\" WHERE email LIKE 'zz-%'"))
+
+    await clean()
+    try:
+        yield web, async_sessionmaker(owner_engine, expire_on_commit=False)
+    finally:
+        await clean()
+        await web.kw["bind"].dispose()
+        await owner_engine.dispose()
