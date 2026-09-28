@@ -588,12 +588,46 @@ step 5).
   built bundle and proxying `/api`, with response buffering off for the event
   stream. One origin is what keeps the cookie and the stream simple (§10).
 
+## 12a. Building it — decisions for step 3 (2026-09-27)
+
+Eight slices, one at a time: (1) the chain as one function, (2) the ambiguity
+pin, (3) the trace collector, (4) storage, (5) the job queue and its events,
+(6) sign-in, (7) the routes, (8) the container. The user's answers:
+
+- **The chain lives in `app/chain.py`**, outside `app/api/`, as
+  `ask(question, answers) -> Reply`. The route calls it; `evals/run.py` moves
+  onto it in the user's testing update, not in step 3.
+- **One whole job at a time**, parse through present — the GPU is the
+  bottleneck either way, and one gate is simpler than one per model call.
+- **A session lasts 30 days** from sign-in, a setting; expected to shorten
+  before deployment.
+- **The fixed sentences** a reader gets when no curated reason exists (§1):
+
+  | stage | sentence |
+  |---|---|
+  | parse | "I couldn't work out what that question is asking for. Try naming the figure, the company and the period explicitly." |
+  | execute | "The figures for this query came back in a form that mismatches what I was expecting, so I haven't shown them." |
+  | present | "Something went wrong attempting to display the results." |
+  | anything else (a bug) | "Something went terribly wrong, likely a backend bug. Please contact your database administrator, jk, time to debug." |
+
+- **Run on the host during slices 1–7** (uvicorn with reload); the container
+  arrives in slice 8.
+- **Conversation history is in**: a "my past questions" list.
+- **Administration is CLI-only** in step 3 — invites, the first administrator,
+  password resets. An admin page may come later.
+- **Invite codes**: 12 characters in three groups (`K7QM-3XRD-9TPW`) from an
+  alphabet without look-alikes, 14 days by default, shown once, stored hashed.
+- **The web role never falls back to the owner.** The read-only roles' session
+  factories fall back to `DATABASE_URL` with a warning when their URL is unset;
+  the Web Server refuses to start without `DATABASE_URL_WEB` instead, because
+  the owner can do everything its grants were designed to prevent.
+
 ## 13. Open
 
 - **Email sender** for verification and reset. Deferred by the user; until
   then accounts are unverified and invitations stand in for it (§10).
-- **One orchestrator for [B] and the evals.** `evals/run.py::run_one` is [B]
-  without the browser; if the route writes its own copy of the chain, the evals
+- **Evals onto the one orchestrator.** `evals/run.py::run_one` is [B] without
+  the browser; once `app/chain.py` exists it should call that, or the evals
   measure a surrogate (HANDOFF §3). Deferred by the user to the testing update.
 - **Rate limiting** — every request costs GPU seconds, and login has no
   protection against password guessing (§10). Deferred by the user; needed
