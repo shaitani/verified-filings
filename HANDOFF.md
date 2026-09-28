@@ -47,7 +47,7 @@ QueryPlan                concrete coordinates, caveats, cardinality
    ↓  app/schemas/result.py
 ResultSet                rows + citations + verdict + notes + ResultSpec
    ↓  app/presenter/     [F] Presenter        ResultSet → AnswerView   built
-   ↓  app/api/           [B] Web Server       FastAPI                  NOT BUILT
+   ↓  app/api/           [B] Web Server       FastAPI                  built
    ↓  web/               [A] Web Client       Angular                  NOT BUILT
 ```
 
@@ -64,7 +64,7 @@ and that is known, not an oversight.
 | # | Name | Status | Where |
 |---|---|---|---|
 | [A] | Web Client | not built | `web/` — Angular + ngrx/signals; renders, decides nothing |
-| [B] | Web Server | not built | `app/api/` — FastAPI; runs the chain, the only thing that talks to [A] |
+| [B] | Web Server | built | `app/api/` — FastAPI; runs the chain, the only thing that talks to [A] |
 | [C] | Query Parser | **built** | `app/parser/` |
 | [D] | Query Mapper | built | `app/semantic/query_mapper.py` |
 | [E] | Executor | built | `app/retrieval/` |
@@ -72,7 +72,8 @@ and that is known, not an oversight.
 | [G] | Store | built | `app/db/` |
 | [H] | Ingest | built | `app/ingest/` |
 
-[A] and [B] are designed, not built: read
+[B] is built (2026-09-27, step 3: eight slices, `app/chain.py` and
+`app/api/`) and runs in its own container; [A] is designed, not built. Read
 [`app/api/DESIGN.md`](app/api/DESIGN.md). [F] is built (2026-09-27):
 [`app/presenter/DESIGN.md`](app/presenter/DESIGN.md). [A] and [B] were renamed on
 2026-09-27 from Ask UI and Web Display.

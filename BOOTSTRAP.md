@@ -196,6 +196,16 @@ uv run uvicorn app.api.server:create_app --factory --host 127.0.0.1 --port 8000 
 uv run python -m app.api.admin invite --email you@example.com
 ```
 
+Or run it in its container, as it would be deployed — after steps 1–4, since
+it needs the migration and the roles:
+
+```bash
+CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose --profile web up -d --build api
+```
+
+It is `healthy` once `GET /api/health` reaches the database as the web role,
+on the same `http://localhost:8000`. Either way:
+
 The invite command prints a code once. Register with it at
 `http://127.0.0.1:8000/docs` (`POST /api/auth/register`), then, if you want
 to be the administrator:

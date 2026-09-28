@@ -1,0 +1,18 @@
+# Never in the image: secrets, data, local environments, history.
+.env
+.env.*
+!.env.example
+data/
+.venv/
+.git/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+*.pptx
+~$*
+
+# Not needed to serve.
+tests/
+evals/
+*.md
+!README.md

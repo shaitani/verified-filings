@@ -15,7 +15,8 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response, status
+from sqlalchemy import text
 
 from app.api.auth import (
     AuthConfig,
@@ -82,6 +83,19 @@ def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> 
     # is the CLI's (app/api/admin.py), with the owner's credential.
 
     app.include_router(build_router(auth))  # ask, answer, watch, read back, list, report
+
+    @app.get("/api/health", tags=["ops"])
+    async def health(request: Request, response: Response) -> dict[str, str]:
+        """Up, and able to reach the database as vf_web_role. No sign-in: it says
+        nothing a reader could use, and Docker's health check calls it."""
+        try:
+            async with request.app.state.web() as session:
+                await session.execute(text("SELECT 1"))
+        except Exception:
+            log.exception("health: the database is unreachable")
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"status": "database unreachable"}
+        return {"status": "ok"}
 
     @app.get("/api/me", response_model=UserRead, tags=["auth"])
     async def me(user: Annotated[User, Depends(auth.current_user)]) -> User:

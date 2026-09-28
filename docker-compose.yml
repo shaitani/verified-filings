@@ -103,6 +103,54 @@ services:
       retries: 60
       start_period: 10s
 
+  # The Web Server ([B], app/api/). Built from ./Dockerfile; one worker, because
+  # its job queue lives in the process (app/api/DESIGN.md §4).
+  #
+  # Credentials come from .env by name, below -- never the whole file. The owner
+  # (superuser) login and the test database's never enter this container:
+  # DATABASE_URL, which the code requires, is the web role's own here, so even an
+  # accidental "owner" session has only vf_web_role's grants. DATABASE_HOST points
+  # every database URL at "db" while keeping its login, so no password is written
+  # twice (app/config.py).
+  #
+  # Behind the "web" profile, so the first `docker compose up -d` of BOOTSTRAP.md
+  # does not start it before the migration and roles it needs exist. Start it
+  # with `docker compose --profile web up -d`.
+  api:
+    profiles: ["web"]
+    build:
+      context: .
+      args:
+        CODE_VERSION: ${CODE_VERSION:-unknown}
+    depends_on:
+      db: {condition: service_healthy}
+      ollama: {condition: service_healthy}
+    environment:
+      DATABASE_HOST: db:5432
+      EMBEDDING_URL: http://ollama:11434
+      DATABASE_URL: ${DATABASE_URL_WEB}
+      DATABASE_URL_WEB: ${DATABASE_URL_WEB}
+      DATABASE_URL_QUERY_MAPPER: ${DATABASE_URL_QUERY_MAPPER}
+      DATABASE_URL_RETRIEVAL: ${DATABASE_URL_RETRIEVAL}
+      AUTH_RESET_SECRET: ${AUTH_RESET_SECRET}
+      AUTH_VERIFY_SECRET: ${AUTH_VERIFY_SECRET}
+      AUTH_OAUTH_STATE_SECRET: ${AUTH_OAUTH_STATE_SECRET}
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-30}
+    volumes: ["./data:/srv/data"]  # retrieval_log.jsonl survives the container
+    ports: ["127.0.0.1:8000:8000", "[::1]:8000:8000"]  # this machine only, as db above
+    healthcheck:
+      test:
+        - CMD
+        - /srv/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
 volumes:
   pgdata:
   pgdata-test:

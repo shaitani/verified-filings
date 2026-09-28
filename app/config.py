@@ -1,7 +1,9 @@
 """App configuration, loaded once from the environment / ``.env`` file."""
 
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # repo root, CWD-independent
@@ -37,6 +39,32 @@ class Settings(BaseSettings):
     auth_session_days: int = 30
     #: Secure cookies: sent over https only -- browsers treat localhost as secure.
     auth_cookie_secure: bool = True
+
+    #: In a container: the database's ``host:port`` there ("db:5432"). Every
+    #: database URL is pointed at it, keeping its login -- so the URLs, and the
+    #: passwords in them, are written once in .env, not again in docker-compose.
+    database_host: str | None = None
+
+    @model_validator(mode="after")
+    def _point_at_database_host(self) -> "Settings":
+        if self.database_host:
+            for name in (
+                "database_url",
+                "database_url_query_mapper",
+                "database_url_retrieval",
+                "database_url_web",
+            ):
+                url = getattr(self, name)
+                if url:
+                    setattr(self, name, _on_host(url, self.database_host))
+        return self
+
+
+def _on_host(url: str, host: str) -> str:
+    """``url`` with its host and port replaced, its login untouched."""
+    parts = urlsplit(url)
+    login = parts.netloc.rpartition("@")[0]
+    return urlunsplit(parts._replace(netloc=f"{login}@{host}" if login else host))
 
 
 settings = Settings()

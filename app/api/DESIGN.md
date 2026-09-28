@@ -675,16 +675,38 @@ step 5).
 
 *Decided:* the Web Server runs in its own container in `docker-compose.yml`.
 
-*Proposed:*
+**Built (slice 8, 2026-09-27)** — `Dockerfile`, `.dockerignore`, the `api`
+service:
 
-- **`api`** — Python 3.13 with `uv`, one `uvicorn` worker (§4), port 8000.
-  `depends_on` `db` and `ollama` with `condition: service_healthy`, both of
-  which already have honest health checks. Its database and Ollama URLs name
-  the compose services (`db`, `ollama`) in `environment:` — `.env`'s
-  `localhost` values are for Python running on Windows and stay as they are.
-  `./data` is mounted so `retrieval_log.jsonl` survives the container; the
-  lexicon files (`company_aliases.json`, `sic_numbers.json`,
-  `corpus_companies.json`) are tracked in git and go into the image.
+- **`api`** — Python 3.13-slim with `uv`, a frozen install from `uv.lock`,
+  one `uvicorn` worker (§4), a non-root user, port 8000 on this machine's
+  loopbacks only. `depends_on` `db` and `ollama` healthy; its own health
+  check calls `GET /api/health`, which runs `SELECT 1` as the web role.
+  Behind the `web` **profile**, so BOOTSTRAP's first `docker compose up -d`
+  does not start it before the migration and roles it needs exist:
+  `docker compose --profile web up -d`.
+- **Only the credentials it needs, by name** — the three role URLs, the
+  secrets, GitHub — never `.env` whole. The owner's login and the test
+  database's never enter the container (checked: none in its environment).
+  `DATABASE_URL`, which the code requires, is the **web role's** there, so
+  even an accidental owner session has only `vf_web_role`'s grants.
+- **`DATABASE_HOST=db:5432`** points every database URL at the compose
+  service while keeping its login (`app/config.py`), so `.env` stays written
+  for Python on the host and no password is written twice.
+- **Nothing secret in the image** — `.dockerignore` keeps `.env`, `data/`,
+  `.venv` and `.git` out (checked in the built image). `CODE_VERSION` is a
+  build argument, the git revision, since there is no `.git` inside to ask.
+  `./data` is mounted, so `retrieval_log.jsonl` survives the container.
+- Measured end to end through the container against the real database: an
+  invite, registration, a `Secure` 30-day session, Apple's FY2024 revenue
+  streamed to $391.04B, the trace carrying the container's `CODE_VERSION`;
+  the temporary user was deleted afterwards.
+- **Not for a public server as it stands.** `docker-compose.yml` still
+  commits `postgres`/`postgres` and pgAdmin's password, publishes database
+  and Ollama ports (loopback only, but a server should publish none), and
+  the container's secrets are readable with `docker inspect`. A production
+  override — no published ports but the proxy's, no `db-test` or
+  `pgadmin`, secrets from a secret store — is the deployment step's.
 - **[A] in development** — `ng serve` with a proxy to `api`, so the browser
   sees one origin.
 - **[A] deployed** — later, a small web-server container (nginx) serving the
