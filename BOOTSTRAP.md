@@ -97,7 +97,10 @@ Each check fails loudly rather than returning something plausible-looking.
 docker compose ps --format "table {{.Service}}\t{{.Status}}"
 ```
 
-`db`, `db-test` and `ollama` must all say `(healthy)`. Ollama's health check
+`db`, `db-test` and `ollama` must all say `(healthy)`. Add `\t{{.Ports}}` to the
+format to see the bindings: every published port must show `127.0.0.1:` and
+`[::1]:` only — reachable from this machine and nowhere else. A bare
+`0.0.0.0:` means the network can reach it (`docker-compose.yml` says why). Ollama's health check
 asserts the **model is present**, not merely that the server is listening, so
 `healthy` here means concept search will actually work. On a cold start it sits
 at `starting` until the pull finishes.

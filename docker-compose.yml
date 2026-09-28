@@ -4,7 +4,14 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: verified_filings
-    ports: ["5432:5432"]
+    # 127.0.0.1: reachable from this machine only. A bare "5432:5432" publishes
+    # on every interface -- the local network, and on a server the internet,
+    # where Docker's rules also bypass ufw. A deployment publishes none of these
+    # ports; its web container reaches the database as db:5432.
+    # Both loopbacks: Windows resolves "localhost" to ::1 first, and with only
+    # 127.0.0.1 bound every connection waited ~2s for ::1 to be refused
+    # (measured 2026-09-27: the test suite went from 25s to 7 minutes).
+    ports: ["127.0.0.1:5432:5432", "[::1]:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     # So a cold start can wait for readiness instead of guessing. The very
     # first boot of an empty volume initialises the cluster and restarts it
@@ -26,7 +33,7 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: verified_filings_test
-    ports: ["5433:5432"]
+    ports: ["127.0.0.1:5433:5432", "[::1]:5433:5432"]  # this machine only, as db above
     volumes: ["pgdata-test:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d verified_filings_test"]
@@ -40,7 +47,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: amospamo@proton.me      # login to the pgAdmin site
       PGADMIN_DEFAULT_PASSWORD: admin1234
-    ports: ["5050:80"]
+    ports: ["127.0.0.1:5050:80", "[::1]:5050:80"]  # this machine only, as db above
     depends_on: [db, db-test]
 
   # Local embedding model server. Serves nomic-embed-text-v1.5 over Ollama's
@@ -68,7 +75,9 @@ services:
   # to be kept in step with it.
   ollama:
     image: ollama/ollama:latest
-    ports: ["11434:11434"]
+    # This machine only: Ollama's API has no authentication, so anyone who can
+    # reach it can run or pull models on this GPU.
+    ports: ["127.0.0.1:11434:11434", "[::1]:11434:11434"]
     volumes: ["ollama-models:/root/.ollama"]
     # Without this the container cannot see the card at all and Ollama runs on
     # the CPU -- which is survivable for embeddings and is not for generation.
