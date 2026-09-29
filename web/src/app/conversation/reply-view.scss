@@ -25,9 +25,9 @@
   color: var(--mat-sys-error);
 }
 
-.figures {
-  margin: 4px 0 0;
-  padding-left: 20px;
+.answered-mark {
+  color: var(--mat-sys-primary);
+  vertical-align: middle;
 }
 
 .asked vf-ask-view {

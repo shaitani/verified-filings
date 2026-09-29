@@ -1,0 +1,46 @@
+.sources {
+  margin: 0;
+  padding-left: 24px;
+
+  li {
+    margin-bottom: 8px;
+  }
+}
+
+.concept {
+  margin-right: 6px;
+}
+
+code {
+  font-size: 0.85em;
+  color: var(--mat-sys-on-surface-variant);
+  margin-right: 8px;
+}
+
+.formula,
+.for {
+  margin-right: 8px;
+}
+
+.for {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.how {
+  font: var(--mat-sys-label-small);
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-right: 8px;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.how.unreviewed {
+  color: var(--mat-sys-on-error-container);
+  background: var(--mat-sys-error-container);
+}
+
+.note {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}

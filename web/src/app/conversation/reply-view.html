@@ -13,11 +13,7 @@
 
       @switch (part.outcome) {
         @case ('answered') {
-          <ul class="figures">
-            @for (row of rowsFor(part); track $index) {
-              <li>{{ row.company }} · {{ row.period_label }}: {{ row.display }}</li>
-            }
-          </ul>
+          <mat-icon class="answered-mark" aria-label="answered">check</mat-icon>
         }
         @case ('refused') {
           <span class="reason">{{ part.reason }}</span>
@@ -36,6 +32,10 @@
     </li>
   }
 </ul>
+
+@if (reply().answer; as answer) {
+  <vf-answer-panel [answer]="answer" />
+}
 
 @if (answerable() && asks().length) {
   <button mat-flat-button type="button" [disabled]="!complete() || busy()" (click)="send()">

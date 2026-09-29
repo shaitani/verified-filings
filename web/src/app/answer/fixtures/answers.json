@@ -1,0 +1,2765 @@
+{
+  "q001": {
+    "about": "a stat card: one figure",
+    "question": "What was Apple's revenue in fiscal 2024?",
+    "answer": {
+      "shape": "scalar",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "391035000000.000000",
+          "display": "$391.04B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "stat",
+          "title": "AAPL — revenue, FY2024",
+          "row": 0
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q002": {
+    "about": "a stat card for a balance: 'as of' its date",
+    "question": "How much cash did Microsoft have at the end of its last fiscal year?",
+    "answer": {
+      "shape": "scalar",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "cash",
+          "company_cik": 789019,
+          "company": "MSFT",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "end of FY2025",
+          "granularity": "annual",
+          "period_start": null,
+          "period_end": "2025-06-30",
+          "is_instant": true,
+          "value": "30242000000.000000",
+          "display": "$30.24B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "stat",
+          "title": "MSFT — cash, as of 2025-06-30",
+          "row": 0
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 20,
+              "taxonomy": "us-gaap",
+              "name": "CashAndCashEquivalentsAtCarryingValue",
+              "label": "Cash and Cash Equivalents, at Carrying Value"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": [
+            {
+              "kind": "narrower_than_asked",
+              "message": "This is cash and cash equivalents only. Short-term investments and marketable securities are NOT included, and at this size they are usually the larger half: at FY2025 Microsoft held $30.2B of cash against $64.3B of short-term investments, and Alphabet $30.7B against $96.1B of marketable securities. Someone asking how much money the company has on hand is being shown roughly a third of it."
+            }
+          ]
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q013": {
+    "about": "a line: one company over five years, with its growth beside it",
+    "question": "Show me Apple's revenue trend for the last five years.",
+    "answer": {
+      "shape": "series",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2021,
+          "fiscal_period": "FY",
+          "period_label": "FY2021",
+          "granularity": "annual",
+          "period_start": "2020-09-27",
+          "period_end": "2021-09-25",
+          "is_instant": false,
+          "value": "365817000000.000000",
+          "display": "$365.82B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "394328000000.000000",
+          "display": "$394.33B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "383285000000.000000",
+          "display": "$383.29B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "391035000000.000000",
+          "display": "$391.04B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "416161000000.000000",
+          "display": "$416.16B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "0.07793787604184605964",
+          "display": "+7.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": "FY2021",
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "-0.02800460530319936702",
+          "display": "-2.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": "FY2022",
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "0.02021994077514121346",
+          "display": "+2.0%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": "FY2023",
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "0.06425511782832738757",
+          "display": "+6.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": "FY2024",
+          "citations": [
+            "b0"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "line",
+          "title": "revenue — annual",
+          "unit_kind": "money",
+          "granularity": "annual",
+          "series": [
+            {
+              "label": "AAPL — revenue",
+              "rows": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "line",
+          "title": "revenue growth — annual",
+          "unit_kind": "ratio",
+          "granularity": "annual",
+          "series": [
+            {
+              "label": "AAPL — revenue growth",
+              "rows": [
+                5,
+                6,
+                7,
+                8
+              ]
+            }
+          ]
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q041": {
+    "about": "a line panel holding two metrics in one unit",
+    "question": "Show me Apple's revenue and net income side by side for five years.",
+    "answer": {
+      "shape": "series",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2021,
+          "fiscal_period": "FY",
+          "period_label": "FY2021",
+          "granularity": "annual",
+          "period_start": "2020-09-27",
+          "period_end": "2021-09-25",
+          "is_instant": false,
+          "value": "365817000000.000000",
+          "display": "$365.82B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "394328000000.000000",
+          "display": "$394.33B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "383285000000.000000",
+          "display": "$383.29B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "391035000000.000000",
+          "display": "$391.04B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "416161000000.000000",
+          "display": "$416.16B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "0.07793787604184605964",
+          "display": "+7.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "-0.02800460530319936702",
+          "display": "-2.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "0.02021994077514121346",
+          "display": "+2.0%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "0.06425511782832738757",
+          "display": "+6.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2021,
+          "fiscal_period": "FY",
+          "period_label": "FY2021",
+          "granularity": "annual",
+          "period_start": "2020-09-27",
+          "period_end": "2021-09-25",
+          "is_instant": false,
+          "value": "94680000000.000000",
+          "display": "$94.68B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "99803000000.000000",
+          "display": "$99.80B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "96995000000.000000",
+          "display": "$97.00B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "93736000000.000000",
+          "display": "$93.74B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "112010000000.000000",
+          "display": "$112.01B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2022,
+          "fiscal_period": "FY",
+          "period_label": "FY2022",
+          "granularity": "annual",
+          "period_start": "2021-09-26",
+          "period_end": "2022-09-24",
+          "is_instant": false,
+          "value": "0.05410857625686523025",
+          "display": "+5.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2023,
+          "fiscal_period": "FY",
+          "period_label": "FY2023",
+          "granularity": "annual",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "is_instant": false,
+          "value": "-0.02813542679077783233",
+          "display": "-2.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "-0.03359967008608691170",
+          "display": "-3.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "net income",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "0.19495177946573354954",
+          "display": "+19.5%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": "growth",
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "line",
+          "title": "revenue, net income — annual",
+          "unit_kind": "money",
+          "granularity": "annual",
+          "series": [
+            {
+              "label": "AAPL — revenue",
+              "rows": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "label": "AAPL — net income",
+              "rows": [
+                9,
+                10,
+                11,
+                12,
+                13
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "line",
+          "title": "revenue growth, net income growth — annual",
+          "unit_kind": "ratio",
+          "granularity": "annual",
+          "series": [
+            {
+              "label": "AAPL — revenue growth",
+              "rows": [
+                5,
+                6,
+                7,
+                8
+              ]
+            },
+            {
+              "label": "AAPL — net income growth",
+              "rows": [
+                14,
+                15,
+                16,
+                17
+              ]
+            }
+          ]
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b1": {
+          "key": "b1",
+          "concepts": [
+            {
+              "concept_id": 195,
+              "taxonomy": "us-gaap",
+              "name": "NetIncomeLoss",
+              "label": "Net Income (Loss) Attributable to Parent"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q009": {
+    "about": "a ranking: bars, highest first, capped at ten",
+    "question": "Which of these companies has the highest operating margin?",
+    "answer": {
+      "shape": "ranking",
+      "rows": [
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1045810,
+          "company": "NVDA",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-01-29",
+          "period_end": "2025-01-26",
+          "is_instant": false,
+          "value": "0.62417526839697464310",
+          "display": "62.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b9"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 789019,
+          "company": "MSFT",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-07-01",
+          "period_end": "2025-06-30",
+          "is_instant": false,
+          "value": "0.45621956240859848646",
+          "display": "45.6%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b5"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1326801,
+          "company": "META",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.41437855159579232308",
+          "display": "41.4%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b13"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1652044,
+          "company": "GOOGL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.32032638592380025618",
+          "display": "32.0%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b15"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "0.31970799762591881507",
+          "display": "32.0%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b2"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1341439,
+          "company": "ORCL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-06-01",
+          "period_end": "2025-05-31",
+          "is_instant": false,
+          "value": "0.30798445965957595080",
+          "display": "30.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b14"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 804328,
+          "company": "QCOM",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-30",
+          "period_end": "2025-09-28",
+          "is_instant": false,
+          "value": "0.27899467076144883028",
+          "display": "27.9%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b6"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 723125,
+          "company": "MU",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-08-30",
+          "period_end": "2025-08-28",
+          "is_instant": false,
+          "value": "0.26138370164267751084",
+          "display": "26.1%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b3"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1283699,
+          "company": "TMUS",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.20698909510921876592",
+          "display": "20.7%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b11"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1018724,
+          "company": "AMZN",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.11155296795755198598",
+          "display": "11.2%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b8"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 2488,
+          "company": "AMD",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-12-29",
+          "period_end": "2025-12-27",
+          "is_instant": false,
+          "value": "0.10664280146655503912",
+          "display": "10.7%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1318605,
+          "company": "TSLA",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.04592573845001950921",
+          "display": "4.6%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b12"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 731766,
+          "company": "UNH",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "0.04237130977038074746",
+          "display": "4.2%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b4"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 909832,
+          "company": "COST",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-02",
+          "period_end": "2025-08-31",
+          "is_instant": false,
+          "value": "0.03772412665540356423",
+          "display": "3.8%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b7"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 50863,
+          "company": "INTC",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-12-29",
+          "period_end": "2025-12-27",
+          "is_instant": false,
+          "value": "-0.04188976973870925018",
+          "display": "-4.2%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "operating margin",
+          "company_cik": 1122904,
+          "company": "NTGR",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "-0.04881500126497060551",
+          "display": "-4.9%",
+          "unit": "pure",
+          "unit_kind": "ratio",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b10"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "bar",
+          "title": "operating margin — highest first, top 10 of 16",
+          "unit_kind": "ratio",
+          "order": "descending",
+          "rows": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b1": {
+          "key": "b1",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b2": {
+          "key": "b2",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b3": {
+          "key": "b3",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b4": {
+          "key": "b4",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b5": {
+          "key": "b5",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b6": {
+          "key": "b6",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b7": {
+          "key": "b7",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b8": {
+          "key": "b8",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b9": {
+          "key": "b9",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b10": {
+          "key": "b10",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b11": {
+          "key": "b11",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b12": {
+          "key": "b12",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b13": {
+          "key": "b13",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b14": {
+          "key": "b14",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b15": {
+          "key": "b15",
+          "concepts": [
+            {
+              "concept_id": 202,
+              "taxonomy": "us-gaap",
+              "name": "OperatingIncomeLoss",
+              "label": "Operating Income (Loss)"
+            },
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [
+        {
+          "kind": "partial_coverage",
+          "message": "JPMORGAN CHASE & CO (JPM), BofA Finance LLC (BAC), Chevron Corp (CVX), Johnson & Johnson (JNJ) report no 'operating margin' for the periods asked about, so they are absent from the result. The ordering below is over the remaining 16 company(s) only, and is not necessarily the ordering over all of them"
+        },
+        {
+          "kind": "period_misalignment",
+          "message": "These companies do not share a fiscal calendar: FY 2025 ends anywhere from 2025-01-26 to 2025-12-31, a spread of 339 days. Points sharing a period label are not contemporaneous, so treat a shared time axis as approximate."
+        }
+      ],
+      "conditions": []
+    }
+  },
+  "q006": {
+    "about": "comparison bars: two companies, one figure each",
+    "question": "Which had higher revenue in fiscal 2024, Apple or Microsoft?",
+    "answer": {
+      "shape": "table",
+      "rows": [
+        {
+          "element_id": "e3",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "is_instant": false,
+          "value": "391035000000.000000",
+          "display": "$391.04B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        },
+        {
+          "element_id": "e3",
+          "metric": "revenue",
+          "company_cik": 789019,
+          "company": "MSFT",
+          "companies": [],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-07-01",
+          "period_end": "2024-06-30",
+          "is_instant": false,
+          "value": "245122000000.000000",
+          "display": "$245.12B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "bar",
+          "title": "revenue, FY2024",
+          "unit_kind": "money",
+          "order": "descending",
+          "rows": [
+            0,
+            1
+          ]
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b1": {
+          "key": "b1",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [
+        {
+          "kind": "period_misalignment",
+          "message": "These companies do not share a fiscal calendar: FY 2024 ends anywhere from 2024-06-30 to 2024-09-28, a spread of 90 days. Points sharing a period label are not contemporaneous, so treat a shared time axis as approximate."
+        }
+      ],
+      "conditions": []
+    }
+  },
+  "q022": {
+    "about": "a multiple: 0.89x, never 89%",
+    "question": "What is Apple's current ratio?",
+    "answer": {
+      "shape": "scalar",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "current ratio",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "end of FY2025",
+          "granularity": "annual",
+          "period_start": null,
+          "period_end": "2025-09-27",
+          "is_instant": true,
+          "value": "0.89329292221866679547",
+          "display": "0.89×",
+          "unit": "pure",
+          "unit_kind": "multiple",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b0"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "stat",
+          "title": "AAPL — current ratio, as of 2025-09-27",
+          "row": 0
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 14,
+              "taxonomy": "us-gaap",
+              "name": "AssetsCurrent",
+              "label": "Assets, Current"
+            },
+            {
+              "concept_id": 174,
+              "taxonomy": "us-gaap",
+              "name": "LiabilitiesCurrent",
+              "label": "Liabilities, Current"
+            }
+          ],
+          "expression": "c0 / c1",
+          "unit": "pure",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q020": {
+    "about": "a change, 'vs' the period it is measured from",
+    "question": "How much did Apple's revenue change from Q3 to Q4 last year?",
+    "answer": {
+      "shape": "scalar",
+      "rows": [
+        {
+          "element_id": "e2",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "Q4",
+          "period_label": "Q4 FY2025",
+          "granularity": "quarterly",
+          "period_start": "2025-06-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "8430000000.000000",
+          "display": "+$8.43B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": "change",
+          "compared_with": "Q3 FY2025",
+          "citations": [
+            "b0"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "stat",
+          "title": "AAPL — revenue change, Q4 FY2025 vs Q3 FY2025",
+          "row": 0
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [],
+      "conditions": []
+    }
+  },
+  "q040": {
+    "about": "an average across companies: one row naming the fourteen",
+    "question": "What was the average R&D spend across these companies in 2024?",
+    "answer": {
+      "shape": "table",
+      "rows": [
+        {
+          "element_id": "e1",
+          "metric": "R&D spend",
+          "company_cik": null,
+          "company": "14 companies",
+          "companies": [
+            "AAPL",
+            "AMD",
+            "CVX",
+            "GOOGL",
+            "INTC",
+            "JNJ",
+            "META",
+            "MSFT",
+            "MU",
+            "NTGR",
+            "NVDA",
+            "ORCL",
+            "QCOM",
+            "TSLA"
+          ],
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "period_label": "FY2024",
+          "granularity": "annual",
+          "period_start": "2023-01-30",
+          "period_end": "2024-12-31",
+          "is_instant": false,
+          "value": "15272077285.71428571",
+          "display": "$15.27B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": "average",
+          "compared_with": null,
+          "citations": [
+            "b0",
+            "b1",
+            "b2",
+            "b3",
+            "b4",
+            "b5",
+            "b6",
+            "b7",
+            "b8",
+            "b9",
+            "b10",
+            "b11",
+            "b12",
+            "b13"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "stat",
+          "title": "R&D spend average across 14 companies, FY2024",
+          "row": 0
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b1": {
+          "key": "b1",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b2": {
+          "key": "b2",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b3": {
+          "key": "b3",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b4": {
+          "key": "b4",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b5": {
+          "key": "b5",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b6": {
+          "key": "b6",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b7": {
+          "key": "b7",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b8": {
+          "key": "b8",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b9": {
+          "key": "b9",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b10": {
+          "key": "b10",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b11": {
+          "key": "b11",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b12": {
+          "key": "b12",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b13": {
+          "key": "b13",
+          "concepts": [
+            {
+              "concept_id": 250,
+              "taxonomy": "us-gaap",
+              "name": "ResearchAndDevelopmentExpense",
+              "label": "Research and Development Expense"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [
+        {
+          "kind": "partial_coverage",
+          "message": "JPMORGAN CHASE & CO (JPM), BofA Finance LLC (BAC), UnitedHealth Group Incorporated (UNH), COSTCO WHOLESALE CORP /NEW (COST), AMAZON COM INC (AMZN), T-MOBILE US, INC. (TMUS) report no 'R&D spend' for the periods asked about, so they are absent from the result"
+        },
+        {
+          "kind": "period_misalignment",
+          "message": "These companies do not share a fiscal calendar: FY 2024 ends anywhere from 2024-01-28 to 2024-12-31, a spread of 338 days. Points sharing a period label are not contemporaneous, so treat a shared time axis as approximate."
+        }
+      ],
+      "conditions": []
+    }
+  },
+  "q039": {
+    "about": "a filtered list, stating its filter",
+    "question": "List companies with more than 100 billion dollars in revenue last year.",
+    "answer": {
+      "shape": "ranking",
+      "rows": [
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 1018724,
+          "company": "AMZN",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "716924000000.000000",
+          "display": "$716.92B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b12"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 731766,
+          "company": "UNH",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "447567000000.000000",
+          "display": "$447.57B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b8"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 320193,
+          "company": "AAPL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-29",
+          "period_end": "2025-09-27",
+          "is_instant": false,
+          "value": "416161000000.000000",
+          "display": "$416.16B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b6"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 1652044,
+          "company": "GOOGL",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "402836000000.000000",
+          "display": "$402.84B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b19"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 789019,
+          "company": "MSFT",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-07-01",
+          "period_end": "2025-06-30",
+          "is_instant": false,
+          "value": "281724000000.000000",
+          "display": "$281.72B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b9"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 909832,
+          "company": "COST",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-09-02",
+          "period_end": "2025-08-31",
+          "is_instant": false,
+          "value": "275235000000.000000",
+          "display": "$275.24B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b11"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 1326801,
+          "company": "META",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "200966000000.000000",
+          "display": "$200.97B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b17"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 93410,
+          "company": "CVX",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "184432000000.000000",
+          "display": "$184.43B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b4"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 19617,
+          "company": "JPM",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "182447000000.000000",
+          "display": "$182.45B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b1"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 1045810,
+          "company": "NVDA",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2024-01-29",
+          "period_end": "2025-01-26",
+          "is_instant": false,
+          "value": "130497000000.000000",
+          "display": "$130.50B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b13"
+          ]
+        },
+        {
+          "element_id": "e1",
+          "metric": "revenue",
+          "company_cik": 70858,
+          "company": "BAC",
+          "companies": [],
+          "fiscal_year": 2025,
+          "fiscal_period": "FY",
+          "period_label": "FY2025",
+          "granularity": "annual",
+          "period_start": "2025-01-01",
+          "period_end": "2025-12-31",
+          "is_instant": false,
+          "value": "113097000000.000000",
+          "display": "$113.10B",
+          "unit": "USD",
+          "unit_kind": "money",
+          "derivation": null,
+          "compared_with": null,
+          "citations": [
+            "b3"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "kind": "bar",
+          "title": "revenue — highest first (revenue over $100.00B), top 10 of 11",
+          "unit_kind": "money",
+          "order": "descending",
+          "rows": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        }
+      ],
+      "citations": {
+        "b0": {
+          "key": "b0",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b1": {
+          "key": "b1",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b2": {
+          "key": "b2",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b3": {
+          "key": "b3",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b4": {
+          "key": "b4",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b5": {
+          "key": "b5",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b6": {
+          "key": "b6",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b7": {
+          "key": "b7",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b8": {
+          "key": "b8",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b9": {
+          "key": "b9",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b10": {
+          "key": "b10",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b11": {
+          "key": "b11",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b12": {
+          "key": "b12",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b13": {
+          "key": "b13",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b14": {
+          "key": "b14",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b15": {
+          "key": "b15",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b16": {
+          "key": "b16",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b17": {
+          "key": "b17",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b18": {
+          "key": "b18",
+          "concepts": [
+            {
+              "concept_id": 252,
+              "taxonomy": "us-gaap",
+              "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+              "label": "Revenue from Contract with Customer, Excluding Assessed Tax"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        },
+        "b19": {
+          "key": "b19",
+          "concepts": [
+            {
+              "concept_id": 254,
+              "taxonomy": "us-gaap",
+              "name": "Revenues",
+              "label": "Revenues"
+            }
+          ],
+          "expression": "c0",
+          "unit": "USD",
+          "resolved_by": "alias",
+          "notes": []
+        }
+      },
+      "notes": [
+        {
+          "kind": "period_misalignment",
+          "message": "These companies do not share a fiscal calendar: FY 2025 ends anywhere from 2025-01-26 to 2025-12-31, a spread of 339 days. Points sharing a period label are not contemporaneous, so treat a shared time axis as approximate."
+        }
+      ],
+      "conditions": [
+        "revenue over $100.00B"
+      ]
+    }
+  }
+}

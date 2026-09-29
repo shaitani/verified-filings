@@ -356,6 +356,21 @@ ticks, by `unit_kind`. ECharts is the nearest alternative (Apache-2.0, a native
 time axis); the comparison showed it draws the same three answers with the
 same inputs.
 
+**Built (step 4, slice 6, 2026-09-28)** — `web/src/app/answer/`. `AnswerPanel`
+lays out, in order: notes (verbatim) and conditions ("Only where: revenue over
+$100.00B"), the views, the Material table (always), and the sources. A stat
+view is a plain Angular card; line and bar views go to `chart/`, the one folder
+that touches the library — `chart-options.ts` (a pure function from view and
+rows to settings, tested without drawing) and `answer-chart.ts` (the
+component). **The rule is enforced, not just written down**: ESLint's
+`no-restricted-imports` fails any file outside `answer/chart/` that imports
+`apexcharts` or `ng-apexcharts`. Tooltips show the Presenter's own strings
+(display, fiscal label, "vs", the date span), escaped — they are data, never
+markup. The library loads only when a chart first appears (~228 kB
+compressed), so the initial page stays ~102 kB. Seen in a real browser: a
+five-year revenue series with its growth in a second panel, and a ranking's
+bars highest first under its two notes.
+
 ## 6. Citations with every answer
 
 *Decided.* Every answer shows what it was answered *as*: per binding, the
@@ -368,6 +383,15 @@ answer matches the question, and a chart makes a wrong answer look more
 finished. Showing the interpretation does not close that gap; it lets the
 reader see it. A binding with `resolved_by = embedding` says so: it was
 matched by similarity, and nobody reviewed it.
+
+**Built (step 4, slice 6)** — `CitationsList`, "Answered as". Each source is
+numbered in the order the table first cites it (the table's `[n]`), and shows
+the concept's label and `taxonomy:name`, the arithmetic in operand names for a
+computed figure ("Assets, Current ÷ Liabilities, Current"), the companies it
+answered for, its notes verbatim, and how it was chosen: **curated** (alias),
+**your pick** (pinned), or **unreviewed match** (embedding, flagged in the
+error colour). Open by default up to three sources; a ranking over sixteen
+starts folded.
 
 ## 7. Never sent to the client
 

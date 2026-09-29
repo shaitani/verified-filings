@@ -685,8 +685,14 @@ Put the plan and these questions to the user before building:
   tag, "Continue" once every ask has a pick, and earlier rounds' picks shown
   closed (DESIGN §3). The client's tests use real replies from
   `uv run python -m tests.web_replies` (pytest keeps them current). Answered
-  parts show a plain list of display strings until slice 6. Next: slice 6, the
-  answer drawn — table, charts, notes, citations.
+  parts show a plain list of display strings until slice 6.
+- **Slice 6 done** (2026-09-28): the answer drawn — notes and conditions, stat
+  cards, ApexCharts line and bar views through `answer/chart/` only (ESLint
+  enforces it), the Material table, and "Answered as" with how each source was
+  chosen (DESIGN §5, §6). Tested against ten real `AnswerView`s, also written by
+  `tests.web_replies`. **Polish noted:** the stage line's seconds are the
+  stage's start stamp, not a running clock, so they do not tick. Next: slice 7,
+  history and "report a problem".
 - **Development**: `ng serve` proxying `/api` to `:8000`, one origin, so the
   cookie and the event stream need nothing extra.
 - **GitHub's redirect**: today it returns to the API, which sets the cookie

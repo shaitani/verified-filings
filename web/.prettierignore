@@ -4,3 +4,4 @@ openapi.json
 src/app/api/openapi.d.ts
 # Written by `uv run python -m tests.web_replies`; pytest checks it is current.
 src/app/conversation/fixtures/replies.json
+src/app/answer/fixtures/answers.json

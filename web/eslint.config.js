@@ -33,7 +33,24 @@ module.exports = defineConfig([
           style: 'kebab-case',
         },
       ],
+      // The chart library is swappable because one component wraps it (DESIGN §5):
+      // nothing outside src/app/answer/chart/ may import it.
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['apexcharts', 'apexcharts/*', 'ng-apexcharts', 'ng-apexcharts/*'],
+              message: 'Only src/app/answer/chart/ may use the chart library (DESIGN §5).',
+            },
+          ],
+        },
+      ],
     },
+  },
+  {
+    files: ['src/app/answer/chart/**/*.ts'],
+    rules: { 'no-restricted-imports': 'off' }, // the one place that wraps the chart library
   },
   {
     files: ['**/*.html'],

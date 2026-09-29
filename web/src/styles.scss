@@ -36,4 +36,12 @@ body {
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
+// Chart tooltips: ApexCharts builds them outside any component, so they are styled here.
+.vf-tooltip {
+  padding: 6px 8px;
+  font: var(--mat-sys-body-small);
+}
+
+.vf-tooltip-span {
+  color: var(--mat-sys-on-surface-variant);
+}

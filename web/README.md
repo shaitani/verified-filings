@@ -66,7 +66,8 @@ development proxy: the browser sees one site on port 4200, so the sign-in
 cookie and the event stream need no cross-origin setup.
 
 **Pinned exactly.** `apexcharts` and `ng-apexcharts` carry no `^`, so an update
-is always a deliberate edit. Only the chart component imports them (DESIGN §5).
+is always a deliberate edit. Only `src/app/answer/chart/` may import them — ESLint
+fails any other file that does (DESIGN §5).
 
 **Line endings.** The Angular CLI writes CRLF on Windows; the repository is LF.
 `.gitattributes` makes git commit LF regardless, and `npm run format` fixes the

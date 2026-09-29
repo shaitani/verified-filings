@@ -2,13 +2,14 @@ import { Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
-import type { AnswerIn, AnswerRow, Ask, Part, Reply } from '../api/types';
+import { AnswerPanel } from '../answer/answer-panel';
+import type { AnswerIn, Ask, Reply } from '../api/types';
 import { AskView } from './ask-view';
 
 /** One round's reply: a refusal that sank the question, or each part and what became of it. */
 @Component({
   selector: 'vf-reply-view',
-  imports: [AskView, MatButtonModule, MatIconModule],
+  imports: [AnswerPanel, AskView, MatButtonModule, MatIconModule],
   templateUrl: './reply-view.html',
   styleUrl: './reply-view.scss',
 })
@@ -43,10 +44,5 @@ export class ReplyView {
     this.answered.emit(
       [...this.picking()].map(([ask_id, option_id]) => ({ kind: 'option', ask_id, option_id })),
     );
-  }
-
-  // Until slice 6 draws the answer: each figure of an answered part, as the Presenter wrote it.
-  protected rowsFor(part: Part): readonly AnswerRow[] {
-    return this.reply().answer?.rows.filter((row) => row.element_id === part.part_id) ?? [];
   }
 }
