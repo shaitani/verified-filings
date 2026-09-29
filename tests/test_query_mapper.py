@@ -217,6 +217,98 @@ async def test_quarter_with_no_matching_filing_is_unresolved(
     assert "no Q3 reporting window" in plan.unresolved[0].reason
 
 
+async def test_range_answers_the_years_it_has_and_notes_the_rest(
+    test_session_factory, clean_fake_company
+) -> None:
+    """A range reaching a year with no window is answered over the years that
+    have one, not refused -- and the missing year is named in a note, because
+    the row count is built from what resolved and the verdict cannot see it."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+    year_without_window = WINDOW_YEAR - 1
+    assert year_without_window not in WINDOWS
+
+    plan = await map_query(
+        _query(
+            {
+                "id": "e1",
+                "text": "from then until now",
+                "kind": "period",
+                "from_fiscal_year": year_without_window,
+                "to_fiscal_year": WINDOW_YEAR,
+            }
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert [p.fiscal_year for p in plan.filters.periods] == [WINDOW_YEAR]
+    assert plan.unresolved == []
+    [note] = [n for n in plan.notes if n.kind == "partial_coverage"]
+    assert f"for fiscal {year_without_window};" in note.message
+    assert FIXTURE_TICKER in note.message
+
+
+async def test_open_ended_range_keeps_its_first_year(
+    test_session_factory, clean_fake_company
+) -> None:
+    """ "Since <year>" runs to the newest year on file and never reaches back
+    before its start -- which is what rule 5d's old reading, every year on
+    file, got wrong whenever the start was not the store's first year."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "e1", "text": "since then", "kind": "period", "from_fiscal_year": WINDOW_YEAR}
+        ),
+        session_factory=test_session_factory,
+    )
+    assert [p.fiscal_year for p in plan.filters.periods] == [WINDOW_YEAR]
+    assert all(n.kind != "partial_coverage" for n in plan.notes)
+
+    after = WINDOW_YEAR + 1
+    later = await map_query(
+        _query(
+            {"id": "e1", "text": "since then", "kind": "period", "from_fiscal_year": after}
+        ),
+        session_factory=test_session_factory,
+    )
+    assert later.filters.periods == []
+    assert "no FY reporting window" in later.unresolved[0].reason
+
+
+async def test_range_with_no_window_at_all_is_unresolved_not_noted(
+    test_session_factory, clean_fake_company
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {
+                "id": "e1",
+                "text": "long ago",
+                "kind": "period",
+                "from_fiscal_year": 2001,
+                "to_fiscal_year": 2003,
+            }
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.filters.periods == []
+    assert "no FY reporting window" in plan.unresolved[0].reason
+    assert all(n.kind != "partial_coverage" for n in plan.notes)
+
+
+def test_gaps_name_a_whole_year_or_the_quarters_missing_from_it() -> None:
+    """NVIDIA over "2020 through 2025" by quarter: all of FY2020 is outside
+    the store, and FY2021 lost only Q1 and Q2 at ingest."""
+    asked = {(year, q) for year in range(2020, 2026) for q in ("Q1", "Q2", "Q3", "Q4")}
+    gaps = {(2020, q) for q in ("Q1", "Q2", "Q3", "Q4")} | {(2021, "Q1"), (2021, "Q2")}
+
+    assert (
+        query_mapper._describe_gaps(gaps, asked) == "fiscal 2020, or Q1 and Q2 of fiscal 2021"
+    )
+
+
 async def test_period_element_carrying_nothing_is_unresolved(
     test_session_factory, clean_fake_company
 ) -> None:

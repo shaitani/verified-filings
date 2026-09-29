@@ -162,24 +162,60 @@ becomes `shape="series"`; false leaves `shape` unset for the mapper to infer.
 ## 6. The period gates
 
 Periods are the part the model gets wrong most, and the rules here were
-rewritten once already after the first full eval run. Three gates:
+rewritten once already after the first full eval run. Four gates:
 
-**A period must name a time.** With no `fiscal_year`, `last_n_years` or
-`fiscal_period` it reaches the mapper and returns `Unresolved` — a refusal the
-reader sees. Caught here it costs one more generation instead.
+**A period must name a time.** With no `fiscal_year`, `from_fiscal_year`,
+`last_n_years` or `fiscal_period` it reaches the mapper and returns
+`Unresolved` — a refusal the reader sees. Caught here it costs one more
+generation instead.
 
-**A `fiscal_year` must be a year the question names, and not earlier than the
-earliest one.** Checked against the *question*, not the span. The model is told
+**Every year on a period must be one the question names, and not earlier than
+the earliest one** — `fiscal_year`, `from_fiscal_year` and `to_fiscal_year`
+alike. Checked against the *question*, not the span. The model is told
 nothing about today's date; measured on the first live run, "last year" came
 back as `fiscal_year: 2023`, which resolves cleanly and answers about the wrong
-year. Open-ended *forward* is allowed, because "since 2021" legitimately
-reaches years nobody typed; going below the earliest stated year is not,
-because nothing in the question suggests it.
+year. One year below the earliest is allowed, for the growth rule (5f).
 
-This rule used to read the span, which was wrong: a range like "from 2021
-through 2025" has to become five elements and only two of them can quote a
-year of their own. q025 was refused for emitting `"2022"`, which is exactly
-the right thing to do.
+**A range's end must be a year the question names.** "From 2020 until today"
+has no end the model can know, and a guessed one resolves cleanly — short of
+the data or past it. An open range leaves the end to the mapper, which reads
+each company's newest year from the data.
+
+**One span is one granularity.** Period elements copied from the same phrase
+are all annual or all quarterly (`_refuse_one_span_at_two_granularities`).
+Structural, like `_SharedHead`: it reads which elements share a span, not what
+the words say.
+
+### A range is one element
+
+"From 2021 through 2025", "2020-2025" and "since 2021" are one period element
+with `from_fiscal_year` and, when the question states one, `to_fiscal_year`;
+asked quarterly, four elements carrying the same range. The mapper expands it
+per company (semantic DESIGN §8c). This took the expansion away from the
+model, which used to write one element per year — slow (24 elements for six
+years by quarter, 40 s to generate) and unable to say "since 2021" at all:
+with no way to keep a first year, it meant every year on file, which is the
+same thing only while 2021 is where the store begins.
+
+Measured cold, 2026-09-29, on "Nvidia quarterly gross profits from 2020 until
+today / from 2020-2025 / from 2020 through 2025":
+
+| prompt | until today | 2020-2025 | through 2025 |
+|---|---|---|---|
+| before | one FY2020 element | six annual years, "quarterly" dropped | 24 elements |
+| range rules, closed quarterly example | open annual range **plus** four quarters | right | right |
+| + a sentence in 5d: "instead of, never as well as" | open annual range, quarters dropped | right | right |
+| sentence removed, open quarterly example added | annual range plus Q2–Q4 | right | right |
+| + the granularity gate | **right, on repair** | right | right |
+
+The same pattern as §9 and §10a: prose made it worse, an example moved it,
+and the structural check closed it. The quarterly range examples sit next to
+their annual twins — "between 2023 and 2024" beside "quarterly … from
+2021-2023", "since 2021" beside "each quarter from 2022 onwards". With the
+final prompt, fourteen questions ran cold with the same grades and row counts
+as before — the range and "since" questions (q012, q014, q025, q042, q043),
+the colon lists (q044, q045, q048, q051) and the quarter shapes (q016, q017,
+q018, q020, q038). The q018 round trip kept Costco on 2 of 2 cold runs.
 
 **Every query needs at least one period element.** An empty
 `PlanFilters.periods` is *unconstrained*, not empty — every year on file.

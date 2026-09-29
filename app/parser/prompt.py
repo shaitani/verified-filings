@@ -91,7 +91,7 @@ RULES
       "revenue from outside the United States"
         -> metric "revenue", metric_qualifier "from outside the United States"
       "revenue from 2021 through 2025"
-        -> periods, one per year. No qualifier.
+        -> a period, from 2021 to 2025. No qualifier.
     Do NOT fold the phrase into the metric's `text`, and do NOT leave it out.
     Leaving it out is the worst option available: the question becomes "what
     was the company's revenue", and a total is returned for a question that
@@ -133,15 +133,18 @@ RULES
     "fell the most" compare two periods, so they need two periods (rule 5f) and
     no threshold element.
 
-5. A period element MUST carry at least one of `fiscal_year`, `last_n_years`
-   or `fiscal_period`, or it names no time at all.
+5. A period element MUST carry at least one of `fiscal_year`,
+   `from_fiscal_year`, `last_n_years` or `fiscal_period`, or it names no time
+   at all.
      "in 2024"            -> fiscal_year: 2024
+     "2021 to 2023"       -> from_fiscal_year: 2021, to_fiscal_year: 2023
      "the last 3 years"   -> last_n_years: 3
      "Q3 2024"            -> fiscal_year: 2024, fiscal_period: "Q3"
    With no `fiscal_period`, a period means the full fiscal year.
 
-5a. YOU ARE NOT TOLD WHAT YEAR IT IS NOW. Never guess one. Set `fiscal_year`
-    only when the question states a year in digits. Everything relative goes
+5a. YOU ARE NOT TOLD WHAT YEAR IT IS NOW. Never guess one. Set a year --
+    `fiscal_year`, `from_fiscal_year` or `to_fiscal_year` -- only when the
+    question states that year in digits. Everything relative goes
     in `last_n_years`, counted back from the most recent year on file:
       "last year"          -> last_n_years: 1
       "this year"          -> last_n_years: 1
@@ -161,18 +164,23 @@ RULES
     ratio?", "Which of these has the highest operating margin?" -- emit one
     period element with last_n_years: 1, which is the most recent year.
 
-5c. A RANGE OF YEARS IS ONE ELEMENT PER YEAR. Both ends stated, so write
-    them all out:
-      "between 2023 and 2024"    -> fiscal_year 2023, fiscal_year 2024
-      "from 2021 through 2025"   -> fiscal_year 2021, 2022, 2023, 2024, 2025
-      "2023 to 2025"             -> fiscal_year 2023, 2024, 2025
+5c. A RANGE OF YEARS IS ONE ELEMENT, with `from_fiscal_year` for its first
+    year and `to_fiscal_year` for its last. Do not write the years out one by
+    one:
+      "between 2023 and 2024"    -> from_fiscal_year 2023, to_fiscal_year 2024
+      "from 2021 through 2025"   -> from_fiscal_year 2021, to_fiscal_year 2025
+      "2023 to 2025"             -> from_fiscal_year 2023, to_fiscal_year 2025
+      "2020-2025"                -> from_fiscal_year 2020, to_fiscal_year 2025
     Do NOT turn a range of years into quarters. "Between 2023 and 2024" is
-    two annual figures; it becomes quarters only if the question says so.
+    two annual figures; it becomes quarters only if the question says so --
+    "quarterly", "by quarter", "each quarter" -- and then rule 6 applies.
 
 5d. AN OPEN-ENDED SPAN HAS NO LAST YEAR YOU CAN NAME, so do not invent one.
-    "since 2021", "from 2021 onwards", "over the years" -> ONE element with
-    fiscal_period: "FY" and no fiscal_year and no last_n_years, which means
-    every year on file.
+    "since 2021", "from 2021 onwards", "from 2021 until today", "2021 to
+    date" -> ONE element with from_fiscal_year: 2021 and NO to_fiscal_year,
+    which means every year from 2021 to the most recent on file.
+    "over the years", with no year at all -> ONE element with
+    fiscal_period: "FY" and nothing else, which means every year on file.
 
 5e. A QUARTER AND A YEAR GO ON THE SAME ELEMENT. They are not alternatives.
     `fiscal_period` says WHICH quarter; `fiscal_year` or `last_n_years` says
@@ -201,9 +209,9 @@ RULES
     This rule changes the PERIODS and nothing else. Rule 1 still holds for the
     metric: copy the words the question uses. A question asking how revenue
     "grew" has a metric of "revenue", not "revenue growth".
-    It also does not apply to a period that already covers every year -- one
-    with only a fiscal_period and no year (rule 5d). There is nothing before
-    "every year", so do not add an earlier one.
+    It also does not apply to a range (rules 5c and 5d), which already has a
+    first year and a last, or to a period that already covers every year --
+    one with only a fiscal_period and no year. Do not add an earlier year.
 
 5g. "THE LAST QUARTER" NAMES NO QUARTER, so do not pick one. Use
     `last_n_quarters`, which means the most recent quarters on file whatever
@@ -220,8 +228,9 @@ RULES
 
 6. One period element covers ONE quarter label. "by quarter", "each quarter"
    or "quarterly" therefore needs FOUR elements -- Q1, Q2, Q3 and Q4 -- each
-   repeating the same year selector. A range of years by quarter needs four
-   per year. Emitting fewer silently answers a smaller question.
+   repeating the same year selector. A range of years by quarter is still
+   four elements, each carrying the same from_fiscal_year and to_fiscal_year.
+   Emitting fewer silently answers a smaller question.
 
 7. `intent` is one of:
    lookup   one figure           compare  several entities side by side
@@ -348,8 +357,22 @@ _EXAMPLES: list[tuple[str, str]] = [
         "Which company grew revenue fastest between 2023 and 2024?",
         """{"intent":"rank","elements":[
   {"id":"e1","kind":"metric","text":"revenue","over_time":"growth","rank":"highest"},
-  {"id":"e2","kind":"period","text":"between 2023 and 2024","fiscal_year":2023},
-  {"id":"e3","kind":"period","text":"between 2023 and 2024","fiscal_year":2024}],"wants_chart":false}""",
+  {"id":"e2","kind":"period","text":"between 2023 and 2024","from_fiscal_year":2023,"to_fiscal_year":2024}],"wants_chart":false}""",
+    ),
+    # Rules 5c and 6 together, beside the annual range above on purpose: the
+    # same shape of range, asked quarterly, is four elements carrying it.
+    # Measured 2026-09-29: "quarterly gross profits from 2020-2025" came back
+    # as six annual elements, "quarterly" dropped -- every range example was
+    # annual.
+    (
+        "Show me Apple's quarterly net income from 2021-2023",
+        """{"intent":"trend","elements":[
+  {"id":"e1","kind":"company","text":"Apple"},
+  {"id":"e2","kind":"metric","text":"net income"},
+  {"id":"e3","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q1"},
+  {"id":"e4","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q2"},
+  {"id":"e5","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q3"},
+  {"id":"e6","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q4"}],"wants_chart":false}""",
     ),
     # Rule 5d. "since 2021" has no closing year to name, so the element names
     # none either. Measured: it came back as fiscal_year 2021 alone, which
@@ -359,7 +382,23 @@ _EXAMPLES: list[tuple[str, str]] = [
         """{"intent":"trend","elements":[
   {"id":"e1","kind":"company","text":"Intel"},
   {"id":"e2","kind":"metric","text":"R&D spending"},
-  {"id":"e3","kind":"period","text":"since 2021","fiscal_period":"FY"}],"wants_chart":false}""",
+  {"id":"e3","kind":"period","text":"since 2021","from_fiscal_year":2021}],"wants_chart":false}""",
+    ),
+    # Rules 5d and 6 together, the open-ended twin of the quarterly range
+    # above: four elements, and no annual one beside them. Measured
+    # 2026-09-29 without it, "quarterly ... from 2020 until today" came back
+    # as the open annual range plus four quarterly ones on 2 of 2 cold runs;
+    # a sentence in 5d saying "instead of, never as well as" made it drop
+    # the quarters instead.
+    (
+        "Show Microsoft's operating income each quarter from 2022 onwards",
+        """{"intent":"trend","elements":[
+  {"id":"e1","kind":"company","text":"Microsoft"},
+  {"id":"e2","kind":"metric","text":"operating income"},
+  {"id":"e3","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q1"},
+  {"id":"e4","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q2"},
+  {"id":"e5","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q3"},
+  {"id":"e6","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q4"}],"wants_chart":false}""",
     ),
     # Rule 5b. No time in the question at all, so the period element's text is
     # a description rather than a span -- the only kind of element allowed

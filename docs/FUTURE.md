@@ -124,6 +124,10 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   a later 10-K (MSFT, NVDA, ORCL had filed FY2026 as of 2026-08). Once **all
   20** have, bump `FISCAL_YEAR_MAX` and re-run `get-xbrl` (it re-filters from
   the cache, no network) and the load.
+- **Recover NVIDIA's FY2021 Q1 and Q2** (D3.8), dropped because the filings
+  carry `fy: 2020`. Decide how ingest scopes a filing whose `fy` disagrees with
+  its period dates before changing the filter — it is the same field D1.1
+  warns about.
 - **Submissions overflow** for JPM and BAC (G9), if a five-year analysis of
   their submissions is ever needed.
 - **Loader:** cross-check a file's `cik` against its ticker; model the

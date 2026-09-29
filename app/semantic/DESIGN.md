@@ -358,10 +358,27 @@ alternatives, so that stays a refusal. And when no named company resolves, the
 scope must **not** widen to every loaded filer; `map_query` widens only when
 the question names no company element at all.
 
+### The same for periods: a range answers the years it has
+
+A **range** (`from_fiscal_year`, optionally `to_fiscal_year`) is resolved per
+company, to that company's newest year when it has no end, and the years in
+it with no window are noted rather than refused (`_range_gap_notes`, a
+`partial_coverage` note). "Quarterly gross profit from 2020 through 2025" for
+NVIDIA answers FY2021 Q3 through FY2025 Q4 and says:
+
+> Nothing is on file for NVIDIA CORP (NVDA) for fiscal 2020, or Q1 and Q2 of
+> fiscal 2021; the answer covers the other periods asked for
+
+The note is what keeps this honest. The plan's row count is built from the
+windows that resolved, so the verdict is `complete` without the missing
+periods and cannot say they were asked for. Companies with the same gaps
+share one note, so "since 2020" over twenty filers is one sentence. A range
+that resolves nothing at all is still `Unresolved`.
+
 ### What this does not fix
 
-A period that resolves to nothing. "What was Apple's revenue in 2019?" names
-one year, no window exists for it, and there is no surviving fraction to
+A single year that resolves to nothing. "What was Apple's revenue in 2019?"
+names one year, no window exists for it, and there is no surviving fraction to
 answer — so it stays a refusal. Whether to answer such a question from the
 comparative columns a later 10-K carries is a separate decision, still open.
 

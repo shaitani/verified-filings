@@ -106,9 +106,11 @@ the second).
 - **Retired tickers do not resolve.** Both SEC feeds give only the current
   symbol, so "FB" does not find Meta. Never a wrong company — the cik never
   changes — only a refusal.
-- **A year with no loaded window refuses.** "Apple's revenue in 2019" names a
-  year outside FY2021–FY2025. Answering it from the comparative columns a
-  later 10-K carries is an open decision.
+- **A single year with no loaded window refuses.** "Apple's revenue in 2019"
+  names a year outside FY2021–FY2025. A range reaching past the store is
+  answered over the years it has, with a note naming the rest. Answering a
+  missing year from the comparative columns a later 10-K carries is an open
+  decision.
 - **Alias recall.** Terms people ask that fall to embedding search: interest
   income, treasury stock, deferred revenue, operating expenses, depreciation,
   accounts receivable / payable, retained earnings.
@@ -143,7 +145,7 @@ because the eval set grades the decision, not the figure.
 | question | what comes back | where | status |
 |---|---|---|---|
 | q057 "highest operating income at Costco **in 2024**" | Costco's **FY2025** quarters: the parser drops "in 2024" and emits `last_n_years: 1` | parser | a plausible wrong answer |
-| "revenue from 2023 to 2025 **by quarter**" | 128 rows, not 36: three years plus four bare quarters, which the mapper reads across every year | parser | kept as the Presenter's `smoke_mixed` fixture |
+| q058–q060 "Nvidia quarterly **gross profits** from 2020 …" | refused: the plural misses the curated `gross profit` entry, and embedding search finds four covered candidates, so it asks | alias | plural handling to be decided |
 | q042 "has anyone's total debt more than **doubled** since 2021?" | year-over-year dollar changes for 15 filers, not growth from 2021 with a >100% filter | parser / mapper | G1 |
 | q040 "**average** R&D spend across these companies" | the average on 14 rows, one per company | executor | the Presenter shows it as one figure naming the 14; the real fix is the closed list of operations (FUTURE) |
 | q018's round trip | dropped "Costco" and ranked every filer's quarters | parser | fixed by example order, not a check — G4 |
@@ -463,6 +465,17 @@ signals, wrong as hard filters.
 Filers sometimes tag thousands as millions. **Measured:** no annual revenue
 spread above 100× within any company, so nothing is present today. Nothing
 guards against it.
+
+#### D3.8 A filing's `fy` can be wrong, and ingest scopes by it
+
+The SEC's `fy` on a fact comes from the filing's own fiscal-year tag, and
+ingest keeps FY2021–FY2025 by that field. **Measured:** NVIDIA tagged its
+first two FY2021 10-Qs (filed 2020-05-21 and 2020-08-19, periods ending
+2020-04-26 and 2020-07-26) `fy: 2020`, so both were dropped although their
+periods sit inside FY2021. Every other filer has every FY and quarter window
+from FY2021 to FY2025; NVIDIA lacks FY2021 Q1 and Q2. A range reaching them
+says so in a note (semantic DESIGN §8c); a single `Q1 2021` for NVIDIA is
+refused.
 
 ### D4. Checked, and not a problem here
 

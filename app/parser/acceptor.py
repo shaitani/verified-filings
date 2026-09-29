@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from decimal import Decimal
 
 from pydantic import ValidationError
@@ -213,7 +214,14 @@ _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "metric": frozenset({"clarify_as", "over_time", "rank"}),
     "company": frozenset(),
     "period": frozenset(
-        {"fiscal_year", "fiscal_period", "last_n_years", "last_n_quarters"}
+        {
+            "fiscal_year",
+            "from_fiscal_year",
+            "to_fiscal_year",
+            "fiscal_period",
+            "last_n_years",
+            "last_n_quarters",
+        }
     ),
     "company_group": frozenset({"sic_code", "sic_description"}),
     "metric_qualifier": frozenset({"qualifies"}),
@@ -410,6 +418,38 @@ def _refuse_a_list_item_used_twice(elements: list[ElementIn], question: str) -> 
         used[item] = element.id
 
 
+def _refuse_one_span_at_two_granularities(elements: list[WireElement]) -> None:
+    """Period elements copied from one phrase are all annual or all quarterly.
+
+    One phrase names one granularity. "Quarterly from 2020 until today" came
+    back cold as the open annual range *plus* the quarters (2 of 2 runs, then
+    with Q1 replaced by the annual one), and "revenue from 2023 to 2025 by
+    quarter" once as three years plus four bare quarters. The mapper resolves
+    both happily into a result mixing 363-day and 90-day figures -- more rows
+    than were asked for, and an annual figure passed off as a point in a
+    quarterly series.
+
+    Structural, like ``_SharedHead``: it reads which elements share a span, not
+    what the words say. Two granularities stated in two phrases ("2024 and
+    each quarter of it") keep separate spans and pass.
+    """
+    by_span: dict[str, list[WireElement]] = defaultdict(list)
+    for element in elements:
+        if element.kind == "period":
+            by_span[normalize(element.text)].append(element)
+    for group in by_span.values():
+        annual = [e.id for e in group if e.fiscal_period in (None, "FY")]
+        quarterly = [e.id for e in group if e.fiscal_period not in (None, "FY")]
+        if annual and quarterly:
+            raise MalformedProposal(
+                f"period elements {annual} and {quarterly} were all copied from "
+                f"{group[0].text!r}, but {annual} are annual and {quarterly} are "
+                "quarters. One phrase is one or the other: asked quarterly, it is "
+                "four elements, Q1, Q2, Q3 and Q4, each with the same years and no "
+                "annual element beside them."
+            )
+
+
 def _check_clarify_as(element: WireElement) -> None:
     """``clarify_as`` names a curated question, or is absent.
 
@@ -444,42 +484,66 @@ def _check_period(element: WireElement, span: str, question: str) -> None:
     its own year in it. What actually matters is that the year came from the
     reader rather than from the model, and the question is where to look.
 
-    Open-ended forward is allowed -- "since 2021" legitimately reaches years
-    the question never names. Backwards is allowed by exactly one year, and
-    for one reason: a growth or change question needs the period *before* the
-    one it names, and "revenue growth in 2024" is meaningless without 2023.
-    Two years back is not a comparison, so that is where the line sits.
+    Open-ended forward is allowed -- a ``fiscal_year`` inside a range the
+    question states is a year it never typed. Backwards is allowed by exactly
+    one year, and for one reason: a growth or change question needs the period
+    *before* the one it names, and "revenue growth in 2024" is meaningless
+    without 2023. Two years back is not a comparison, so that is where the line
+    sits.
+
+    A range's **end** is held tighter: ``to_fiscal_year`` must be a year the
+    question names. "From 2020 until today" has no end the model can know --
+    it is not told what year it is -- and a guessed one resolves cleanly,
+    cutting the answer short or reaching for a year nobody asked about. An
+    open range leaves the end to the mapper, which reads it from the data.
     """
     if (
         element.fiscal_year,
+        element.from_fiscal_year,
+        element.to_fiscal_year,
         element.last_n_years,
         element.last_n_quarters,
         element.fiscal_period,
-    ) == (None,) * 4:
+    ) == (None,) * 6:
         raise MalformedProposal(
             f"period element {element.id!r} ({span!r}) carries no fiscal_year, "
-            "last_n_years, last_n_quarters or fiscal_period, so it names no time "
-            "at all. Set fiscal_year for a stated year, last_n_years for a "
-            "relative span of years, or last_n_quarters for the most recent "
-            "quarters."
+            "from_fiscal_year, last_n_years, last_n_quarters or fiscal_period, so "
+            "it names no time at all. Set fiscal_year for a stated year, "
+            "from_fiscal_year (and to_fiscal_year) for a range of years, "
+            "last_n_years for a relative span of years, or last_n_quarters for "
+            "the most recent quarters."
         )
 
-    if element.fiscal_year is None:
+    years = {
+        name: getattr(element, name)
+        for name in ("fiscal_year", "from_fiscal_year", "to_fiscal_year")
+        if getattr(element, name) is not None
+    }
+    if not years:
         return
 
     stated = [int(year) for year in _YEAR.findall(question)]
     if not stated:
+        name, year = next(iter(years.items()))
         raise MalformedProposal(
-            f"period element {element.id!r} has fiscal_year "
-            f"{element.fiscal_year}, but the question names no year at all. "
-            "You are not told what year it is now, so do not guess one: use "
-            'last_n_years for a relative span ("last year" is last_n_years: 1).'
+            f"period element {element.id!r} has {name} {year}, but the question "
+            "names no year at all. You are not told what year it is now, so do not "
+            'guess one: use last_n_years for a relative span ("last year" is '
+            "last_n_years: 1)."
         )
-    if element.fiscal_year < min(stated) - 1:
+    for name, year in years.items():
+        if year < min(stated) - 1:
+            raise MalformedProposal(
+                f"period element {element.id!r} has {name} {year}, which is more "
+                f"than a year earlier than anything the question names (the "
+                f"earliest is {min(stated)})."
+            )
+    if element.to_fiscal_year is not None and element.to_fiscal_year not in stated:
         raise MalformedProposal(
-            f"period element {element.id!r} has fiscal_year "
-            f"{element.fiscal_year}, which is more than a year earlier than "
-            f"anything the question names (the earliest is {min(stated)})."
+            f"period element {element.id!r} has to_fiscal_year "
+            f"{element.to_fiscal_year}, which the question does not name. A range "
+            "that runs to today or to the latest year has no to_fiscal_year: set "
+            "from_fiscal_year alone."
         )
 
 
@@ -525,6 +589,8 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 id=element.id,
                 text=span,
                 fiscal_year=element.fiscal_year,
+                from_fiscal_year=element.from_fiscal_year,
+                to_fiscal_year=element.to_fiscal_year,
                 fiscal_period=element.fiscal_period,
                 last_n_years=element.last_n_years,
                 last_n_quarters=element.last_n_quarters,
@@ -638,6 +704,8 @@ def accept(
             "the question names no time, use last_n_years: 1 for the most recent "
             "year."
         )
+
+    _refuse_one_span_at_two_granularities(elements)
 
     ranked = [e.id for e in elements if e.kind == "metric" and e.rank is not None]
     if wire.intent == "rank" and not ranked:

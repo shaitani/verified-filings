@@ -8,7 +8,18 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 ---
 
-## Now: nothing in progress
+## Now: plural metric phrases
+
+q058–q060 ("Nvidia quarterly **gross profits** from 2020 …") parse their
+years correctly and fail only because the plural misses the curated
+`gross profit` entry ([docs/GAPS.md](docs/GAPS.md#questions-that-come-back-wrong)).
+Two fixes to put to the user, neither started: list `gross profits` as a
+synonym (the file's convention — 21 plurals are listed by hand), or fall back
+to the singular when a phrase misses, with a load-time check that no
+singular/plural pair reaches different entries (none does today, over 277
+forms).
+
+## Before that
 
 The Web Client ([A], `web/`) is complete: it signs in, asks, follows a
 question's stages live, answers questions put back, draws the answer, keeps

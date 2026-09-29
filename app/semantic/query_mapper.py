@@ -170,7 +170,9 @@ async def map_query(
                     for element in companies
                     if element.text in missing_companies
                 ]
-        resolved_periods, period_problems = await _resolve_periods(periods, session, ciks=ciks)
+        resolved_periods, period_problems, period_notes = await _resolve_periods(
+            periods, session, ciks=ciks
+        )
         # A metric asked for over time is bound over the periods asked for
         # *and* the one before each, which a growth figure divides by; every
         # other metric only over the periods asked for, so it gains no rows.
@@ -287,6 +289,7 @@ async def map_query(
         thresholds=thresholds,
         over_time=over_time,
         notes=company_notes
+        + period_notes
         + coverage_notes
         + over_time_notes
         + _alignment_notes(resolved_periods, result)
@@ -928,10 +931,10 @@ async def _lookup_company(element: CompanyElementIn, session: AsyncSession) -> l
 
 async def _resolve_periods(
     elements: list[PeriodElementIn], session: AsyncSession, *, ciks: list[int]
-) -> tuple[list[ResolvedPeriod], list[Unresolved]]:
+) -> tuple[list[ResolvedPeriod], list[Unresolved], list[Note]]:
     """Concrete date windows for every period element, per company.
 
-    Two decisions worth knowing about:
+    Three decisions worth knowing about:
 
     A period element with no ``fiscal_period`` defaults to ``"FY"`` -- "revenue
     in 2024" means the fiscal year, not every quarter in it.
@@ -950,9 +953,16 @@ async def _resolve_periods(
 
     ``last_n_quarters`` is resolved **per company, by date**, which the year
     path is not -- see ``_recent_quarters``.
+
+    A **range** (``from_fiscal_year``) is answered over the years it has, and
+    the ones it does not are noted rather than refused. A single
+    ``fiscal_year`` with no window still refuses: "revenue in 2019" has no
+    answer, while "revenue from 2020 through 2025" has five sixths of one, and
+    refusing it withholds figures the store holds. The note is what keeps the
+    shortfall from being silent -- see ``_range_gap_notes``.
     """
     if not elements:
-        return [], []
+        return [], [], []
 
     windows = _with_derived_q4(await _load_windows(session, ciks))
     if not windows:
@@ -962,11 +972,14 @@ async def _resolve_periods(
                 reason="no filing reporting windows could be resolved for the companies in scope",
             )
             for element in elements
-        ]
+        ], []
 
     newest_by_company = _newest_by_company(windows)
     resolved: dict[tuple[int, int, str], ResolvedPeriod] = {}
     problems: list[Unresolved] = []
+    #: Every (company, fiscal year, fiscal period) a range asked for, found or
+    #: not -- the difference from ``windows`` is what the range's note names.
+    asked_by_range: set[tuple[int, int, str]] = set()
 
     for element in elements:
         if element.last_n_quarters is not None:
@@ -983,14 +996,15 @@ async def _resolve_periods(
 
         if (
             element.fiscal_year,
+            element.from_fiscal_year,
             element.last_n_years,
             element.fiscal_period,
-        ) == (None,) * 3:
+        ) == (None,) * 4:
             problems.append(
                 Unresolved(
                     element_id=element.id,
                     reason=f"period {element.text!r} carries no fiscal_year, "
-                    "last_n_years or fiscal_period",
+                    "from_fiscal_year, last_n_years or fiscal_period",
                 )
             )
             continue
@@ -1001,14 +1015,20 @@ async def _resolve_periods(
             """The years this element selects *for this company*.
 
             ``None`` means unconstrained -- every year there is a window for.
-            A year range is computed from that company's own newest year, so
-            filers loaded to different points each get their own last N.
+            A relative span, and a range with no end, is computed from that
+            company's own newest year, so filers loaded to different points
+            each get their own last N.
             """
             if element.fiscal_year is not None:
                 return {element.fiscal_year}
+            newest = newest_by_company.get(company_cik)
+            if element.from_fiscal_year is not None:
+                last = element.to_fiscal_year or newest
+                if last is None:
+                    return set()
+                return set(range(element.from_fiscal_year, last + 1))
             if element.last_n_years is None:
                 return None
-            newest = newest_by_company.get(company_cik)
             if newest is None:
                 return set()
             return set(range(newest - element.last_n_years + 1, newest + 1))
@@ -1027,9 +1047,72 @@ async def _resolve_periods(
                     reason=f"no {wanted_period} reporting window found for {element.text!r}",
                 )
             )
+        elif element.from_fiscal_year is not None:
+            # Only a range that found something is noted: one that found
+            # nothing is refused above, and a note would say it twice.
+            asked_by_range.update(
+                (company_cik, year, wanted_period)
+                for company_cik in ciks
+                for year in _wanted(company_cik)
+            )
         resolved.update(matched)
 
-    return [resolved[key] for key in sorted(resolved)], problems
+    notes = await _range_gap_notes(asked_by_range, windows, session)
+    return [resolved[key] for key in sorted(resolved)], problems, notes
+
+
+async def _range_gap_notes(
+    asked: set[tuple[int, int, str]],
+    windows: dict[tuple[int, int, str], ResolvedPeriod],
+    session: AsyncSession,
+) -> list[Note]:
+    """Say which periods a range asked for and the answer does not hold.
+
+    Two causes, one sentence: a year before or after the store's window
+    ("from 2020" over FY2021-FY2025), and a hole inside it (NVIDIA tagged its
+    FY2021 Q1 and Q2 10-Qs ``fy: 2020``, so ingest's year filter dropped them).
+    Either way the reader asked for a period and is not getting it, and the
+    verdict cannot say so -- the plan's row count is built from the windows
+    that resolved, so the result is ``complete`` without them.
+
+    One note per distinct set of gaps rather than per company: "since 2020"
+    over twenty filers is one sentence about fiscal 2020, not twenty.
+    """
+    gaps_by_company: dict[int, set[tuple[int, str]]] = defaultdict(set)
+    asked_by_company: dict[int, set[tuple[int, str]]] = defaultdict(set)
+    for company_cik, year, fiscal_period in asked:
+        asked_by_company[company_cik].add((year, fiscal_period))
+        if (company_cik, year, fiscal_period) not in windows:
+            gaps_by_company[company_cik].add((year, fiscal_period))
+
+    companies_by_gaps: dict[str, list[int]] = defaultdict(list)
+    for company_cik, gaps in sorted(gaps_by_company.items()):
+        described = _describe_gaps(gaps, asked_by_company[company_cik])
+        companies_by_gaps[described].append(company_cik)
+
+    return [
+        Note(
+            kind="partial_coverage",
+            message=(
+                f"Nothing is on file for {await _describe_scope(company_ciks, session)} "
+                f"for {described}; the answer covers the other periods asked for"
+            ),
+        )
+        for described, company_ciks in companies_by_gaps.items()
+    ]
+
+
+def _describe_gaps(gaps: set[tuple[int, str]], asked: set[tuple[int, str]]) -> str:
+    """``"fiscal 2020, or Q1 and Q2 of fiscal 2021"`` -- a whole year when every
+    period asked of it is missing, its quarters by name when only some are."""
+    parts = []
+    for year in sorted({year for year, _ in gaps}):
+        missing = sorted(p for y, p in gaps if y == year)
+        if len(missing) == len({p for y, p in asked if y == year}):
+            parts.append(f"fiscal {year}")
+        else:
+            parts.append(f"{' and '.join(missing)} of fiscal {year}")
+    return ", or ".join(parts)
 
 
 def _newest_by_company(

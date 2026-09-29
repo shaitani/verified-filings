@@ -82,10 +82,17 @@ def _elements(query) -> list[str]:
             bits = []
             if element.fiscal_year:
                 bits.append(f"fiscal_year {element.fiscal_year}")
+            if element.from_fiscal_year:
+                bits.append(
+                    f"fiscal years {element.from_fiscal_year}–"
+                    f"{element.to_fiscal_year or '(newest on file)'}"
+                )
             if element.fiscal_period:
                 bits.append(f"fiscal_period {element.fiscal_period}")
             if element.last_n_years:
                 bits.append(f"last_n_years {element.last_n_years}")
+            if element.last_n_quarters:
+                bits.append(f"last_n_quarters {element.last_n_quarters}")
             detail = ", ".join(bits) or "—"
         elif element.kind == "company":
             detail = element.ticker or element.name or "—"

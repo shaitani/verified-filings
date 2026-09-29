@@ -525,3 +525,23 @@ questions:
       16-week quarter, over 2.20B, 2.06B, 1.98B -- checked 2026-09-27).
       Dropped: 16 filers report quarterly OperatingIncomeLoss, so about 64 rows
       and a partial_coverage note naming the four that do not.
+
+  - id: q058
+    question: Show me Nvidia quarterly gross profits from 2020 until today
+    expect: [answered]
+    needs: [retrieval]
+
+  - id: q059
+    question: Show me Nvidia quarterly gross profits from 2020-2025
+    expect: [answered]
+    needs: [retrieval]
+
+  - id: q060
+    question: Show me Nvidia quarterly gross profits from 2020 through 2025
+    expect: [answered]
+    needs: [retrieval]
+
+  - id: q061
+    question: Show me the top 3 companies with the highest operating losses in 2023
+    expect: [answered]
+    needs: [retrieval, ranking]

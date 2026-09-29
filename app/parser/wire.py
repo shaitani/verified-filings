@@ -68,6 +68,11 @@ class WireElement(BaseModel):
     # dropping them, since a field on the wrong kind means the model was
     # confused about the element and silence would hide that.
     fiscal_year: int | None = None
+    # A range of years, as one element. Placed beside `fiscal_year` and in the
+    # order the prompt's examples write them: the grammar fixes the order of
+    # the keys, and an example the grammar cannot produce teaches nothing.
+    from_fiscal_year: int | None = None
+    to_fiscal_year: int | None = None
     fiscal_period: QueryFiscalPeriod | None = None
     last_n_years: int | None = None
     last_n_quarters: int | None = None

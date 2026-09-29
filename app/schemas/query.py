@@ -243,9 +243,10 @@ class CompanyElementIn(_ElementBase):
 
 
 class PeriodElementIn(_ElementBase):
-    """A time span. Absolute (``fiscal_year`` / ``fiscal_period``), relative by
-    year (``last_n_years``), or relative by quarter (``last_n_quarters``); the
-    mapper turns all three into concrete windows.
+    """A time span. Absolute (``fiscal_year`` / ``fiscal_period``), a range of
+    years (``from_fiscal_year`` / ``to_fiscal_year``), relative by year
+    (``last_n_years``), or relative by quarter (``last_n_quarters``); the
+    mapper turns all four into concrete windows.
 
     ``fiscal_period`` uses ``QueryFiscalPeriod``, which accepts "Q4" even
     though no Q4 filing exists -- see that alias. The mapper turns it into the
@@ -274,6 +275,19 @@ class PeriodElementIn(_ElementBase):
     #: different pair of windows for Apple than for Microsoft.
     last_n_quarters: int | None = Field(default=None, ge=1, le=40)
 
+    #: "from 2021 through 2025", "since 2021", "from 2020 until today" -- every
+    #: fiscal year from ``from_fiscal_year`` to ``to_fiscal_year`` inclusive,
+    #: or to the newest year on file for that company when there is no end.
+    #:
+    #: A range used to be one ``fiscal_year`` element per year, written out by
+    #: the model, and "since 2021" had no way to keep its first year at all:
+    #: it became every year on file, which is the same thing only while 2021
+    #: happens to be where the store begins. Unlike ``fiscal_year``, a year in
+    #: the range with no window is not a refusal -- the mapper answers the
+    #: years it has and notes the ones it does not.
+    from_fiscal_year: int | None = Field(default=None, ge=2000, le=2100)
+    to_fiscal_year: int | None = Field(default=None, ge=2000, le=2100)
+
     @model_validator(mode="after")
     def _one_way_of_saying_when(self) -> PeriodElementIn:
         """Absolute, relative-by-year and relative-by-quarter are exclusive.
@@ -285,6 +299,7 @@ class PeriodElementIn(_ElementBase):
         """
         ways = {
             "fiscal_year": self.fiscal_year,
+            "from_fiscal_year": self.from_fiscal_year,
             "last_n_years": self.last_n_years,
             "last_n_quarters": self.last_n_quarters,
         }
@@ -293,6 +308,17 @@ class PeriodElementIn(_ElementBase):
             raise ValueError(
                 f"a period says when in exactly one way, but {set_ways} were all set"
             )
+        if self.to_fiscal_year is not None:
+            if self.from_fiscal_year is None:
+                raise ValueError(
+                    f"to_fiscal_year={self.to_fiscal_year} ends a range, so it needs "
+                    f"from_fiscal_year to start it"
+                )
+            if self.to_fiscal_year < self.from_fiscal_year:
+                raise ValueError(
+                    f"the range runs backwards: from_fiscal_year={self.from_fiscal_year} "
+                    f"is after to_fiscal_year={self.to_fiscal_year}"
+                )
         if self.last_n_quarters is not None and self.fiscal_period is not None:
             raise ValueError(
                 f"last_n_quarters={self.last_n_quarters} already means the most recent "

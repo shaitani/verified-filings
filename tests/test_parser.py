@@ -604,6 +604,90 @@ def test_the_year_before_the_one_named_is_allowed():
     assert len(accept(reply, "What was revenue growth in 2024?").elements) == 3
 
 
+def _range(**fields) -> str:
+    return _reply(
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "revenue"},
+            {"id": "e2", "kind": "period", "text": "the range", **fields},
+        ]
+    )
+
+
+def test_a_stated_range_is_one_element():
+    period = accept(
+        _range(from_fiscal_year=2020, to_fiscal_year=2025, fiscal_period="Q2"),
+        "Show quarterly revenue from 2020-2025",
+    ).elements[1]
+    assert (period.from_fiscal_year, period.to_fiscal_year, period.fiscal_period) == (
+        2020,
+        2025,
+        "Q2",
+    )
+
+
+def test_an_open_range_has_no_end():
+    period = accept(
+        _range(from_fiscal_year=2020), "Show revenue from 2020 until today"
+    ).elements[1]
+    assert (period.from_fiscal_year, period.to_fiscal_year) == (2020, None)
+
+
+def test_an_invented_end_of_range_is_refused():
+    """"Until today" names no year, and the model is not told which one it is.
+    A guessed end resolves cleanly -- short of the data, or past it."""
+    with pytest.raises(MalformedProposal, match="does not name"):
+        accept(
+            _range(from_fiscal_year=2020, to_fiscal_year=2025),
+            "Show revenue from 2020 until today",
+        )
+
+
+def test_a_range_starting_far_before_any_stated_year_is_refused():
+    with pytest.raises(MalformedProposal, match="from_fiscal_year 2018"):
+        accept(_range(from_fiscal_year=2018), "Show revenue since 2021")
+
+
+def test_a_range_in_a_question_naming_no_year_is_refused():
+    with pytest.raises(MalformedProposal, match="names no year"):
+        accept(_range(from_fiscal_year=2021), "Show revenue over the years")
+
+
+def test_a_range_end_without_a_start_is_refused():
+    with pytest.raises(MalformedProposal, match="needs from_fiscal_year"):
+        accept(_range(to_fiscal_year=2025), "Show revenue through 2025")
+
+
+def test_one_span_cannot_be_both_annual_and_quarterly():
+    """Measured cold: "quarterly from 2020 until today" came back as the open
+    annual range plus the quarters, and the mapper resolved the mix."""
+    span = "quarterly from 2020 until today"
+    annual = {"kind": "period", "text": span, "from_fiscal_year": 2020}
+    periods = [{"id": "e2", **annual}] + [
+        {"id": f"e{i}", **annual, "fiscal_period": q}
+        for i, q in ((3, "Q2"), (4, "Q3"), (5, "Q4"))
+    ]
+    reply = _reply(elements=[{"id": "e1", "kind": "metric", "text": "revenue"}, *periods])
+    with pytest.raises(MalformedProposal, match="annual"):
+        accept(reply, f"Show revenue {span}")
+
+
+def test_two_phrases_may_ask_for_two_granularities():
+    reply = _reply(
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "revenue"},
+            {"id": "e2", "kind": "period", "text": "2024", "fiscal_year": 2024},
+            {
+                "id": "e3",
+                "kind": "period",
+                "text": "Q4 2024",
+                "fiscal_year": 2024,
+                "fiscal_period": "Q4",
+            },
+        ]
+    )
+    assert len(accept(reply, "Show revenue for 2024 and for Q4 2024").elements) == 3
+
+
 def test_a_quarter_and_a_year_may_share_an_element():
     """They are orthogonal, not alternatives. Measured: the model dropped the
     quarter from "Q4 revenue last year" and returned the annual figure."""

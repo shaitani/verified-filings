@@ -130,6 +130,9 @@ def test_rank_is_only_carried_by_a_ranking() -> None:
         {"fiscal_year": 2024, "last_n_quarters": 2},
         {"last_n_years": 3, "last_n_quarters": 2},
         {"fiscal_year": 2024, "last_n_years": 3, "last_n_quarters": 2},
+        {"fiscal_year": 2024, "from_fiscal_year": 2021},
+        {"from_fiscal_year": 2021, "last_n_years": 3},
+        {"from_fiscal_year": 2021, "last_n_quarters": 2},
     ],
 )
 def test_a_period_says_when_in_exactly_one_way(fields) -> None:
@@ -158,6 +161,35 @@ def test_last_n_quarters_cannot_name_a_particular_quarter() -> None:
                 }
             )
         )
+
+
+def test_a_range_may_be_open_ended_and_carry_a_quarter() -> None:
+    """ "Q1 of every year since 2021" is one element: a start, no end, and the
+    quarter it selects in each year."""
+    element = QueryIn.model_validate(
+        _query(
+            {
+                "id": "e1",
+                "text": "since 2021",
+                "kind": "period",
+                "from_fiscal_year": 2021,
+                "fiscal_period": "Q1",
+            }
+        )
+    ).elements[0]
+    assert (element.from_fiscal_year, element.to_fiscal_year) == (2021, None)
+
+
+@pytest.mark.parametrize(
+    ("fields", "match"),
+    [
+        ({"to_fiscal_year": 2025}, "needs from_fiscal_year"),
+        ({"from_fiscal_year": 2025, "to_fiscal_year": 2021}, "runs backwards"),
+    ],
+)
+def test_a_range_has_a_start_and_runs_forwards(fields, match) -> None:
+    with pytest.raises(ValidationError, match=match):
+        QueryIn.model_validate(_query({"id": "e1", "text": "x", "kind": "period", **fields}))
 
 
 def test_elements_cannot_be_empty() -> None:
