@@ -1103,6 +1103,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "fastapi" },
     { name = "fastapi-users", extra = ["sqlalchemy"] },
     { name = "httpx" },
     { name = "httpx-oauth" },
@@ -1127,6 +1128,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.19.1" },
     { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "fastapi", specifier = ">=0.141.1" },
     { name = "fastapi-users", extras = ["sqlalchemy"], specifier = ">=15.0.5" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "httpx-oauth", specifier = ">=0.17.0" },

@@ -43,27 +43,15 @@ from app.parser.acceptor import (
     normalize,
 )
 from app.parser.prompt import build_question_prompt, build_repair_prompt
-from app.parser.proposer import (
-    CONTEXT_TOKENS,
-    PARSER_MODEL,
-    TEMPERATURE,
-    ProposalError,
-    propose,
-)
-from app.parser.wire import WIRE_SCHEMA, WireElement, WireQuery
+from app.parser.proposer import PARSER_MODEL, ProposalError, propose
 from app.schemas.query import QueryIn
 
 __all__ = [
-    "CONTEXT_TOKENS",
     "MalformedProposal",
     "PARSER_MODEL",
     "ProposalError",
-    "TEMPERATURE",
     "UnacceptableProposal",
     "UnfaithfulSpan",
-    "WIRE_SCHEMA",
-    "WireElement",
-    "WireQuery",
     "accept",
     "build_question_prompt",
     "build_repair_prompt",
