@@ -5,9 +5,9 @@ company's full SEC **XBRL data** document, filters it down to this project's
 scope, and writes the result here as pretty-printed JSON. "XBRL data" is this
 project's only name for the SEC endpoint
 ``https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json`` -- see
-sec-retriever.md.
+docs/sec-retriever.md.
 
-Scope filter applied on ingest (sec-retriever.md section 5):
+Scope filter applied on ingest (docs/sec-retriever.md):
 
 * **Forms:** only exact ``10-K`` and ``10-Q`` facts are kept -- amendments
   (``10-K/A`` etc.) and every other form are dropped.

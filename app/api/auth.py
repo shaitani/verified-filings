@@ -255,7 +255,7 @@ class AuthConfig:
         if missing:
             raise RuntimeError(
                 f"{', '.join(n.upper() for n in missing)} not set: sign-in needs all three "
-                "(BOOTSTRAP.md)."
+                "(docs/STARTUP.md, .env.example)."
             )
         short = [
             name.upper()

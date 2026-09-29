@@ -1,6 +1,6 @@
 """The ``xbrl.reported_fact`` view, against the real test database.
 
-The view is half of a fence (``app/retrieval/DESIGN.md`` §3 and §6): it is the
+The view is half of a fence (``app/retrieval/DESIGN.md`` §3 and §7): it is the
 only relation ``vf_retrieval_role`` may read, so what it exposes is exactly
 what generated SQL can reach. Widening it by accident is a silent change to
 that boundary, which is why the column list is asserted rather than described.
@@ -25,7 +25,7 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "xbrl_fake_company.json"
 #:
 #: What is absent matters as much, and the exact match below enforces it.
 #: `fiscal_year` / `fiscal_period` sit on `filing` and describe which filing a
-#: number appeared in, not the period it covers (PITFALLS §1.1) -- a 10-K
+#: number appeared in, not the period it covers (docs/GAPS.md D1.1) -- a 10-K
 #: carries prior-year comparatives, so `WHERE fiscal_year = 2024` returns the
 #: wrong years, and a column of that name Qwen can see is an invitation to use
 #: it. The labels reach the result from the query plan instead.

@@ -1,7 +1,7 @@
 """The job queue: one job at a time, its stages pushed to whoever is watching.
 
 One worker, because the GPU serves one request at a time and one gate is
-simpler than one per model call (DESIGN §12a). Each job runs the chain inside a
+simpler than one per model call (DESIGN §4). Each job runs the chain inside a
 trace; its stages are written to ``web.job`` and published as events; it ends
 ``done`` with its reply, or ``failed`` if the machinery itself broke -- a
 refusal is a finished job. Its trace is written whatever happened.

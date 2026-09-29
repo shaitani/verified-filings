@@ -104,7 +104,7 @@ def web_sessionmaker(url: str | None = None) -> async_sessionmaker:
     if not url:
         raise WebRoleMissing(
             "DATABASE_URL_WEB is not set. The Web Server runs only as vf_web_role -- "
-            "see BOOTSTRAP.md for the .env line and `uv run python -m app.db.roles`."
+            "see docs/STARTUP.md for the .env line and `uv run python -m app.db.roles`."
         )
     user = make_url(url).username
     if user != WEB.name:

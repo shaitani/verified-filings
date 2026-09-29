@@ -72,13 +72,13 @@ to metric spans only. Accounting judgment as data, the same argument as
 
 Measured end to end: "What was Apple's gross revenue in 2024?" reaches the
 mapper with the phrase intact, and the curated entry does its job — at the
-time a refusal, since 2026-09-26 total revenue with a `narrower_than_asked`
-note naming the sense answered. Without the gate the same question returns
+time a refusal, now total revenue with a `narrower_than_asked` note naming
+the sense answered. Without the gate the same question returns
 the figure with no note at all.
 
 ## 2a. A colon list that shares its heading
 
-Added 2026-09-26. "What is Apple's cash flow: operating, investing, financing"
+"What is Apple's cash flow: operating, investing, financing"
 asks for three figures, and none of their names appears whole in the question.
 Each item names one only together with the heading. The substring gate refused
 the right reading ("operating cash flow"), so the model found wrong ones that
@@ -191,7 +191,7 @@ Apple's current ratio?" asked for five years of rows. The prompt's default is
 
 A period's meaning lives entirely in its typed fields. The mapper reads a
 period's `text` in exactly two places, both refusal messages
-(`query_mapper.py:492`, `:515`). Holding periods to the substring rule refused
+(when it cannot resolve one). Holding periods to the substring rule refused
 correct work: **8 of 56 answerable eval questions failed** because the model
 *composes* a period description out of words from different parts of a
 sentence — "Q4 last year", "year-over-year in 2024" — which is a perfectly good
@@ -203,7 +203,7 @@ number.
 
 ## 6a. A qualifier is its own element, because every other home is worse
 
-Added 2026-09-23. "How much revenue did Apple make from iPhones?" has a phrase
+"How much revenue did Apple make from iPhones?" has a phrase
 that cuts the metric down to part of the company, and before `metric_qualifier`
 existed the model had three places to put it and all three were wrong:
 
@@ -224,7 +224,7 @@ So the mapper rule is **an unsatisfiable qualifier takes its metric with it**
 what the reader will not be getting.
 
 No qualifier is satisfiable today: the XBRL data endpoint carries no
-dimensional facts at all (PITFALLS §3.2). The check is written as
+dimensional facts at all (GAPS D3.2). The check is written as
 `_qualifier_is_satisfiable` rather than a flat refusal so a later segment
 ingest changes one function.
 
@@ -237,73 +237,37 @@ through 2025", which is the control most at risk from a rule about the word
 
 **The answerability gate** (failure #9). "Did any of these companies restate
 its revenue?" parses into perfectly good elements; nothing here asks whether
-the question is about figures at all. This is HANDOFF §6's last
-plausible-wrong-answer, and closing it needs the eval set runnable so the gate
-can be measured rather than guessed at — and the eval set needs this module.
-It is the next thing, not part of this one.
+the question is about figures at all ([docs/GAPS.md](../../docs/GAPS.md) G1).
+"Why" questions are caught — the model tags the causal words as a `narrative`
+element, which the mapper refuses — but questions about the *filing* rather
+than its figures are not. The gate belongs here, measured against the eval
+set rather than guessed at.
 
-Today that question happens to end in a refusal, because the model tags "these
-companies" as a company group that resolves to nobody. That is luck, not a
-gate.
-
-**Pinning metric-level ambiguity.** HANDOFF §3 assigns this to the parser:
-"how much money was made" is revenue or net income. The faithfulness rule means
-the parser *cannot* pin it by substitution — that is exactly the paraphrase
-§2 forbids. The right home is a curated `clarify` entry in
-`metric_aliases.yaml`, which already has the machinery: a curated question with
-named options, surfaced through `QueryPlan.clarifications`, answered by the
-reader, and fed back through `parse_question(answers=...)`. That is an
-accounting-judgment edit, so it belongs to whoever curates that file.
+**Pinning metric-level ambiguity by substitution.** "How much money was made"
+is revenue or net income, and the faithfulness rule means the parser *cannot*
+pin it by rewording — that is the paraphrase §2 forbids. It is a curated
+`clarify` entry instead (`money_made`), asked of the reader (§10).
 
 ## 8. Prompt line breaks are content
 
 `pyproject.toml` ignores `E501` for `prompt.py`. This is not laziness.
 Reflowing one worked example to satisfy the line-length rule — moving
 `"wants_chart":true}` onto its own line — changed what the model emitted for
-an *unrelated* question, turning a passing parse of the HANDOFF §8 smoke test
-into a refusal. At this model size the prompt is whitespace-sensitive.
+an *unrelated* question, turning a passing parse of the smoke-test question
+([docs/TESTING.md](../../docs/TESTING.md#verifying-figures-yourself)) into a refusal. At this model size the prompt is whitespace-sensitive.
 Formatting rules do not get a vote on prompt content.
 
 The same reasoning is why every worked example is checked by a test: an
 example whose `text` is not in its own question demonstrates the paraphrase
 the prompt forbids, and the model copies what it is shown.
 
-## 9. Measured
+## 9. What the period rules cost, measured
 
-`qwen2.5-coder:7b`, temperature 0, 3–5 s for an ordinary question. Full eval
-set (`evals/questions.yaml`, 56 questions), 2026-09-21:
-
-| | first run | + period fixes | + 5e/5f | + 1a and the quarter pair |
-|---|---|---|---|---|
-| parsed | 43 | 53 | 53 | **51** |
-| refused | 13 | 3 | 3 | **5** |
-
-The raw counts stop being the useful measure at the end, because a refusal is
-the right answer to some of these questions. Against what the eval set expects:
-
-| `expect` | parsed | refused |
-|---|---|---|
-| answerable (37) | **37** | **0** |
-| partial (8) | 6 | 2 |
-| refuse (11) | 8 | 3 |
-
-**No answerable question is refused by the parser.** The eight `refuse`
-questions that parse are the correct division of labour — the parser's job
-is to find the elements, and the mapper is what knows that "market
-capitalisation" or "competition risk" is not a filed fact.
-
-Spot checks through the mapper: "What was Apple's revenue in 2024?" →
-`complete`, 1 binding. "Which company had the highest net income in 2024?" →
-`complete`, ranking, 20 bindings. "What was Apple's gross revenue in 2024?" →
-refused by the curated entry (§2) at the time; answered with a caveat since
-2026-09-26. HANDOFF §8 smoke test → `series`, axes
-`['company','period']`, **36 rows**, `period_misalignment`, metric unresolved
-pending a `clarify` entry (§7).
-
-All three refusals are questions the eval set marks `refuse` or `partial`:
-q030 (revenue by product line), and q045 / q048, two `<Company>` template
-questions whose comma-separated metric lists the model composes into phrases
-that are not in the question.
+`qwen2.5-coder:7b`, temperature 0, 3–5 s for an ordinary question. Over the
+eval set, no answerable question is refused by the parser; the questions that
+parse but should be refused ("market capitalisation", "competition risk") are
+the right division of labour — the parser finds the elements, and the mapper
+knows what is not a filed fact.
 
 ### Rules 5e and 5f, and what they cost
 
@@ -386,58 +350,9 @@ that plan `complete` — nothing was unresolved because nothing had been asked
 for. `accept()` now requires a metric element, the mirror of the period gate,
 and rule 1b tells the model that the vague word *is* the metric.
 
-### 10b. `over_time` — the metric's movement, not its level
-
-Added 2026-09-26. "Revenue growth", "grew fastest", "the largest decline",
-"compound annual growth" ask for a metric's movement. The metric element keeps
-the metric's words ("revenue") and carries `over_time: change | growth | cagr`;
-the grammar allows exactly those values and `accept()` allows the field on
-metrics only. Retrieval computes the arithmetic in Python (retrieval DESIGN
-§4.8). Taught by example, like `clarify_as`, not by a numbered rule: the Tesla
-growth, "grew revenue fastest", the single-quarter decline, and one CAGR
-example carry it. "Has Intel's R&D spending increased or decreased since
-2021?" deliberately does not — it asks for a series to be judged, which the
-model still derives.
-
-### 10c. `rank` — which end of a ranking comes first
-
-Added 2026-09-27. A `rank` question said *that* it ordered by a metric and not
-*which way*; the direction lived only in the English, and the SQL model read it
-from there. The metric element now carries `rank: highest | lowest`, and
-`accept()` requires it on some metric of a `rank` question and refuses it on
-any other — both repairable. "Largest decline" is `lowest`: the change most
-below zero comes first. The mapper copies it onto `ResultSpec.rank` for the
-metrics that bound, and from there Python writes the `ORDER BY` (retrieval
-DESIGN §4.6) and the Presenter sorts by it without seeing the plan.
-
-**Taught by example, like `clarify_as`**: the five ranking examples carry it,
-one of them `lowest`, and a test holds every ranking example to showing it.
-
-**What adding it broke, and how that was found.** The eval set passed cold, 13
-of 13 including the colon lists. The clarification round trip is not in the
-eval set, and it broke: "Which quarter is Costco's strongest?" answered
-"Total revenue" re-parsed with **no company element** on 2 of 2 cold runs —
-so the scope widened to every filer and the answer was a confident ranking of
-all 20 companies' quarters, verdict `complete`. The code before the change
-kept Costco on 2 of 2.
-
-A variant harness found the cause in one pass: `rank` on the rule-3 example
-("Which company had the highest operating income in 2024?"), the one ranking
-that deliberately names no company. Carrying the same field as the Apple
-ranking, it taught "a ranking names no company". Moving it beside the Apple
-example — a contrasting pair, as in §9 — kept Costco on 4 of 4. Two things
-worth keeping from this:
-
-- **A dropped company is silent.** A question naming no company means every
-  filer (HANDOFF §3), so a company the model omits widens the scope rather
-  than failing. Nothing structural catches it; see HANDOFF §6.
-- **The round trip needs measuring too.** It runs a different prompt (the
-  answers are appended), and a prompt change can move it when the first pass
-  is untouched.
-
 ### 10a. `clarify_as` — the parser names the question
 
-Added 2026-09-26, from q043: "how much money was made" is revenue or net
+From q043: "how much money was made" is revenue or net
 income, the alias file did not list the phrase, and the embedding search found
 nothing within reach (best 0.58) — so a question that should have been *asked*
 was *refused*. Listing phrases fixes one wording at a time; the vague words
@@ -493,8 +408,9 @@ metric that silently drops the list.
 
 **Using it when fixing a question that should ask.** Pick the `clarify` entry
 whose question fits, or add one (an accounting-judgment edit, collaborative —
-HANDOFF §4). Add the common wordings as synonyms, so the answer does not rest
-on the model. Then check, from a cold model (HANDOFF §6), that the question
+[docs/DESIGN.md](../../docs/DESIGN.md#the-alias-layer)). Add the common wordings as synonyms, so the answer does not rest
+on the model. Then check, from a cold model
+([docs/TESTING.md](../../docs/TESTING.md#the-prompt-cache)), that the question
 now comes back `asked` and that questions naming a *specific* figure did not
 start carrying `clarify_as` — a stock price or a headcount is specific, not
 vague, and should get none. If the model needs a new example to reach a new
@@ -526,3 +442,52 @@ Measured end to end: ask → four options → pick "Total revenue" → `complete
 
 One retry, not a loop: `app/retrieval/generator.py` records the reasoning —
 error text handed back repeatedly becomes a map of what to get around.
+
+### 10b. `over_time` — the metric's movement, not its level
+
+"Revenue growth", "grew fastest", "the largest decline",
+"compound annual growth" ask for a metric's movement. The metric element keeps
+the metric's words ("revenue") and carries `over_time: change | growth | cagr`;
+the grammar allows exactly those values and `accept()` allows the field on
+metrics only. Retrieval computes the arithmetic in Python (retrieval DESIGN
+§4.8). Taught by example, like `clarify_as`, not by a numbered rule: the Tesla
+growth, "grew revenue fastest", the single-quarter decline, and one CAGR
+example carry it. "Has Intel's R&D spending increased or decreased since
+2021?" deliberately does not — it asks for a series to be judged, which the
+model still derives.
+
+### 10c. `rank` — which end of a ranking comes first
+
+A `rank` question said *that* it ordered by a metric and not
+*which way*; the direction lived only in the English, and the SQL model read it
+from there. The metric element now carries `rank: highest | lowest`, and
+`accept()` requires it on some metric of a `rank` question and refuses it on
+any other — both repairable. "Largest decline" is `lowest`: the change most
+below zero comes first. The mapper copies it onto `ResultSpec.rank` for the
+metrics that bound, and from there Python writes the `ORDER BY` (retrieval
+DESIGN §4.6) and the Presenter sorts by it without seeing the plan.
+
+**Taught by example, like `clarify_as`**: the five ranking examples carry it,
+one of them `lowest`, and a test holds every ranking example to showing it.
+
+**What adding it broke, and how that was found.** The eval set passed cold, 13
+of 13 including the colon lists. The clarification round trip is not in the
+eval set, and it broke: "Which quarter is Costco's strongest?" answered
+"Total revenue" re-parsed with **no company element** on 2 of 2 cold runs —
+so the scope widened to every filer and the answer was a confident ranking of
+all 20 companies' quarters, verdict `complete`. The code before the change
+kept Costco on 2 of 2.
+
+A variant harness found the cause in one pass: `rank` on the rule-3 example
+("Which company had the highest operating income in 2024?"), the one ranking
+that deliberately names no company. Carrying the same field as the Apple
+ranking, it taught "a ranking names no company". Moving it beside the Apple
+example — a contrasting pair, as in §9 — kept Costco on 4 of 4. Two things
+worth keeping from this:
+
+- **A dropped company is silent.** A question naming no company means every
+  filer, so a company the model omits widens the scope rather than failing.
+  Nothing structural catches it ([docs/GAPS.md](../../docs/GAPS.md) G4).
+- **The round trip needs measuring too.** It runs a different prompt (the
+  answers are appended), and a prompt change can move it when the first pass
+  is untouched.

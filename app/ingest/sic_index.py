@@ -6,7 +6,7 @@ in ``actions.py`` calls ``update_sic_index()`` as its final step. The file
 therefore always reflects exactly the corpus companies that have been fetched
 at least once -- there is no separate build step to run.
 
-The format is fixed by sec-retriever.md section 5.1: a top-level JSON array,
+The format is fixed by docs/sec-retriever.md: a top-level JSON array,
 one object per fetched company, in ``corpus_companies.json`` order, each with
 exactly these string keys, in this order:
 

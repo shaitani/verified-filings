@@ -4,7 +4,7 @@ Companion to [`app/schemas/DESIGN.md`](../schemas/DESIGN.md), which covers the
 `QueryIn` / `QueryPlan` models this package produces and consumes (its sections
 8 and 8.11-8.12 in particular).
 
-Data hazards and their evidence live in [`PITFALLS.md`](../../PITFALLS.md).
+Data hazards and their evidence live in [docs/GAPS.md](../../docs/GAPS.md#data-hazards).
 
 This file covers the **curated metric alias layer** — `metric_aliases.yaml` and
 `metric_aliases.py`. The file holds the accounting judgment; the module
@@ -17,12 +17,6 @@ beside it, nothing else reads it, and splitting ~200 lines across two packages
 under the same name bought nothing but confusion.
 
 ---
-
-
-Added 2026-09-18 with the metric resolver. `metric_aliases.yaml` holds the
-accounting judgment; `metric_aliases.py` validates and indexes it. It is **data, not code**, so extending it is an edit
-rather than a deploy — and it is the artifact a non-accountant and a model can
-sensibly co-author, which is the whole reason it exists.
 
 ## 1. `terms` are operand slots, each holding ordered alternatives
 
@@ -83,7 +77,7 @@ where it does.
 
 ## 3b. Why the binding bar is not the place to fix wrong bindings
 
-`_MIN_BINDING_SIMILARITY` (0.70) is what a lone surviving candidate must clear
+`_MIN_BINDING_SIMILARITY` (0.75) is what a lone surviving candidate must clear
 to be bound with nobody having reviewed it. It is tempting to raise it until
 the wrong bindings stop. The same 221 cases say the score does not separate
 right from wrong well enough for that to work cleanly:
@@ -179,8 +173,7 @@ file that does resolve.
 **When to use it.** Where a default would be quietly *wrong*, not merely
 imprecise. "Profit margin" reads as net by convention, but gross and net
 routinely differ by twenty points on one company, so picking one hands someone
-a wrong answer with no signal. Three entries carry it: `profit_margin`,
-`profit` and `cash_flow`.
+a wrong answer with no signal.
 
 **Only the bare term asks.** "Net profit margin" resolves straight through. If
 naming the thing precisely still triggered a question, the clarification would
@@ -193,7 +186,7 @@ Either way it replaced the worst case in the eval set: "total debt" across the
 corpus produced nineteen ambiguity records offering, among other things,
 `DebtInstrumentCarryingAmount`, a per-instrument footnote line.
 
-**Two ways in** (added 2026-09-26). A clarify entry is reached by a listed
+**Two ways in.** A clarify entry is reached by a listed
 phrase, as above, or by name through `MetricElementIn.clarify_as` — the parser
 naming the curated question that fits a vague phrase the file does not list.
 `_resolve_metrics` takes them in this order:
@@ -210,6 +203,71 @@ because it can only produce a question. A name that is not a `clarify` entry
 answers `None` and the element falls through as if the field were absent. Six
 entries ask today: `profit_margin`, `profit`, `debt`, `cash_flow`,
 `money_made`, `performance`. See `app/parser/DESIGN.md` §10a.
+
+## 8a. Declining, for terms the dataset simply does not hold
+
+`unavailable` carries a sentence of curated reasoning that becomes
+`Unresolved.reason` verbatim. It is not a third flavour of "we could not find
+it": it is a statement that someone looked, and there is nothing to find.
+
+**Why it has to be in the file rather than left to fail naturally.** An
+unlisted term does not fail naturally — it falls into the embedding search,
+which always returns *something*. Measured 2026-09-19 across 52 unaliased
+business phrases and six filers, that path committed eight bindings with no
+human behind them, and half were wrong. "Share price" bound
+`dei:EntityListingParValuePerShare` at 0.726, which for Microsoft is
+$0.000006 — a plausible wrong number with a rationale reading "verified over
+1 period(s)". "Stock price" scored 0.733 against
+`CommonStockParOrStatedValuePerShare` and was held back only by a second
+candidate happening to survive alongside it, which is luck, not a guard.
+
+So the entries exist for the questions people actually ask that this store
+cannot answer, and they reach the resolver first. Four are curated today,
+among them:
+
+| entry | why it is not here |
+|---|---|
+| `stock_price` | set by the market, never filed |
+| `market_cap` | needs a price; `EntityPublicFloat` is not it |
+| `segment_revenue` | the XBRL data endpoint returns only undimensioned consolidated facts (GAPS D3.2) |
+
+`gross_revenue` is the instructive one, twice over. It was left *unlisted* for
+a long time on the reasoning that there was nothing honest to map it to — but
+unlisted is not declined. It fell to the embedding net, which offered
+`GrossProfit` at 0.812: a different line, and one *smaller* than revenue where
+the asker expected something larger. So it became `unavailable`.
+
+**Then it stopped declining** (the user's call, after checking the usage). "Gross revenue" has a narrow accounting sense — revenue before returns,
+allowances and discounts — which no filer here reports, and an everyday sense —
+total revenue, the top line — which every filer does. The refusal answered the
+narrow sense and told a reader asking the common one "no" while the answer sat
+in the data. It now resolves to the same concepts as `revenue`, with a
+per-concept `caveat` that becomes a `narrower_than_asked` note saying which
+sense was answered and that it is not gross profit. The lesson: before
+declining a term, check whether a common reading of it *is* answerable; an
+`unavailable` entry is for when none is.
+
+**The reason text names the plausible wrong answer.** Each one says what the
+thing is, why no filing carries it, and which nearby concept an embedding
+search would reach for — `EntityPublicFloat` is not market cap, par value is
+not a share price. Naming it is what stops the mistake being re-derived by the
+next person, or the next model, who notices the concept exists.
+
+**It refuses rather than asks.** `needs_input` stays false: a clarification
+offers a choice the asker can make, and here there is none.
+
+**Three ways a plan can fall short, and they are not the same:**
+
+| field | meaning | what to do |
+|---|---|---|
+| `unresolved` | the data cannot support it — either measured (no coverage) or curated (`unavailable`) | say so; do not ask |
+| a `narrower_than_asked` note | it answered, with a figure that is a *subset* of the phrase | show the number **and** the sentence |
+| `ambiguous` | the *machine* could not choose; candidates are raw concepts | offer them, imperfectly |
+| `clarifications` | a *person* decided the term is several things and wrote the choices | ask properly |
+
+`QueryPlan.needs_input` is true for the latter two. It separates "ask them"
+from "tell them it cannot be done", which is the distinction a user-facing
+model needs and cannot infer from `is_complete` alone.
 
 ## 8b. Answering with a narrower figure, and saying so
 
@@ -253,8 +311,8 @@ to a decline, or to nothing, wastes the one round trip you get.
 
 ## 8c. Answering over the companies that can answer
 
-Added 2026-09-22, from the first full eval run: five of the sixteen remaining
-failures were one filer refusing a question about twenty.
+From the first full eval run: five of the sixteen remaining failures were one
+filer refusing a question about twenty.
 
 A company that reports nothing for a metric is **ordinary, not an error**.
 JPMorgan tags no `OperatingIncomeLoss` and no `GrossProfit`, correctly — a
@@ -309,7 +367,7 @@ comparative columns a later 10-K carries is a separate decision, still open.
 
 ## 8d. A comparison left with one side is refused
 
-Added 2026-09-25, reversing part of §8c at the user's call. "How does Apple
+This reverses part of §8c, at the user's call. "How does Apple
 compare to Samsung on revenue?" used to answer with Apple's revenue and a
 `partial_coverage` note. Half a comparison is not a smaller version of the
 answer, it is a different one — and the SQL step, handed a `compare` plan with
@@ -347,7 +405,7 @@ The rule rests on `intent`, which the parser's model sets. A comparison tagged
 
 ## 8e. A question is answered per part
 
-Added 2026-09-26. "What are Apple's: assets, liabilities, stockholders' equity,
+"What are Apple's: assets, liabilities, stockholders' equity,
 cash, goodwill, inventory" asks six things. Apple files no goodwill, so that
 part is refused — and before this, the refusal made the plan incomplete and the
 other five went unanswered too. The asker got nothing for five figures the
@@ -374,7 +432,7 @@ plan had already explained.
 
 ## 8f. How a figure reads: `display_as`
 
-Added 2026-09-27. `pure` covers both percentages (margins, tax rates) and
+`pure` covers both percentages (margins, tax rates) and
 multiples (a current ratio), and a reader told Apple's current ratio is "89%"
 has been told something wrong. An entry may say `display_as: multiple`; the
 mapper copies it onto every binding it makes, the executor onto the citation,
@@ -384,7 +442,7 @@ read a figure is curated judgment, like a caveat.
 
 ## 8g. A pinned concept: the asker's pick
 
-Added 2026-09-27. When an element comes back `ambiguous`, the Web Server asks
+When an element comes back `ambiguous`, the Web Server asks
 which candidate was meant (api DESIGN §3), and the pick returns as
 `map_query(query, pins={element_id: ConceptRef})`. A pinned element skips the
 alias lookup and the embedding search — the asker has chosen — but not the
@@ -393,69 +451,3 @@ through the same coverage check, so a pick with no facts for a filer is still
 reported, never bound on trust. `resolved_by = "pinned"`, which `ResolvedBy`
 gained for it; the similarity bar and the tie report apply only to
 `"embedding"`, so neither can fire on a pick.
-
-## 8a. Declining, for terms the dataset simply does not hold
-
-`unavailable` carries a sentence of curated reasoning that becomes
-`Unresolved.reason` verbatim. It is not a third flavour of "we could not find
-it": it is a statement that someone looked, and there is nothing to find.
-
-**Why it has to be in the file rather than left to fail naturally.** An
-unlisted term does not fail naturally — it falls into the embedding search,
-which always returns *something*. Measured 2026-09-19 across 52 unaliased
-business phrases and six filers, that path committed eight bindings with no
-human behind them, and half were wrong. "Share price" bound
-`dei:EntityListingParValuePerShare` at 0.726, which for Microsoft is
-$0.000006 — a plausible wrong number with a rationale reading "verified over
-1 period(s)". "Stock price" scored 0.733 against
-`CommonStockParOrStatedValuePerShare` and was held back only by a second
-candidate happening to survive alongside it, which is luck, not a guard.
-
-So the entries exist for the questions people actually ask that this store
-cannot answer, and they reach the resolver first. Four are curated today,
-among them:
-
-| entry | why it is not here |
-|---|---|
-| `stock_price` | set by the market, never filed |
-| `market_cap` | needs a price; `EntityPublicFloat` is not it |
-| `segment_revenue` | the XBRL data endpoint returns only undimensioned consolidated facts (PITFALLS §3.2) |
-
-`gross_revenue` is the instructive one, twice over. It was left *unlisted* for
-a long time on the reasoning that there was nothing honest to map it to — but
-unlisted is not declined. It fell to the embedding net, which offered
-`GrossProfit` at 0.812: a different line, and one *smaller* than revenue where
-the asker expected something larger. So it became `unavailable`.
-
-**Then it stopped declining** (2026-09-26, the user's call after checking the
-usage). "Gross revenue" has a narrow accounting sense — revenue before returns,
-allowances and discounts — which no filer here reports, and an everyday sense —
-total revenue, the top line — which every filer does. The refusal answered the
-narrow sense and told a reader asking the common one "no" while the answer sat
-in the data. It now resolves to the same concepts as `revenue`, with a
-per-concept `caveat` that becomes a `narrower_than_asked` note saying which
-sense was answered and that it is not gross profit. The lesson: before
-declining a term, check whether a common reading of it *is* answerable; an
-`unavailable` entry is for when none is.
-
-**The reason text names the plausible wrong answer.** Each one says what the
-thing is, why no filing carries it, and which nearby concept an embedding
-search would reach for — `EntityPublicFloat` is not market cap, par value is
-not a share price. Naming it is what stops the mistake being re-derived by the
-next person, or the next model, who notices the concept exists.
-
-**It refuses rather than asks.** `needs_input` stays false: a clarification
-offers a choice the asker can make, and here there is none.
-
-**Three ways a plan can fall short, and they are not the same:**
-
-| field | meaning | what to do |
-|---|---|---|
-| `unresolved` | the data cannot support it — either measured (no coverage) or curated (`unavailable`) | say so; do not ask |
-| a `narrower_than_asked` note | it answered, with a figure that is a *subset* of the phrase | show the number **and** the sentence |
-| `ambiguous` | the *machine* could not choose; candidates are raw concepts | offer them, imperfectly |
-| `clarifications` | a *person* decided the term is several things and wrote the choices | ask properly |
-
-`QueryPlan.needs_input` is true for the latter two. It separates "ask them"
-from "tell them it cannot be done", which is the distinction a user-facing
-model needs and cannot infer from `is_complete` alone.

@@ -73,7 +73,7 @@ class ResultRow(_Base):
     ``fiscal_year`` / ``fiscal_period`` are projected from the plan rows
     injected into the statement, never read from the database: the
     ``xbrl.reported_fact`` view has no such column, because ``Filing``'s is
-    provenance rather than the period a fact describes (PITFALLS §1.1).
+    provenance rather than the period a fact describes (docs/GAPS.md D1.1).
     """
 
     #: Which ``QueryIn`` element this answers. Several elements share one

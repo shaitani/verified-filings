@@ -4,7 +4,7 @@ The Web Server's tables: users and sign-in, invitations, conversations, jobs,
 their traces and feedback. Design: app/api/DESIGN.md section 11. Nothing in
 `xbrl` changes.
 
-Hand-corrected from autogenerate (ALEMBIC.md Part 2):
+Hand-corrected from autogenerate (docs/ALEMBIC.md):
 * CREATE SCHEMA / DROP SCHEMA added -- autogenerate does not emit them;
 * the library's GUID / TIMESTAMPAware written as the plain UUID / timestamptz
   they compile to, so this file does not import library internals;

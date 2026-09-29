@@ -29,7 +29,7 @@ from app.db import roles
 PASSWORDS = {
     roles.QUERY_MAPPER.name: "mapper-pw",
     roles.RETRIEVAL.name: "retrieval-pw",
-    roles.WEB.name: "web-pw",  # needs the web migration on the test database (ALEMBIC.md)
+    roles.WEB.name: "web-pw",  # needs the web migration on the test database (docs/STARTUP.md)
 }
 
 #: 768 floats, matching the embedding column. A shorter literal fails on
@@ -191,7 +191,7 @@ async def test_the_retrieval_role_cannot_name_the_base_tables(
     """The other half of the fence (app/retrieval/DESIGN.md 6). The view bakes
     in the is_latest filter and the three joins; this is what stops generated
     SQL routing around it -- and what keeps every column called `fiscal_year`
-    out of reach, since Filing's is provenance, not a period (PITFALLS 1.1)."""
+    out of reach, since Filing's is provenance, not a period (docs/GAPS.md D1.1)."""
     engine = _engine(provisioned, roles.RETRIEVAL.name)
     try:
         async with engine.connect() as connection:

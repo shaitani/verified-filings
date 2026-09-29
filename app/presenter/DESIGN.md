@@ -9,10 +9,8 @@ than prose, and what the client does with the output: `app/api/DESIGN.md` §2,
 §5, §6. The output contract is `app/schemas/answer_view.py`, whose validators
 run on everything this builds.
 
-Built 2026-09-27 against real `ResultSet`s captured from the chain
-(`tests/fixtures/presenter/`), so its tests run with no database and no model.
-Then checked against every other eval question the same day (§5), which found
-six things a reader needed and did not get; all six are fixed here.
+Tested against real `ResultSet`s captured from the chain
+(`tests/fixtures/presenter/`), so its tests need no database and no model.
 
 ## 1. Inputs, and what it refuses
 
@@ -44,7 +42,7 @@ charts point into it and are never a second copy of the figures.
 
 Order: metrics in the order the asker named them. A ranked metric in rank
 order, **sorted here from the values**, not trusted from the statement
-(retrieval DESIGN §9); a row with no value cannot be ranked and goes last.
+(retrieval DESIGN §6); a row with no value cannot be ranked and goes last.
 Anything else by company, then filed before derived, annual before quarterly,
 then date.
 
@@ -98,29 +96,21 @@ one company becomes **one row**: `company_cik` null, "14 companies", and the
 every row, for every company the metric bound; otherwise it is refused. One
 company's own aggregate stays that company's row.
 
-The real fix is upstream: the parser's closed list of operations (HANDOFF §6
-TODO) lets Python write the aggregate as one row with no company at all.
+The real fix is upstream: the parser's closed list of operations
+([docs/FUTURE.md](../../docs/FUTURE.md#retire-qwen-as-a-sql-writer)) lets Python
+write the aggregate as one row with no company at all.
 
-## 5. Checked against every eval question
+## 5. What the fixtures show
 
-2026-09-27: the 41 eval questions not already fixtures, through the chain and
-here. None failed; six displayed something a reader could misread or not see,
-and are fixed (§1, §3, §4, §4a): the average on every company, a current ratio
-as 89%, a filtered list that never said its filter, a change with no "vs", a
-two-company comparison with no chart, a balance labelled like a flow. Fixtures
-for each: `q040`, `q022`, `q039`, `q020`/`q011`/`q013`, `q006`, `q002`.
+Every eval question was run through the chain and here; six displayed
+something a reader could misread or not see, each now covered above and pinned
+by a fixture: the average on every company (`q040`), a current ratio as 89%
+(`q022`), a filtered list that never said its filter (`q039`), a change with
+no "vs" (`q020`, `q011`, `q013`), a two-company comparison with no chart
+(`q006`), a balance labelled like a flow (`q002`).
 
-Questions whose *answers* are wrong or oddly worded — not a display problem —
-are collected in HANDOFF §6, "Questions that come back wrong". Two worth
-knowing before reading a chart: the `smoke_mixed` fixture is a misparsed
-question kept because its output is honest; q038's "largest decline" is a
-Q4 → Q1 seasonal drop, correct for the words asked.
-
-## 6. Not done
-
-- **No headline sentence.** If one is ever wanted it is templated here from a
-  row, never written by a model.
-- **An aggregate over one company's periods** ("Apple's average revenue over
-  five years") keeps the company but is labelled with a single period. Not
-  seen in the eval set; it needs the aggregate operation upstream to say which
-  periods it spans.
+Two worth knowing before reading a chart: the `smoke_mixed` fixture is a
+misparsed question kept because its output is honest; q038's "largest
+decline" is a Q4 → Q1 seasonal drop, correct for the words asked. Answers that
+are wrong rather than badly shown: [docs/GAPS.md](../../docs/GAPS.md#questions-that-come-back-wrong).
+Not done: [docs/FUTURE.md](../../docs/FUTURE.md#quality-of-answers), GAPS G9.

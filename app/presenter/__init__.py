@@ -30,11 +30,11 @@ __all__ = ["BAR_LIMIT", "PresentationError", "present"]
 #: Bars drawn for a ranking. The table below the chart holds every row.
 BAR_LIMIT = 10
 
-#: Arithmetic over time, written in Python (retrieval DESIGN §4.8).
+#: Arithmetic over time, written in Python (retrieval DESIGN §4.1).
 OVER_TIME = frozenset({"change", "growth", "cagr"})
 
-#: One figure over several companies, still written by the model (HANDOFF §6's
-#: TODO moves these to Python). The statement attaches it to every company it
+#: One figure over several companies, still written by the model (moving these
+#: to Python: docs/FUTURE.md). The statement attaches it to every company it
 #: spans, which a table would read as each company's own figure (DESIGN §4a).
 AGGREGATES = frozenset(
     {"average", "mean", "median", "sum", "total", "min", "minimum", "max", "maximum"}
@@ -177,7 +177,7 @@ def _order(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str])
         mine = [row for row in rows if row.element_id == element_id]
         direction = result.result.rank.get(element_id)
         if direction is not None:
-            # Sorted here, not trusted from the statement (retrieval DESIGN §9).
+            # Sorted here, not trusted from the statement (docs/GAPS.md G7).
             # A row with no value cannot be ranked, so it goes last.
             valued = sorted(
                 (row for row in mine if row.value is not None),

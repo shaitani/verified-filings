@@ -153,9 +153,6 @@ recording:
   (`USD, shares, pure, USD/shares, Rate, EUR`). Those tag disclosure counts
   (lawsuits, warehouses, segments), not financial-statement data.
 
-> The load step (`app/db/loader.py`) is **not written yet** — `load_run` is a
-> defined table with no code populating it. See `DESIGN.md` § 5.
-
 ---
 
 ## Enum types
@@ -173,4 +170,4 @@ The whole namespace drops with one `DROP SCHEMA xbrl CASCADE` for a clean reload
 ---
 
 Row counts throughout are the measured corpus: 20 companies, 10-K / 10-Q filings,
-five fiscal years (`DESIGN.md` § 7).
+five fiscal years (`DESIGN.md` § 6).

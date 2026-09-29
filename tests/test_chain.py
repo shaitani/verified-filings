@@ -239,7 +239,7 @@ def test_several_sinking_reasons_are_kept_whole() -> None:
 
 
 def test_the_reader_s_sentences_are_the_ones_decided() -> None:
-    """app/api/DESIGN.md §12a, as the user worded them."""
+    """app/api/DESIGN.md §1, as the user worded them."""
     assert PARSE_FAILED.endswith("the company and the period explicitly.")
     assert EXECUTE_FAILED.startswith("The figures for this query came back")
     assert PRESENT_FAILED == "Something went wrong attempting to display the results."
@@ -247,7 +247,7 @@ def test_the_reader_s_sentences_are_the_ones_decided() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The next round: picks become answers or pins (slice 2)
+# The next round: picks become answers or pins
 # --------------------------------------------------------------------------- #
 
 

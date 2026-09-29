@@ -14,7 +14,7 @@ a ``Note``; the caller reads ``plan.is_complete`` and decides.
 
 The data hazards this navigates -- comparative columns, 52/53-week calendars,
 Q4 never being filed, filers changing tags mid-range -- are catalogued with
-their evidence in ``PITFALLS.md``.
+their evidence in ``docs/GAPS.md``.
 
 Dependency direction: ``semantic -> (schemas, db)``, never the reverse.
 
@@ -299,7 +299,7 @@ def _qualifier_is_satisfiable(qualifier: MetricQualifierElementIn) -> str | None
 
     Always a reason today, and the reason is a property of the corpus rather
     than of the phrase: the SEC's XBRL data endpoint returns company totals
-    only, with no dimensional breakdown at all (PITFALLS §3.2). There is no
+    only, with no dimensional breakdown at all (docs/GAPS.md D3.2). There is no
     product axis, no geography axis and no segment axis to filter on, for any
     filer.
 
@@ -515,7 +515,7 @@ def _series_growth(
 
     "Show me NVIDIA's revenue over five years" gets its five figures and the
     four growths between them. Computed in the statement like any over-time
-    metric (retrieval DESIGN §4.8); this used to be a separate Python step
+    metric (retrieval DESIGN §4.1); this used to be a separate Python step
     that added rows after the query ran (``changes.py``), the same arithmetic
     in a second place.
 
@@ -1760,7 +1760,7 @@ def _binding_unit(
     stored value already is. Arithmetic is where this used to go wrong:
     ``gross_margin`` is ``c0 / c1`` over two USD concepts and the result is
     dimensionless, but the lead operand's unit was copied through, so the plan
-    said a ratio of 0.46 was "USD" (PITFALLS §2.1). Anything formatting that
+    said a ratio of 0.46 was "USD" (docs/GAPS.md D1.17). Anything formatting that
     would render 46 cents.
 
     Deliberately not a unit algebra -- one rule, matching what the alias file
@@ -1904,7 +1904,7 @@ def _sign_violation(
     ``c0 - c1`` into an addition and inflates the answer, and nothing
     downstream can tell. That is a wrong number rather than a caveated one, so
     it is refused here for the same reason a missing window is --
-    see PITFALLS.md section 1.15.
+    see docs/GAPS.md D1.15.
 
     Operands declared ``signed`` are left alone: operating cash flow really
     does go negative, and so does gross profit.
@@ -2109,7 +2109,7 @@ async def _gather_evidence(
         same_kind = [row for row in found if row[1] == is_instant]
         # One unit per binding, and the covered windows must be the windows of
         # THAT unit -- a concept filed in both EUR and USD would otherwise pass
-        # coverage on one and be reported as the other. See PITFALLS.md.
+        # coverage on one and be reported as the other. See docs/GAPS.md D1.14.
         unit = Counter(unit for unit, _, _, _, _ in same_kind).most_common(1)[0][0]
         evidence[key] = _Evidence(
             is_instant=is_instant,

@@ -1,8 +1,7 @@
 """Pydantic v2 schemas for one curated XBRL-data file (``data/xbrl/<TICKER>.json``).
 
-These validate a file on the way IN, before the load step (``app/db/loader.py``,
-not written yet) turns it into ORM rows. Inbound validation only -- outbound /
-read DTOs are a separate, later concern.
+These validate a file on the way IN, before the load step (``app/db/loader.py``)
+turns it into ORM rows. Inbound validation only.
 
 Full rationale for every choice here: ``app/schemas/DESIGN.md``. In brief:
 

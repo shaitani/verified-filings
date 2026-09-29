@@ -81,7 +81,7 @@ PeriodGranularity = Literal["annual", "quarterly"]
 ResultAxis = Literal["company", "period", "metric"]
 
 #: Caveats a binding can carry. The answer is computable, but something about
-#: it should reach the reader rather than being smoothed over. See PITFALLS.md.
+#: it should reach the reader rather than being smoothed over. See docs/GAPS.md.
 #:   "concept_switch"     -- the filer changed tags mid-range and the two agree
 #:                           where they overlap, so the series was stitched.
 #:   "unverified_switch"  -- same, but there is no overlapping period to check
@@ -140,7 +140,7 @@ Comparison = Literal["gt", "gte", "lt", "lte", "eq"]
 #:               to the last, one figure per company.
 #: Each is arithmetic over the same metric at two periods, so it is written in
 #: Python like any other multi-operand metric, never by the model. See
-#: ``app/retrieval/DESIGN.md`` §4.8.
+#: ``app/retrieval/DESIGN.md`` §4.1.
 OverTime = Literal["change", "growth", "cagr"]
 
 #: Which end of a ranking comes first. The asker's words, not SQL's: "highest",
@@ -368,7 +368,7 @@ class MetricQualifierElementIn(_ElementBase):
 
     What it resolves to today is always a refusal. The SEC's XBRL data
     endpoint carries **no dimensional facts at all** -- only company totals
-    (PITFALLS §3.2) -- so no qualifier can be satisfied from this corpus. It is
+    (docs/GAPS.md D3.2) -- so no qualifier can be satisfied from this corpus. It is
     still a first-class element rather than a rule in the prompt, because the
     refusal has to be *specific*: "this dataset holds only company totals, not
     revenue broken down by iPhones". The reader learns what is missing instead
@@ -401,8 +401,8 @@ class NarrativeElementIn(_ElementBase):
     2026-09-24 -- q033 came back offering to clarify *which margin*, having
     never noticed the question was not about a figure at all.
 
-    This is the narrow, structural half of HANDOFF §6's "nothing checks that
-    the answer matches the question". It does not check meaning in general; it
+    This is the narrow, structural half of docs/GAPS.md G1, "nothing checks
+    that the answer matches the question". It does not check meaning in general; it
     catches the case where the asker named, in words, a thing this corpus is
     not made of.
 
@@ -596,7 +596,7 @@ class Binding(_Base):
     ``Revenues`` in FY2025, so a five-year question yields two bindings for one
     company, each naming the periods it answers. One binding per element per
     company would have had to pick a concept that covers everything, and there
-    isn't one -- see PITFALLS.md.
+    isn't one -- see docs/GAPS.md.
     """
 
     element_id: str = Field(min_length=1, max_length=32)
@@ -618,7 +618,7 @@ class Binding(_Base):
 
     #: The unit of the binding's **result**. For a single-operand binding that
     #: is the facts' own unit; for a ratio it is ``pure``, because dividing
-    #: like by like is dimensionless (PITFALLS §2.1 -- copying the lead
+    #: like by like is dimensionless (docs/GAPS.md D1.17 -- copying the lead
     #: operand's unit through made a 0.46 gross margin report as "USD", which
     #: any formatter renders as 46 cents).
     unit: str = Field(min_length=1, max_length=32)  # mirrors Fact.unit

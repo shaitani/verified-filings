@@ -1,7 +1,7 @@
 """SQLAlchemy 2.0 ORM models for the curated SEC XBRL data (PostgreSQL target).
 
-Full design rationale, source-field -> column reference, and guidance for the
-not-yet-written Pydantic schemas: see ``app/db/DESIGN.md``.
+Full design rationale and the source-field -> column reference: see
+``app/db/DESIGN.md``.
 
 Source of the data
 ------------------
@@ -28,10 +28,9 @@ a clean reload.
 Two steps, two vocabularies
 ---------------------------
 * **retrieval** -- SEC cloud -> ``data/xbrl/<TICKER>.json`` on disk. Code in
-  ``app/ingest/`` (sec-retriever.md's name for this layer). Already built.
-  The file carries its own ``retrieved`` timestamp.
+  ``app/ingest/``. The file carries its own ``retrieved`` timestamp.
 * **load** -- ``data/xbrl/*.json`` -> rows in these tables. Code in
-  ``app/db/loader.py`` (not written yet). Recorded per run in ``LoadRun``.
+  ``app/db/loader.py``. Recorded per run in ``LoadRun``.
 This module says "load", never "ingest", for the second step.
 
 Load-time unit filter -- IMPORTANT
@@ -46,8 +45,8 @@ Each load records the allow-list it applied and how many facts it skipped in
 to bring more in. This is a load-time policy, not a schema constraint: the
 column itself is a plain string.
 
-Key choices (see the module conversation for the full rationale)
----------------------------------------------------------------
+Key choices (rationale in app/db/DESIGN.md)
+-------------------------------------------
 * ``Company`` PK is the SEC ``cik`` -- a stable, globally unique, never-reused
   integer. ``Company.id`` is an auto-populated IDENTITY column kept UNIQUE but
   referenced by nothing; it exists so a synthetic surrogate can be promoted to
@@ -67,13 +66,6 @@ Key choices (see the module conversation for the full rationale)
   an explicit ``nullable=`` on every non-PK column. PK columns state it once
   via ``primary_key=True``. Column string lengths are bounded from observed
   data (see per-column comments); genuinely long prose is ``Text``.
-
-Future work (not written yet) -- see ``app/db/DESIGN.md`` section 5
------------------------------------------------------------------
-* Pydantic schemas -> ``app/schemas/`` (per sec-retriever.md section 3).
-* The load step -> ``app/db/loader.py``.
-* Alembic -> ``app/db/migrations/`` (scripts) + ``alembic.ini`` at repo root.
-* Engine + ``sessionmaker`` -> ``app/db/session.py``.
 """
 
 from __future__ import annotations

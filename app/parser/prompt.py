@@ -333,7 +333,7 @@ _EXAMPLES: list[tuple[str, str]] = [
     # the decline below); "cagr" is compound growth from the first year to the
     # last. The metric's `text` stays the metric -- "revenue", not "revenue
     # growth" -- and the arithmetic is computed from it in Python, never by the
-    # model (app/retrieval/DESIGN.md §4.8).
+    # model (app/retrieval/DESIGN.md §4.1).
     (
         "What was Microsoft's compound annual growth rate of revenue over the last five years?",
         """{"intent":"derive","elements":[

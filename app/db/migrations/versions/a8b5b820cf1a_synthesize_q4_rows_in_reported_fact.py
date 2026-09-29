@@ -45,7 +45,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # Day counts, not fiscal labels. `filing` carries fiscal_year/fiscal_period but
 # those are provenance -- which filing a number appeared in, not the period it
-# describes (PITFALLS 1.1) -- so a 10-K's prior-year comparative column would
+# describes (docs/GAPS.md D1.1) -- so a 10-K's prior-year comparative column would
 # be mis-grouped by them. The window lengths are the period itself.
 ANNUAL_DAYS = (350, 380)
 

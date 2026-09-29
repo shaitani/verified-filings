@@ -50,7 +50,7 @@ only live there.
 
 Not an Alembic migration: a role is a cluster object that outlives any one
 database, autogenerate cannot see it, and its password has no business in
-version control. See ``ALEMBIC.md``.
+version control. See ``docs/ALEMBIC.md``.
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ RETRIEVAL = RoleSpec(
     # One relation, and it is a view. Generated SQL cannot *name* `fact`,
     # `filing` or `concept`, so the `is_latest` filter and the three joins
     # cannot be got wrong by omitting them -- and no column called
-    # `fiscal_year` is in reach to be mistaken for a period (PITFALLS 1.1).
+    # `fiscal_year` is in reach to be mistaken for a period (docs/GAPS.md D1.1).
     # `REVOKE ALL ON ALL TABLES IN SCHEMA` covers views, and it runs before
     # these grants, so this narrowing takes effect on the next provision.
     # The view's own SELECT withholds `concept.embedding` and

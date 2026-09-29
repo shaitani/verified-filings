@@ -1,7 +1,7 @@
 """Loader for the closed-corpus company list.
 
 `corpus_companies.json` (project root) is the master list of the 20
-companies this project will ever cover — see sec-retriever.md, Section 5.
+companies this project will ever cover — see docs/sec-retriever.md.
 This module is the single place that reads it and resolves a caller-
 supplied identifier (ticker, ticker alias, or CIK) to the matching entry.
 

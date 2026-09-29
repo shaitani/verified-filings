@@ -55,7 +55,7 @@ CONTEXT_TOKENS = 8192
 #: question was 88% of a 91-minute run.
 #:
 #: 1536 is roughly 2.25x the largest legitimate reply measured on this prompt:
-#: the HANDOFF §8 smoke test (three companies, twelve quarters, 16 elements)
+#: the smoke-test question in docs/TESTING.md (three companies, twelve quarters, 16 elements)
 #: is 682 tokens, and a seven-company four-metric five-year chart is 439. A
 #: question that needs more than this is not a bigger question, it is a model
 #: that has stopped tracking the schema.

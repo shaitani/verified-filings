@@ -1,7 +1,7 @@
 """The question-to-reply chain, as one function: parse -> map -> answer -> present.
 
 ``ask()`` is what the Web Server runs for each job, and what the evals should
-call too, so they measure the path a reader gets (``app/api/DESIGN.md`` §12a).
+call too, so they measure the path a reader gets (``app/api/DESIGN.md``).
 It never raises for a question it cannot answer: every outcome, from any
 stage, becomes part of the ``Outcome``, and the reader's words for a failure
 are fixed sentences -- the detail goes to ``errors``, for the trace.
@@ -31,7 +31,7 @@ from app.semantic.query_mapper import map_query
 
 log = logging.getLogger(__name__)
 
-#: What a reader is told when no curated reason exists (DESIGN §12a).
+#: What a reader is told when no curated reason exists (app/api/DESIGN.md §1).
 PARSE_FAILED = (
     "I couldn't work out what that question is asking for. Try naming the figure, "
     "the company and the period explicitly."
@@ -61,7 +61,7 @@ class OptionRecord(_Base):
     option_id: str
     label: str  # a clarification's answer text: what parse_question(answers=) is given
     metric: str | None = None  # clarification: the curated metric it leads to
-    concept: ConceptRef | None = None  # ambiguity: the concept to pin (slice 2)
+    concept: ConceptRef | None = None  # ambiguity: the concept to pin
 
 
 class AskRecord(_Base):
@@ -300,7 +300,7 @@ async def _answer(
     outcome: Outcome, plan: QueryPlan, elements: list, decided: dict[str, Part], stage
 ) -> tuple[dict[str, str], AnswerView | None]:
     """Fetch and present the bound parts. Any failure refuses every one of them
-    -- they came out of one statement (retrieval DESIGN §5) -- and leaves the
+    -- they came out of one statement (retrieval DESIGN §6) -- and leaves the
     mapper's refusals and questions standing."""
 
     def refuse_all(reason: str) -> tuple[dict[str, str], None]:

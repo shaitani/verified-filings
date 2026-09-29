@@ -44,7 +44,7 @@ def test_every_captured_result_presents(name: str) -> None:
 
 
 def test_a_single_figure_is_a_stat() -> None:
-    view = _present("q001")  # Apple FY2024 revenue, HANDOFF §8's check figure
+    view = _present("q001")  # Apple FY2024 revenue, a check figure in docs/TESTING.md
     (stat,) = view.views
     assert stat.kind == "stat"
     assert view.rows[stat.row].value == Decimal("391035000000")

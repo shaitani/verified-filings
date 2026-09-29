@@ -27,9 +27,9 @@ otherwise every list would have to enumerate twenty filers nobody typed.
 
 **It grades the decision, not the number.** Nothing here checks that a figure
 is right. Recording expected answers was rejected when this set was written
-(``evals/README.md``): pinning numbers turns a design instrument into a
-brittle regression suite, and the few figures worth pinning are pinned in
-``HANDOFF.md`` §8.
+(``docs/TESTING.md``): pinning numbers turns a design instrument into a
+brittle regression suite, and the few figures worth pinning are listed there
+under "Verifying figures yourself".
 
 One grade is not symmetric. ``unsafe`` is the system **answering** an item a
 person marked ``refused`` or ``asked`` -- it produced a figure where it should
@@ -412,9 +412,9 @@ async def preflight() -> None:
         async with QueryMapperSessionLocal() as session:
             loaded = await session.scalar(select(func.count()).select_from(Company))
     except Exception as exc:
-        sys.exit(f"cannot reach the database ({type(exc).__name__}: {exc}). See BOOTSTRAP.md.")
+        sys.exit(f"cannot reach the database ({type(exc).__name__}: {exc}). See docs/STARTUP.md.")
     if not loaded:
-        sys.exit("the store holds no companies. See BOOTSTRAP.md for the load step.")
+        sys.exit("the store holds no companies. See docs/STARTUP.md for the load step.")
 
 
 LABEL = {"pass": "PASS", "fail": "MISS", "unsafe": "UNSAFE", "ungraded": "----"}

@@ -1,4 +1,4 @@
-"""Administration, from the command line, with the owner's credential (DESIGN §12a).
+"""Administration, from the command line, with the owner's credential (DESIGN §10).
 
     uv run python -m app.api.admin invite --email someone@example.com [--days 14]
     uv run python -m app.api.admin invite --github their-username [--days 14]

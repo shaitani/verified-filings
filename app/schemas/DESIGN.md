@@ -1,19 +1,17 @@
 # `app/schemas` — Pydantic schemas: design decisions
 
-Context handoff for the schemas in [`xbrl.py`](xbrl.py), like
-[`app/db/DESIGN.md`](../db/DESIGN.md) is for the ORM models. Records **what was
-decided and why**, so a future session can extend or explain the schemas without
-re-deriving the reasoning.
-
-Related: `app/db/DESIGN.md`, `app/semantic/DESIGN.md`, `PITFALLS.md`,
-memory `db-layer-layout.md`, `xbrl-data-terminology.md`.
+What was decided about the Pydantic contracts, and why: `xbrl.py` (the
+curated files, §1–§7) and `query.py` (the mapper's two ends, §8). The result
+contract (`result.py`) is in [app/retrieval/DESIGN.md](../retrieval/DESIGN.md);
+`answer_view.py` in [app/presenter/DESIGN.md](../presenter/DESIGN.md) and
+[app/api/DESIGN.md](../api/DESIGN.md).
 
 ---
 
 ## 1. Purpose & scope
 
-`app/schemas/` is the app-wide home for Pydantic models — `sec-retriever.md` §3
-calls it "the single source of truth". One module per domain; consumers import
+`app/schemas/` is the app-wide home for the Pydantic contracts — the single
+source of truth for each shape. One module per domain; consumers import
 from the submodule (`from app.schemas.xbrl import CompanyFactsFile`), so
 `__init__.py` stays a docstring only.
 
@@ -22,14 +20,13 @@ live in [`app/semantic/DESIGN.md`](../semantic/DESIGN.md).
 
 `xbrl.py` validates **one curated XBRL-data file** (`data/xbrl/<TICKER>.json`,
 written by the retrieval step in `app/ingest/xbrl_store.py`) on the way IN,
-before the **load step** (`app/db/loader.py`, see `LOADER.md`) turns it into
+before the **load step** (`app/db/loader.py`, see [docs/LOADER.md](../../docs/LOADER.md)) turns it into
 `app.db` ORM rows.
 
-- **No read DTOs yet.** Nothing here mirrors ORM rows on the way out — those
-  come if/when there's an HTTP API or structured CLI output, as separate
-  classes with `from_attributes=True`. Never reuse the `*In` models for output.
-  (`query.py`'s `QueryPlan` *is* outbound, but it is computed, not a projection
-  of ORM rows, so `from_attributes` doesn't apply — see §8.)
+- **Nothing here projects ORM rows.** The outbound models (`QueryPlan`,
+  `ResultSet`, `AnswerView`) are computed, not copies of rows; the Web Server's
+  request and response models live in `app/api/schemas.py`. Never reuse the
+  `*In` models for output.
 - Dependency direction: **schemas → nothing in the app**; **loader → (schemas,
   models)**. No cycles.
 
@@ -119,16 +116,13 @@ pattern could be added later with low risk, but isn't now.)
 is touched. Observed max in the data is 4 decimal places (rates / EPS); 7+ would
 signal a data problem.
 
-**Correction (verified once the loader existed):** an earlier version of this
-doc said the loader must read files with `parse_float=Decimal` to avoid `0.047`
-becoming an imprecise binary float. Not needed — Pydantic's `Decimal` validator
-converts a Python `float` via its *string* form (`str(500000.47) ->
-Decimal('500000.47')`), not the raw binary value, so plain `json.loads(text)`
-is already exact, as long as the raw dict goes straight into
-`CompanyFactsFile.model_validate()` before anything else touches `val`. Verified
-empirically: `Decimal(500000.47)` (raw) gives `500000.46999999997206...`, but
-`FactIn.model_validate({"val": 500000.47, ...}).val` gives the exact
-`Decimal("500000.47")`, with or without `parse_float=Decimal` upstream.
+**Plain `json.loads` is exact — no `parse_float=Decimal` needed.** Pydantic's
+`Decimal` validator converts a Python `float` through its *string* form
+(`str(500000.47) → Decimal('500000.47')`), not its binary value, as long as the
+raw dict goes straight into `CompanyFactsFile.model_validate()` before anything
+else touches `val`. Verified: `Decimal(500000.47)` gives
+`500000.46999999997206…`, while `FactIn.model_validate({"val": 500000.47,
+…}).val` gives exactly `Decimal("500000.47")`.
 
 ### 4.6 String fields mirror their DB column lengths
 
@@ -201,27 +195,18 @@ loader wants it elsewhere, moving it is trivial.
 
 ## 5. Relationship to `app/db`
 
-- The load step (`app/db/loader.py`, built — see `LOADER.md`) reads a file with
-  plain `json.loads(text)` → `CompanyFactsFile.model_validate(...)`
-  → walk `iter_facts()` → apply `ALLOWED_UNITS` (imported from `app.db`) →
-  upsert `Concept`, insert `Filing` / `Fact`, maintain `is_latest` → write a
-  `LoadRun`.
-- `LoadRun.retrieved_at` comes from `CompanyFactsFile.retrieved`;
-  `LoadRun.loaded_at` is DB `now()`.
-- `LoadRun.taxonomy_count` / `concept_count` / `fact_count` can be taken straight
-  from `CountsIn` (already checksum-verified by 4.7).
+The load step ([docs/LOADER.md](../../docs/LOADER.md)) reads a file with plain
+`json.loads(text)` → `CompanyFactsFile.model_validate(...)` → walks
+`iter_facts()` → applies `ALLOWED_UNITS` → writes the rows.
+`LoadRun.retrieved_at` comes from `CompanyFactsFile.retrieved`, and its counts
+from `CountsIn` (already checksummed by 4.7). Dependency direction: schemas
+import nothing from the app; the loader imports schemas and models.
 
----
+## 6. Possible tightenings
 
-## 6. Not built yet / follow-ups
-
-- Read DTOs projecting ORM rows — deferred until there's an API or structured
-  CLI output. (`query.py`'s outbound models are computed, not projections.)
-- Possible `fy ∈ scope.fiscal_years` assertion (4.8).
-- Possible `accn` / `frame` regex (4.4).
-- A tighter `fy` bound than `2000..2100` once the scope-window rule is settled.
-
----
+Listed in [docs/FUTURE.md](../../docs/FUTURE.md#data-and-ingest): `fy ∈
+scope.fiscal_years` (4.8), an `accn` / `frame` format check (4.4), a tighter
+`fy` bound.
 
 ## 7. Data facts referenced (measured across all 20 files, 2026-08-30)
 
@@ -238,12 +223,11 @@ loader wants it elsewhere, moving it is trivial.
 
 ## 8. `query.py` — the query mapper's two ends
 
-Added 2026-09-18 alongside `app/semantic/query_mapper.py`. `QueryIn` is what a user's
-question looks like once the Query Parser (`app/parser/`, block [C]) has
-parsed it;
-`QueryPlan` is what the mapper resolves that into, and what the SQL-generating
-model reads. Both live in one module because they are two ends of one contract
-— changing one almost always means changing the other.
+`QueryIn` is what a question looks like once the Query Parser
+(`app/parser/`, [C]) has parsed it; `QueryPlan` is what the mapper resolves
+that into, and what retrieval reads. Both live in one module because they are
+two ends of one contract — changing one almost always means changing the
+other.
 
 ### 8.1 `QueryIn` speaks the user's language, never XBRL
 
@@ -255,8 +239,8 @@ knowable from the question text).
 
 ### 8.2 Elements are a discriminated union on `kind`
 
-`metric` / `company` / `period` / `qualifier`, dispatched by Pydantic on
-`kind`. A flat "list of things being asked about" was the original sketch and
+`metric`, `company`, `company_group`, `period`, `metric_qualifier`,
+`metric_threshold` and `narrative`, dispatched by Pydantic on `kind`. A flat "list of things being asked about" was the original sketch and
 it does not survive contact: each kind needs a *different* resolver, and
 running embedding search over `"Apple"` returns noise. The discriminator is
 what routes each element correctly, and `extra="forbid"` then makes a
@@ -280,10 +264,11 @@ Some metrics exist as no single `Concept` row: gross margin is
 one of those is asked for, so the list is there from the start. The ordinary
 case is one operand and the default `expression` of `"c0"`.
 
-`expression` is a **string**, not a parsed tree. Its only consumer today is a
-language model that reads it as text, and a real AST can replace it the moment
-something needs to *evaluate* it. A `model_validator` keeps it honest: every
-`cN` it references must be an operand that was actually bound.
+`expression` is a **string** over `c0`, `c1`, …, not a parsed tree:
+retrieval substitutes each `cN` with its operand's value in SQL and keeps the
+operators as written. A real AST can replace it the moment something needs to
+evaluate it another way. A `model_validator` keeps it honest: every `cN` it
+references must be an operand that was actually bound.
 
 ### 8.5 Company ambiguity has no home in `Ambiguity`
 
@@ -331,14 +316,11 @@ ratio is the honest maturity metric for the mapping layer, and it costs one
 
 ### 8.9 `FilingForm` / `Taxonomy` are imported from `xbrl.py`
 
-Not redefined. They mirror the same DB enums, and two copies would drift.
-
-**Superseded in part (see §8.12):** this section originally also imported
-`FiscalPeriod` for `PeriodElementIn.fiscal_period`, and called the resulting
-rejection of `fiscal_period="Q4"` a useful side effect. It wasn't — it made
-every Q4 question unanswerable. Period *labels* a question may use are now
-`QueryFiscalPeriod`, defined in `query.py`; only the storage-level fields still
-borrow `xbrl.py`'s four-value Literal.
+Not redefined. They mirror the same database enums, and two copies would
+drift. Period *labels* a question may use are `QueryFiscalPeriod`, defined in
+`query.py` with `Q4` — wider than storage's four values, because no filing is
+a Q4 yet a Q4 is askable (§8.12). Borrowing storage's `FiscalPeriod` once made
+every Q4 question unanswerable.
 
 ### 8.10 `extra="forbid"` matters more here than in `xbrl.py`
 
@@ -392,52 +374,26 @@ This is also the groundwork for Q4: a derived fourth quarter is the annual
 window minus the 9-month year-to-date window sharing its `period_start`, which
 is only expressible once periods carry dates.
 
-### 8.12 Q4 is derived, and the schema makes the derivation provable
+### 8.12 Q4 is askable, though no filer files one
 
-No US filer files a fourth quarter — the store holds 100 `FY`, 99 `Q1`, 99
-`Q2`, 100 `Q3` and **zero** `Q4` filings. Q4 is therefore not an edge case to
-special-case per company; it is a derivation that must happen every time
-anyone asks for one.
+The store holds 100 `FY`, 99 `Q1`, 99 `Q2`, 100 `Q3` and **zero** `Q4`
+filings. So the query vocabulary is wider than the storage vocabulary on
+purpose: *no Q4 rows exist* and *Q4 is not askable* are different claims, and
+translating between them is the mapper's job.
 
-**Query vocabulary is wider than storage vocabulary.** `PeriodElementIn` uses
-`QueryFiscalPeriod` (`FY`/`Q1`/`Q2`/`Q3`/`Q4`) while `Filing.fiscal_period`
-stays at four values. An earlier version of §8.9 called rejecting `Q4` at the
-boundary "correct" — that was wrong. It conflated *no Q4 rows exist* with *Q4
-is not askable*, and translating between those is the mapper's entire purpose.
+The mapper resolves a Q4 window per company from windows it already has — Q4
+runs from the day after Q3 closes to the fiscal-year end — and the view
+supplies the value as an ordinary row (GAPS D1.4). So a Q4 needs nothing
+special in the schema: `ResolvedPeriod.granularity` is `quarterly`, like any
+quarter.
 
-**The derivation.** For duration (flow) facts,
-`Q4 = annual window − nine-month year-to-date window sharing its start`. Both
-components open on the fiscal year start, which is what lets the SQL step join
-them without guessing — hence `PeriodResidual.shared_start` as one field rather
-than two that happen to agree. For **instant** facts there is no arithmetic at
-all: the fiscal-year-end balance *is* the Q4-end balance.
-
-**Why the rule lives on `Binding`, not `ResolvedPeriod`.** Whether Q4 needs
-subtracting depends on the *concept*, not the period: at the same Q4, revenue
-is a residual and total assets is a plain instant read. So `ResolvedPeriod`
-always supplies the component windows for a Q4 and `Binding.period_rule`
-decides whether to use them.
-
-**The mapper needs no extra query.** Q4 runs from the day after Q3 closes to
-the fiscal year end, and Q3's discrete window already ends exactly where the
-nine-month term does — so `_with_derived_q4` builds it from windows §8.11
-already resolved. A company missing either component gets no Q4 key at all.
-
-**Why `Coverage.components` exists.** Verified against the store: NVIDIA
-carries four *annual* facts under the revenue concept Apple and Microsoft use
-quarterly, and zero nine-month ones. A Q4 binding to that concept passes a
-concept-level `fact_count > 0` check and then cannot be computed. Worse, a
-subtraction with a missing term does not error — drop the nine-month value and
-"Q4" silently becomes the whole year. `Binding` therefore *refuses* to validate
-a `residual` binding whose components aren't each proven non-empty, which makes
-that bug unrepresentable rather than merely discouraged.
-
-**Verified end to end.** The mapper's residual windows drive SQL that joins on
-exact plan-supplied dates — no day-span ranges — returning FY2025 Q4 revenue of
-102.5B (AAPL), 76.4B (MSFT) and 39.3B (NVDA), all matching reported figures.
-Note those are three different calendar quarters (Jun–Sep, Apr–Jun, Oct–Jan)
-carrying the same label, which is why §8.11's per-company windows had to land
-first.
+It used to: the plan carried the two windows to subtract (`PeriodResidual`),
+`Binding.period_rule` said whether to subtract, and `Coverage.components`
+proved both halves existed. All of it went when the view took over the
+arithmetic, after the two derivations were cross-checked — 275 of 275 residuals
+agreed across 20 companies, 4 metrics and 5 years. The lesson stands: a
+subtraction with a missing term does not error, it returns a different number,
+so wherever the arithmetic lives it has to be impossible to run half of it.
 
 ### 8.13 `Binding.periods` and `Binding.notes`
 
@@ -464,8 +420,7 @@ See `app/semantic/DESIGN.md` §8b.
 
 The seam is verified rather than assumed: where two concepts both report a
 period their values are compared, and the note says whether the series was
-stitched across agreeing values or across an unverifiable gap. See
-`PITFALLS.md` §1.8.
+stitched across agreeing values or across an unverifiable gap (GAPS D1.8).
 
 ### 8.14 `ResultSpec` — what the answer has to contain
 
@@ -491,13 +446,13 @@ for the same reason: *what to compute* and *what to return* are different
 questions, and folding them together is how the dimension got missed in the
 first place.
 
-`ResultSet.result` carries a copy (2026-09-27), because the presenter chooses
-the view from it and never sees the plan (retrieval DESIGN §5). For the same
+`ResultSet.result` carries a copy, because the Presenter chooses the view
+from it and never sees the plan (retrieval DESIGN §6). For the same
 reason it carries the ranking direction (`rank`) and the plan's `thresholds` —
 a filtered list has to say what filtered it. `QueryPlan` refuses a result whose
 thresholds differ from its own, so the two copies cannot drift.
 
-`Binding.display_as` (2026-09-27) is the curated reading of a dimensionless
+`Binding.display_as` is the curated reading of a dimensionless
 result: `multiple` makes a current ratio `0.89×`, not `89%`. The unit (`pure`)
 cannot say which; semantic DESIGN §8f.
 
@@ -505,7 +460,7 @@ cannot say which; semantic DESIGN §8f.
 
 `Binding.unit` is the unit of the **result** — what a reader is shown. For
 `gross_margin`, which is `c0 / c1` over two USD concepts, that is `pure`,
-because dividing like by like is dimensionless (PITFALLS §2.1: copying the
+because dividing like by like is dimensionless (GAPS D1.17: copying the
 lead operand's unit through once made a 0.46 gross margin report as "USD",
 which any formatter renders as 46 cents).
 
@@ -527,7 +482,7 @@ resolves the two. A multi-operand binding that omits it raises.
 ### 8.15 Two kinds of notes
 
 `Binding.notes` covers a caveat about one binding's numbers; `QueryPlan.notes`
-covers one about the result as a whole. Period misalignment (PITFALLS §1.16) is
+covers one about the result as a whole. Period misalignment (GAPS D1.16) is
 the plan-level case — it is a statement about a *comparison*, and attaching it
 to one of its sides would be arbitrary.
 
@@ -567,18 +522,13 @@ modes, and collapsing them would make "which company" and "which companies" the
 same request. Named companies and group members merge without duplicates, so a
 question may do both.
 
-`Company` gained `sic_code` / `sic_description` / `sic_office` (migration
-`3011d3c40ff8`), all nullable and **unpopulated** — the load step does not
-write them yet. `_resolve_company_groups` therefore checks whether *any* filer
-has the column set and reports "SIC data has not been loaded" when none does.
-An empty result would read as "no company is in that sector", which is a
-different and wrong answer. The check also means the path starts working the
-moment the data lands, with no code change; a test proves that by populating
-one column and re-resolving.
-
-`sic_office` has no source: `sic_numbers.json` carries code and description
-only. The SEC assigns review offices by SIC *range*, so it is derivable given
-that mapping, which this project does not have.
+`Company` carries `sic_code`, `sic_description` and `sic_office` (migration
+`3011d3c40ff8`), all nullable. The load step fills the first two from
+`sic_numbers.json`. `_resolve_company_groups` first checks whether *any* filer
+has the column set and, when none does, says the data is missing — an empty
+result would read as "no company is in that sector", a different and wrong
+answer. `sic_office` has no source (GAPS G9), and its refusal says so rather
+than suggesting a reload.
 
 ### 8.18 Granularity is tracked apart from period
 
@@ -592,16 +542,13 @@ fourfold spike. The question is perfectly normal, so this is a plan-level
 `mixed_granularity` note rather than a refusal — but the two series want
 showing separately.
 
-### 8.19 `QualifierElementIn` removed
+### 8.19 A qualifier that nothing resolves is worse than no kind at all
 
-It was inert: `map_query` never looked at it, so a parser emitting
-`kind: "qualifier"` had its intent silently dropped. The things it was meant to
-carry are better served elsewhere — "diluted" and "basic" are already separate
-alias entries, and every fact in this store is consolidated because
-companyfacts has no dimensional data at all (PITFALLS §3.2).
-
-Removing the kind converts a silent drop into a `ValidationError`, which is the
-house rule everywhere else on this boundary.
+An earlier `qualifier` kind was inert: `map_query` never looked at it, so a
+parser emitting one had its intent silently dropped. It was removed, turning a
+silent drop into a `ValidationError`. Its replacement, `metric_qualifier`, is
+resolved — and an unsatisfiable one takes its metric with it (parser DESIGN
+§6a), because the metric alone would answer a narrower question with a total.
 
 ### 8.20 Not built: metric groups
 
@@ -614,9 +561,9 @@ Recorded here because it was briefly designed as a "bundle" concept before
 being recognised as nothing new.
 
 
-### 8.21 Fields added 2026-09-26: per-part refusals, curated questions, movement over time
+### 8.21 Per-part refusals, curated questions, movement over time, ranking direction
 
-Three additions, each with its full reasoning elsewhere:
+Each with its full reasoning elsewhere:
 
 - **`Unresolved.blocks_question`** and **`QueryPlan.has_answerable_part`** — a
   question is answered per part. A refused metric or narrative span refuses
@@ -637,9 +584,9 @@ Three additions, each with its full reasoning elsewhere:
   as an operand (the year before a single year asked for), kept out of
   `periods` so nothing counts or reports them. Which periods pair up is one
   rule, `over_time_pairs`, beside `previous_period` in this module, so the
-  mapper and retrieval cannot disagree. Retrieval DESIGN §4.8.
+  mapper and retrieval cannot disagree. Retrieval DESIGN §4.1.
 - **`MetricElementIn.rank`** (`highest` / `lowest`, `RankDirection`) and
-  **`ResultSpec.rank`** (2026-09-27) — which end of a ranking comes first, in
+  **`ResultSpec.rank`** — which end of a ranking comes first, in
   the asker's words. `QueryIn` refuses it outside a `rank` question. On
   `ResultSpec` it is keyed by element and holds only metrics that bound, and
   it rides on `ResultSet` to the Presenter. Parser DESIGN §10c.

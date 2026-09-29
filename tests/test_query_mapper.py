@@ -961,7 +961,7 @@ def test_a_q4_is_bound_in_the_same_binding_as_its_neighbours() -> None:
 def test_a_ratio_is_dimensionless_not_the_numerator_s_unit() -> None:
     """`gross_margin` is USD over USD and the answer is a ratio. Reporting the
     lead operand's unit said 0.46 was "USD", which anything formatting values
-    would render as 46 cents (PITFALLS 2.1)."""
+    would render as 46 cents (docs/GAPS.md D1.17)."""
     numerator = query_mapper._Candidate(
         concept_id=1, taxonomy="us-gaap", name="GrossProfit", score=1.0
     )

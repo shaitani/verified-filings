@@ -35,7 +35,7 @@ def _isolate_xbrl_store(tmp_path, monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # Test database (tests/test_loader.py) -- the separate PostgreSQL container
-# "db-test" (see docker-compose.yml, ALEMBIC.md), never the real database.
+# "db-test" (see docker-compose.yml, docs/ALEMBIC.md), never the real database.
 # --------------------------------------------------------------------------- #
 
 #: cik of tests/fixtures/xbrl_fake_company.json -- read from the file itself,

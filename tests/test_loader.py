@@ -1,7 +1,7 @@
 """Tests for app/db/loader.py.
 
 test_build_plan_transform is pure -- no database. The rest run against the
-real "db-test" PostgreSQL container (tests/conftest.py); see LOADER.md.
+real "db-test" PostgreSQL container (tests/conftest.py); see docs/LOADER.md.
 
 Expected values are derived from the fixture itself (via `doc` and
 `doc.iter_facts()`), never retyped as literals -- so editing the fixture can't

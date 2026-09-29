@@ -23,7 +23,7 @@ from app.schemas.query import (
 )
 
 #: How a unit is formatted. A ratio is shown as a percentage, never as money
-#: (PITFALLS §2.1); a multiple ("current ratio") as 0.89x, never as 89%.
+#: (docs/GAPS.md D1.17); a multiple ("current ratio") as 0.89x, never as 89%.
 UnitKind = Literal["money", "ratio", "multiple", "per_share", "count"]
 
 
@@ -164,7 +164,7 @@ class AnswerView(_Base):
         values = [row.value for row in rows]
         if any(value is None for value in values):
             raise ValueError(f"bar view {view.title!r} has a row with no value to rank")
-        # Nothing upstream checks a ranking's order (retrieval DESIGN §9); here it
+        # Nothing upstream checks a ranking's order (docs/GAPS.md G7); here it
         # cannot be drawn out of order.
         if values != sorted(values, reverse=view.order == "descending"):
             raise ValueError(f"bar view {view.title!r} is not in {view.order} order")

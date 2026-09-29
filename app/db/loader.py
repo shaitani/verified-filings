@@ -4,7 +4,7 @@
 
 Standalone entry point -- not part of app/cli.py. Retrieval (SEC -> disk,
 app/ingest/) and loading (disk -> DB, here) stay separate steps joined only by
-the files in data/xbrl/. See LOADER.md for the full write-up.
+the files in data/xbrl/. See docs/LOADER.md for the full write-up.
 """
 
 from __future__ import annotations

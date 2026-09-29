@@ -339,7 +339,7 @@ metrics:
     label: Effective income tax rate
     # The filer's own reported rate, not one derived here. Filed under two
     # units across the corpus ("pure" and "Rate"), so the multi-unit guard
-    # picks one and coverage may exclude filers using the other. PITFALLS 1.14.
+    # picks one and coverage may exclude filers using the other. docs/GAPS.md D1.14.
     synonyms: [tax rate, effective rate, etr, effective tax rates]
     terms:
       - [us-gaap:EffectiveIncomeTaxRateContinuingOperations]
@@ -418,7 +418,7 @@ metrics:
     # R&D intensity?" parses to ['R&D intensity'] and does.
     #
     # So this entry fixes the NAMED ratio, not the phrased one. The general
-    # case is app/retrieval/DESIGN.md §4.3d.
+    # case is docs/GAPS.md G5.
     synonyms: [r d intensity, research intensity, r d to revenue,
                r d revenue ratio, r d as a share of revenue,
                r d as a percentage of revenue]

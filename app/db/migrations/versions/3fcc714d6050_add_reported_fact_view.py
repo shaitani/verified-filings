@@ -3,7 +3,7 @@
 The one relation ``vf_retrieval_role`` may read. It bakes in the ``is_latest``
 filter and the three joins, and -- deliberately -- exposes no fiscal year or
 fiscal period: those are provenance on ``filing``, not the period a fact
-describes, and a column of that name is an invitation to PITFALLS.md 1.1.
+describes, and a column of that name is an invitation to docs/GAPS.md D1.1.
 Labels reach the result from the query plan instead.
 
 See app/retrieval/DESIGN.md 3.

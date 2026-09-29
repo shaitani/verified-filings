@@ -175,6 +175,6 @@ def xbrl_data_url(cik_padded: str) -> str:
     "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"
 
     SEC's own path segment for this endpoint is "companyfacts"; this project
-    refers to the data it returns only as "XBRL data" (see sec-retriever.md).
+    refers to the data it returns only as "XBRL data" (see docs/sec-retriever.md).
     """
     return f"{DEFAULT_BASE_URL}/api/xbrl/companyfacts/CIK{cik_padded}.json"

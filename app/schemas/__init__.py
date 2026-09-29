@@ -1,5 +1,4 @@
-"""Pydantic schemas -- the app-wide single source of truth for data shapes
-(sec-retriever.md section 3).
+"""Pydantic schemas -- the app-wide single source of truth for data shapes.
 
 One module per domain. Consumers import from the submodule, e.g.::
 

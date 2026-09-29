@@ -1,25 +1,17 @@
-# `app/db` — XBRL data model: design decisions
+# `app/db` — [G] the XBRL data model: design decisions
 
-This document is the context handoff for the SQLAlchemy models in
-[`models.py`](models.py). It records **what was decided and why**, so a future
-session can extend the layer (e.g. write the Pydantic schemas, wire up a
-session, add a table) or explain any part of it without re-deriving the
-reasoning. Read it alongside `models.py` — the code has per-line comments, this
-has the rationale.
+What was decided about the SQLAlchemy models in [`models.py`](models.py) — the
+`xbrl` schema — and why. The code has per-line comments; this has the
+rationale. A diagram of the tables is in [`SCHEMA-MAP.md`](SCHEMA-MAP.md).
 
-Related memory: `db-layer-layout.md`, `xbrl-data-ingest-plan.md`,
-`xbrl-data-terminology.md`.
+The `web` schema (users, conversations, jobs; `web.py`) is designed in
+[app/api/DESIGN.md](../api/DESIGN.md) §11, and the login roles
+(`roles.py`) in [docs/DESIGN.md](../../docs/DESIGN.md#9-who-can-do-what-in-the-database).
 
-### Vocabulary — two steps, don't say "ingest"
-
-| step | direction | code | timestamp |
-|---|---|---|---|
-| **retrieval** | SEC cloud → `data/xbrl/<TICKER>.json` on disk | `app/ingest/` (built) | the file's own `retrieved` field |
-| **load** | `data/xbrl/*.json` → rows in the `xbrl.*` tables | `app/db/loader.py` (not written) | `LoadRun.loaded_at` |
-
-"Ingest" was previously used for both and is avoided from here on. `sec-retriever.md`
-still names the retrieval layer `app/ingest/` — that folder was kept (renaming it
-collided with §3's reserved `app/retrieval/` for hybrid search).
+**Two steps, two words.** *Retrieval* is SEC → `data/xbrl/<TICKER>.json`
+(`app/ingest/`, timestamped by the file's own `retrieved`); *load* is those
+files → rows here (`app/db/loader.py`, timestamped by `LoadRun.loaded_at`).
+"Ingest" names the package, not a step.
 
 ---
 
@@ -106,8 +98,7 @@ is a one-line clean-slate for a full reload.
 Note the three words for "schema" that came up:
 - **relational schema** = the whole table blueprint (what `models.py` expresses)
 - **PostgreSQL schema** = this namespace
-- **Pydantic "schema"** = a DTO / request-response shape (FastAPI's naming); the
-  framework-agnostic term is **DTO**. Not built yet — see §5.
+- **Pydantic "schema"** = a validated data shape (`app/schemas/`).
 
 ### 3.2 `Company.cik` is the primary key; `Company.id` is inert
 
@@ -209,14 +200,11 @@ ALLOWED_UNITS = frozenset({"USD", "shares", "pure", "USD/shares", "Rate", "EUR"}
 in exactly one company — these tag disclosure **counts** (number of lawsuits,
 warehouses, segments), not financial data, with inconsistent `val` semantics.
 
-**The load step drops any fact whose unit ∉ `ALLOWED_UNITS`.** The `Fact.unit`
-column itself is an unconstrained string — nothing in the DB enforces the
-allow-list. The constant lives in `models.py` only so the policy is documented
-next to the table and the `LoadRun` audit columns. **The enforcement code does
-not exist yet** — when `app/db/loader.py` is built, it will:
-`if unit not in ALLOWED_UNITS: dropped += len(facts); continue`, then write
-`LoadRun.units_allowlist = sorted(ALLOWED_UNITS)` and
-`LoadRun.facts_dropped_unit = dropped`.
+**The load step drops any fact whose unit ∉ `ALLOWED_UNITS`**, and records
+the allow-list and the dropped count on `LoadRun`. The `Fact.unit` column
+itself is an unconstrained string — nothing in the database enforces the
+allow-list. The constant lives in `models.py` so the policy is documented next
+to the table and its audit columns.
 
 To widen coverage later: add to `ALLOWED_UNITS`, reload. The audit trail in
 `LoadRun` explains any historical gap.
@@ -386,78 +374,20 @@ Full index list:
 
 ---
 
-## 5. Where things go — layout follows `sec-retriever.md` §3
+## 5. Async throughout
 
-**Database driver: `asyncpg`, not psycopg** (user's call, 2026-09). Everything
-that touches Postgres is async:
+The driver is **`asyncpg`**, not psycopg: everything touching Postgres is
+async. URLs are `postgresql+asyncpg://…`; `app/db/session.py` builds async
+engines and session factories, one per login role; the loader is `async def`,
+called from the CLI through `asyncio.run`. The `before_create` / `after_drop`
+schema hooks in `models.py` work unchanged — but Alembic does **not** fire
+them, so the first migration creates the `xbrl` schema explicitly.
 
-- SQLAlchemy URL scheme is `postgresql+asyncpg://user:pass@host:5432/dbname`.
-- `app/db/session.py` uses `create_async_engine` + `async_sessionmaker` +
-  `AsyncSession` (not the sync `Engine` / `sessionmaker`). `greenlet` (already
-  installed) is what SQLAlchemy needs for this.
-- `app/db/loader.py` is `async def`; any CLI path that calls it does so via
-  `asyncio.run` (same pattern as the existing `app/cli.py`).
-- The `before_create` / `after_drop` `DDL(...).execute_if(dialect="postgresql")`
-  hooks in `models.py` work unchanged under asyncpg. Note Alembic does **not**
-  fire them — the first migration creates the `xbrl` schema explicitly.
+Changing the schema: [docs/ALEMBIC.md](../../docs/ALEMBIC.md). The load step:
+[docs/LOADER.md](../../docs/LOADER.md). Validating a file before it loads:
+[app/schemas/DESIGN.md](../schemas/DESIGN.md).
 
-| thing | location | status |
-|---|---|---|
-| **Pydantic schemas** | `app/schemas/xbrl.py` (+ `DESIGN.md`, `tests/test_xbrl_schema.py`) | **built 2026-08-30.** Inbound validation of one `data/xbrl/*.json` file. See §6 and `app/schemas/DESIGN.md`. |
-| **Config** | `app/config.py` | **built.** `pydantic-settings` `Settings`; exposes `settings.database_url` from `.env`. |
-| **Engine + async session** | `app/db/session.py` | **built.** `engine` + `SessionLocal` (`async_sessionmaker`, `expire_on_commit=False`), from `settings.database_url`. |
-| **Alembic** | `alembic.ini` (repo root) + `app/db/migrations/` (async template) | **scaffolded + wired.** `env.py` pulls the URL from `app.config.settings`, sets `target_metadata = Base.metadata`, restricts autogenerate to the `xbrl` schema, keeps `alembic_version` in `public`. `app/db/migrations/` is excluded from ruff. |
-| **The load step** | `app/db/loader.py` | **built.** `async def`. Reads a file (plain `json.loads`), validates via `CompanyFactsFile`, walks `iter_facts()`, applies `ALLOWED_UNITS` (from `app.db`), upserts `Concept`, inserts `Filing` / `Fact`, maintains `is_latest`, writes a `LoadRun`. See `LOADER.md`. |
-| **HTTP API DTOs** | `app/api/` — **only if** a real HTTP API is added | §3 reserves `app/api/` for FastAPI routes (Sprint 2). Keep request/response DTOs there, not in `app/schemas/`. Currently a CLI. |
-
-### 5.1 Changing the schema later
-
-Full setup record + the migration workflow + the known autogenerate gaps for
-this schema (`CREATE SCHEMA`, enum types, enum values, expression indexes) live
-in **`ALEMBIC.md`** at the repo root. In brief: edit `models.py` →
-`uv run alembic revision --autogenerate -m "…"` → read and fix the generated
-file → `uv run alembic upgrade head` → `uv run alembic check` → commit the
-migration with the model change.
-
-Dependency direction is always **schemas → nothing in the app** and **loader →
-(schemas, models)**, never the reverse. The nested-JSON walk is
-`CompanyFactsFile.iter_facts()` — a method on the schema, not a separate module
-(see `app/schemas/DESIGN.md` §4.14).
-
----
-
-## 6. Pydantic schemas — built
-
-`app/schemas/xbrl.py` (2026-08-30). Inbound validation of one
-`data/xbrl/<TICKER>.json` file before the load step. Classes: `CompanyFactsFile`
-(top), `ScopeIn`, `CountsIn`, `ConceptIn`, `FactIn`. Every rationale — the seven
-signed-off decisions plus the micro-choices — is in
-**[`app/schemas/DESIGN.md`](../schemas/DESIGN.md)**. Tests:
-`tests/test_xbrl_schema.py` (all 20 real store files validate).
-
-What the load step (`app/db/loader.py`) needed to know:
-
-- Plain `json.loads(text)` is enough — **no `parse_float=Decimal` needed.**
-  Earlier drafts assumed one was required to avoid `0.047` becoming an
-  imprecise binary float; verified this is unnecessary — Pydantic's `Decimal`
-  validator converts a `float` via its *string* form
-  (`str(500000.47) -> Decimal('500000.47')`), not the raw binary value, so it's
-  already exact as long as the raw dict goes straight into
-  `CompanyFactsFile.model_validate()` before anything else touches `val`.
-- Walk facts via **`CompanyFactsFile.iter_facts()`** — yields
-  `(taxonomy, concept_name, ConceptIn, unit, FactIn)`. Don't re-implement the loop.
-- Schema field names mirror the **source JSON** (`start`/`end`/`val`); the loader
-  renames to the ORM names (`period_start`/`period_end`/`value`).
-- Apply `ALLOWED_UNITS` in the loader — the schema accepts any unit key.
-- `LoadRun.taxonomy_count` / `concept_count` / `fact_count` can be taken straight
-  from `CountsIn` (the schema already checksums them against the facts tree).
-
-Outbound / read DTOs are still deferred — separate classes with
-`from_attributes=True`, never reuse the `*In` models.
-
----
-
-## 7. Data facts (measured across all 20 files, 2026-08-30)
+## 6. Data facts (measured across all 20 files, 2026-08-30)
 
 - 20 companies. Taxonomies present: `dei` (20), `us-gaap` (20), `srt` (7).
 - ~174,390 total facts; ~6,834 concept rows; 206 concepts with null

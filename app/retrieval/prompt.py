@@ -331,7 +331,7 @@ def emit_cte(cells: list[PlanCell]) -> str:
     list, qwen2.5-coder:7b wrote 40 of them and **computed** the windows for
     those from the fiscal-year label: Oracle's FY2021 Q1 came out as 2021-06-01
     where the plan says 2020-06-01, because Oracle's year ends in May. A fiscal
-    year's name and its dates are independent (PITFALLS §1.1). Every window was
+    year's name and its dates are independent (docs/GAPS.md D1.1). Every window was
     twelve months wrong, and the rows were attributable, plausible and in the
     right unit -- nothing downstream would have caught it.
 
@@ -783,7 +783,7 @@ def _refuse_if_too_long(prompt: str, cells: list[PlanCell]) -> None:
     windows and started *computing* them from the fiscal-year label: Oracle's
     FY2021 Q1 came out as 2021-06-01 when the plan says 2020-06-01, because
     Oracle's year ends in May. A fiscal year's name and its dates are
-    independent (PITFALLS §1.1), so every one of those windows was twelve months
+    independent (docs/GAPS.md D1.1), so every one of those windows was twelve months
     wrong -- and the rows were attributable, plausible and in the right unit.
     Nothing downstream would have caught it.
 

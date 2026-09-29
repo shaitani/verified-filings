@@ -169,7 +169,7 @@ async def test_a_session_is_an_http_only_cookie_for_thirty_days(client, web_fact
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{SESSION_COOKIE}=")
     assert "HttpOnly" in cookie and "SameSite=lax" in cookie
-    assert "Max-Age=2592000" in cookie  # 30 days (DESIGN §12a)
+    assert "Max-Age=2592000" in cookie  # 30 days (app/api/DESIGN.md §10)
 
     me = await client.get("/api/me")
     assert me.status_code == 200 and me.json()["email"] == "zz-auth-h@example.com"

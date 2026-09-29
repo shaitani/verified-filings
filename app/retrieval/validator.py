@@ -74,7 +74,7 @@ Conservative throughout: anything not positively understood is refused.
    ``FETCH ... WITH TIES`` is refused, because it returns more rows than its
    own count.
 
-See ``app/retrieval/DESIGN.md`` §7.
+See ``app/retrieval/DESIGN.md`` §8.
 """
 
 from __future__ import annotations

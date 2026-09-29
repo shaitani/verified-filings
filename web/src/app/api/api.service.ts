@@ -34,7 +34,7 @@ export function apiPath(path: ApiPath, params: Readonly<Record<string, string>> 
 
 /**
  * Every call the client makes, one method per route. The event stream is not here: it is
- * an `EventSource`, not an HTTP call (slice 4).
+ * an `EventSource`, not an HTTP call.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {

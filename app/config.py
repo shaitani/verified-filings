@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     github_oauth_client_secret: str | None = None
     #: Where GitHub sends the browser back. One of the app's registered callbacks.
     github_oauth_redirect_url: str = "http://localhost:8000/api/auth/github/callback"
-    #: How long a sign-in lasts, from signing in (DESIGN §12a). Shorten before deploying.
+    #: How long a sign-in lasts, from signing in (app/api/DESIGN.md §10). Shorten before deploying.
     auth_session_days: int = 30
     #: Secure cookies: sent over https only -- browsers treat localhost as secure.
     auth_cookie_secure: bool = True

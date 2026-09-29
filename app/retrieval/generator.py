@@ -8,7 +8,7 @@ Ollama serves the model alongside the embedding one (``docker-compose.yml``);
 kept in step** -- the ``ollama`` service pulls its models on startup because
 ``docker compose down -v`` wipes the model volume along with the database
 ones, and a model that only ever arrives by someone running ``ollama pull`` by
-hand is the step that goes missing after a wipe. See ``BOOTSTRAP.md``.
+hand is the step that goes missing after a wipe. See ``docs/BOOTSTRAP.md``.
 
 **No credential, ever.** The separation this layer rests on is that the model
 takes text and returns text. It has no driver, no connection string and no

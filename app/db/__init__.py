@@ -7,7 +7,8 @@ most recent fiscal years.
 
 Everything lives in a dedicated PostgreSQL schema (namespace) called ``xbrl``
 rather than ``public`` -- see ``app/db/models.py`` and ``app/db/DESIGN.md``.
-Engine/session wiring, the load step, and Alembic migrations are not here yet.
+Sessions are in ``session.py``, the load step in ``loader.py``, the login roles
+in ``roles.py``, the ``web`` schema in ``web.py``.
 
 Re-exports the declarative ``Base`` and the five model classes for convenience::
 
