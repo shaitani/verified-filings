@@ -317,6 +317,23 @@ def lookup_keys(text: str) -> list[str]:
     return keys
 
 
+def singular(key: str) -> str | None:
+    """A lookup key with the plural ``s`` taken off its last word, or ``None``
+    when that word does not look like a plural.
+
+    The fallback for a phrase that misses: "gross profits" reaches the entry
+    listing "gross profit". Only the last word, because that is the one English
+    pluralizes ("cash flows", not "cashes flow"). Not a stemmer -- "liabilities"
+    and "expenses" keep their endings and still need listing -- and a word
+    ending in "ss" ("loss", "gross") or of three letters or fewer ("eps") is
+    left alone, since its "s" is not a plural.
+    """
+    head, _, last = key.rpartition(" ")
+    if len(last) <= 3 or not last.endswith("s") or last.endswith("ss"):
+        return None
+    return f"{head} {last[:-1]}" if head else last[:-1]
+
+
 @dataclass(frozen=True)
 class AliasHit:
     """One curated metric, resolved down to concept keys.
@@ -396,14 +413,40 @@ class AliasIndex:
                         )
                     self._by_form[key] = hit
 
+        self._refuse_plurals_that_disagree()
+
+    def _refuse_plurals_that_disagree(self) -> None:
+        """No listed plural may reach a different entry than its singular.
+
+        ``lookup`` falls back to the singular for a phrase the file does not
+        list, which is safe only while "X" and "Xs" mean the same line of the
+        accounts wherever both are listed. A pair that splits -- a curated
+        plural meaning something its singular does not -- would make an
+        unlisted spelling's answer depend on which form happened to be listed.
+        Refused at load, so the file cannot drift into it.
+        """
+        for key, hit in self._by_form.items():
+            one = singular(key)
+            if one in self._by_form and self._by_form[one].metric != hit.metric:
+                raise ValueError(
+                    f"{key!r} reaches {hit.metric!r} but its singular {one!r} reaches "
+                    f"{self._by_form[one].metric!r}; lookup falls back to the singular, "
+                    "so a plural and its singular must lead to the same entry"
+                )
+
     def lookup(self, text: str) -> AliasHit | None:
         """The curated metric for a phrase, or ``None`` to fall through to the
         embedding search.
 
         Tries the separator spelling before the compacted one, so a phrase that
         could be read either way ("SG&A") lands on whichever the file lists.
+        Then, only if both miss, each spelling's singular (``singular``): a
+        plural the file does not list is the same metric as the singular it
+        does, and without this "gross profits" fell to the embedding search,
+        which finds four covered candidates and asks rather than binds.
         """
-        for key in lookup_keys(text):
+        keys = lookup_keys(text)
+        for key in keys + [one for key in keys if (one := singular(key))]:
             hit = self._by_form.get(key)
             if hit is not None:
                 return hit

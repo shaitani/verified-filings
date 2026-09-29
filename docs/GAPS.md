@@ -145,7 +145,6 @@ because the eval set grades the decision, not the figure.
 | question | what comes back | where | status |
 |---|---|---|---|
 | q057 "highest operating income at Costco **in 2024**" | Costco's **FY2025** quarters: the parser drops "in 2024" and emits `last_n_years: 1` | parser | a plausible wrong answer |
-| q058–q060 "Nvidia quarterly **gross profits** from 2020 …" | refused: the plural misses the curated `gross profit` entry, and embedding search finds four covered candidates, so it asks | alias | plural handling to be decided |
 | q042 "has anyone's total debt more than **doubled** since 2021?" | year-over-year dollar changes for 15 filers, not growth from 2021 with a >100% filter | parser / mapper | G1 |
 | q040 "**average** R&D spend across these companies" | the average on 14 rows, one per company | executor | the Presenter shows it as one figure naming the 14; the real fix is the closed list of operations (FUTURE) |
 | q018's round trip | dropped "Costco" and ranked every filer's quarters | parser | fixed by example order, not a check — G4 |

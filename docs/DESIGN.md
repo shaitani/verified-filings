@@ -158,7 +158,8 @@ lever on answer quality.
 curated question by one of two routes:
 
 1. Its phrase is listed as a synonym of a `clarify` entry — exact phrase after
-   normalization, so list the wordings people use. Checked first.
+   normalization (a plural reaches its singular), so list the wordings people
+   use. Checked first.
 2. The parser names the entry in `clarify_as`, for a vague phrase the file
    does not list ("How did Apple *fare*" → `performance`). It can only ever
    produce a question, never a figure.

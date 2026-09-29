@@ -125,6 +125,22 @@ One rule cannot serve both cases: "SG&A" wants its ampersand to vanish, and
 and lookup use the pair. Collision detection covers both spellings, so an entry
 cannot claim a form another entry already owns under either fold.
 
+**A plural the file does not list reaches its singular.** Lookup is exact, so
+"gross profits" missed the entry listing "gross profit" and fell to the
+embedding search, which found four covered candidates (`GrossProfit` at 0.85)
+and asked rather than bound — q058–q060. The file had been listing plurals by
+hand (21 of them), which fails the day one is forgotten. So when both folds
+miss, `lookup` tries each with the plural `s` taken off the last word
+(`singular`). Only then, so a listed form always wins; only a plain `s`, so
+"liabilities" and "expenses" still need listing; and never on a word ending
+"ss" or of three letters ("loss", "gross", "eps").
+
+It is safe while a plural and its singular mean the same line of the accounts
+wherever both are listed, and `AliasIndex` refuses to load a file where a pair
+reaches different entries. Measured at the change: none of the 277 forms did,
+and none of the 41 metric phrases the eval set's walkthrough parsed resolved
+differently. The hand-listed plurals are now redundant and harmless.
+
 ## 5. Coverage still outranks the file
 
 An alias entry is a hypothesis, not an answer. Every candidate it proposes goes

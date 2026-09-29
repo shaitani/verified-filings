@@ -23,6 +23,7 @@ from app.semantic.metric_aliases import (
     compact,
     load_aliases,
     normalize,
+    singular,
 )
 
 FAKE_ALIASES = Path(__file__).parent / "fixtures" / "metric_aliases_fake.yaml"
@@ -191,6 +192,41 @@ def test_fake_alias_file_loads() -> None:
 
 def test_unknown_phrase_returns_none_so_the_caller_can_fall_through() -> None:
     assert alias_index().lookup("blorptastic synergy index") is None
+
+
+def test_an_unlisted_plural_reaches_its_singular() -> None:
+    """q058-q060: "gross profits" is not listed, and embedding search finds four
+    covered candidates for it and asks rather than binds."""
+    assert alias_index().lookup("gross profits").metric == "gross_profit"
+    assert alias_index().lookup("Gross-Profits").metric == "gross_profit"
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("gross profits", "gross profit"),
+        ("revenues", "revenue"),
+        ("net loss", None),  # "ss" is not a plural
+        ("eps", None),  # nor is the "s" of a three-letter word
+        ("gross profit", None),
+    ],
+)
+def test_singular_takes_the_plural_s_off_the_last_word_only(key: str, expected) -> None:
+    assert singular(key) == expected
+
+
+def test_a_plural_reaching_a_different_entry_than_its_singular_is_rejected() -> None:
+    """The fallback is safe only while every listed pair agrees."""
+    document = AliasFile.model_validate(
+        _document(
+            {
+                "widget": {"label": "Widget", "terms": [["us-gaap:A"]]},
+                "widgets": {"label": "Widgets", "terms": [["us-gaap:B"]]},
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="must lead to the same entry"):
+        AliasIndex(document)
 
 
 def test_operand_slot_accepts_both_spellings() -> None:
