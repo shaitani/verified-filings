@@ -138,6 +138,9 @@ services:
       AUTH_OAUTH_STATE_SECRET: ${AUTH_OAUTH_STATE_SECRET}
       GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
       GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      # Where GitHub returns the browser: the Web Client's page (.env.example). The
+      # fallback repeats app/config.py's default -- an empty value would override it.
+      GITHUB_OAUTH_REDIRECT_URL: ${GITHUB_OAUTH_REDIRECT_URL:-http://localhost:8000/api/auth/github/callback}
       AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-30}
     volumes: ["./data:/srv/data"]  # retrieval_log.jsonl survives the container
     ports: ["127.0.0.1:8000:8000", "[::1]:8000:8000"]  # this machine only, as db above
