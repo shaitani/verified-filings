@@ -27,3 +27,12 @@
 .loading {
   color: var(--mat-sys-on-surface-variant);
 }
+
+.report {
+  margin-top: 4px;
+}
+
+.reported {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}

@@ -10,6 +10,7 @@ import {
   REPLIES,
   conversation,
   fakeEventSource,
+  fakeHistory,
   round,
 } from './conversation.testing';
 
@@ -18,15 +19,18 @@ const settle = () => new Promise((resolve) => setTimeout(resolve));
 describe('ConversationStore', () => {
   let store: InstanceType<typeof ConversationStore>;
   let http: HttpTestingController;
+  let history: ReturnType<typeof fakeHistory>;
 
   beforeEach(() => {
     FakeEventSource.opened = [];
+    history = fakeHistory();
     TestBed.configureTestingModule({
       providers: [
         ConversationStore,
         provideHttpClient(),
         provideHttpClientTesting(),
         fakeEventSource,
+        history.provider,
       ],
     });
     store = TestBed.inject(ConversationStore);
@@ -126,6 +130,36 @@ describe('ConversationStore', () => {
       .flush(conversation(round({ status: 'done', reply: REPLIES.clarification })));
     await sent;
     expect(store.problem()).toBe('That choice is no longer on offer. Please reload the page.');
+  });
+
+  it('refreshes the past questions when a round ends', async () => {
+    await opened(round({ status: 'parsing' }));
+    history.refresh.mockClear(); // opening refreshed once already
+    FakeEventSource.last().send({ kind: 'done', reply: DONE_REPLY } as JobEvent);
+    http
+      .expectOne('/api/conversations/c1')
+      .flush(conversation(round({ status: 'done', reply: DONE_REPLY })));
+    await settle();
+    expect(history.refresh).toHaveBeenCalled();
+  });
+
+  it('starts the stage clock from when the round was queued', async () => {
+    await opened(round({ status: 'parsing' }));
+    const before = Date.now();
+    FakeEventSource.last().send({ kind: 'stage', stage: 'mapping', seconds: 12 } as JobEvent);
+    const startedAt = store.startedAt()!;
+    expect(before - startedAt).toBeGreaterThanOrEqual(12_000 - 50);
+    expect(before - startedAt).toBeLessThan(12_000 + 1_000);
+  });
+
+  it('reports a round, and remembers it for this visit', async () => {
+    await opened(round({ status: 'done', reply: DONE_REPLY }));
+    const reported = store.report('j1', 'goodwill is wrong');
+    const request = http.expectOne({ method: 'POST', url: '/api/jobs/j1/feedback' });
+    expect(request.request.body).toEqual({ note: 'goodwill is wrong' });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await reported;
+    expect(store.reported().has('j1')).toBe(true);
   });
 
   it('says so when the conversation is not the reader’s', async () => {

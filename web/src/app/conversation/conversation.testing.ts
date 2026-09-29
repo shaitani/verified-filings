@@ -1,7 +1,18 @@
 // Shared by the conversation tests; `.testing.ts` keeps it out of the app build.
 import type { ConversationView, Reply, RoundView } from '../api/types';
 import replies from './fixtures/replies.json';
+import { HistoryStore } from '../history/history-store';
 import { OPEN_EVENT_SOURCE } from './job-events';
+
+/**
+ * The sidebar's store, reduced to spies: a conversation's tests see when it would refresh
+ * the list without answering its GET /api/conversations.
+ */
+export function fakeHistory() {
+  const refresh = vi.fn(async () => undefined);
+  const clear = vi.fn();
+  return { provider: { provide: HistoryStore, useValue: { refresh, clear } }, refresh };
+}
 
 /**
  * Real replies: the chain and the Presenter over captured runs, written by
@@ -77,7 +88,7 @@ export function conversation(...rounds: RoundView[]): ConversationView {
   };
 }
 
-/** A finished round's reply: one part answered, no figures needed at this slice. */
+/** A finished round's reply: one part answered, no figures needed. */
 export const DONE_REPLY = {
   conversation_id: 'c1',
   job_id: 'j1',

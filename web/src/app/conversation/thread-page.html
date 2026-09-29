@@ -27,8 +27,18 @@
           <p class="problem">{{ round.message }}</p>
         }
         @default {
-          <vf-stage-line [stage]="stageOf(round)" [elapsed]="store.stage()?.seconds ?? null" />
+          <vf-stage-line [stage]="stageOf(round)" [startedAt]="store.startedAt()" />
         }
+      }
+
+      @if (round.status === 'done' || round.status === 'failed') {
+        <div class="report">
+          @if (store.reported().has(round.job_id)) {
+            <span class="reported">Reported — thank you.</span>
+          } @else {
+            <button mat-button type="button" (click)="report(round)">Report a problem</button>
+          }
+        </div>
       }
     </section>
   }

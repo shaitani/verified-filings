@@ -468,6 +468,8 @@ export interface components {
              * @enum {string}
              */
             readonly status: "queued" | "parsing" | "mapping" | "fetching" | "presenting" | "done" | "failed";
+            /** Reply Status */
+            readonly reply_status: ("answered" | "partial" | "asked" | "refused") | null;
         };
         /**
          * ConversationView

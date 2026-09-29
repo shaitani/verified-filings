@@ -1,4 +1,14 @@
 <mat-toolbar>
+  @if (auth.user() && !wide()) {
+    <button
+      mat-icon-button
+      type="button"
+      aria-label="Past questions"
+      (click)="drawerOpen.set(!drawerOpen())"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+  }
   <a class="title" routerLink="/">Verified Filings</a>
   <span class="spacer"></span>
   @if (auth.user(); as user) {
@@ -8,16 +18,34 @@
   }
 </mat-toolbar>
 
-<main>
-  <router-outlet />
-  <p class="server">
-    Web Server:
-    @if (health.isLoading()) {
-      checking…
-    } @else if (health.hasValue()) {
-      {{ health.value()['status'] }}
-    } @else {
-      unreachable
-    }
-  </p>
-</main>
+<mat-sidenav-container class="body">
+  @if (auth.user()) {
+    <mat-sidenav
+      class="history"
+      [mode]="wide() ? 'side' : 'over'"
+      [opened]="wide() || drawerOpen()"
+      (closedStart)="drawerOpen.set(false)"
+    >
+      <!-- Loaded once the page is idle: the list is not needed to draw the first screen. -->
+      @defer (on idle) {
+        <vf-history-list (opened)="drawerOpen.set(false)" />
+      }
+    </mat-sidenav>
+  }
+
+  <mat-sidenav-content>
+    <main>
+      <router-outlet />
+      <p class="server">
+        Web Server:
+        @if (health.isLoading()) {
+          checking…
+        } @else if (health.hasValue()) {
+          {{ health.value()['status'] }}
+        } @else {
+          unreachable
+        }
+      </p>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

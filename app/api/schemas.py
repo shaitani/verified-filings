@@ -22,6 +22,9 @@ Stage = Literal["parse", "map", "execute"]
 
 PartOutcome = Literal["answered", "asked", "refused"]
 
+#: A whole reply, derived from its parts (``Reply.status``).
+ReplyStatus = Literal["answered", "partial", "asked", "refused"]
+
 
 class Refusal(_Base):
     """A refusal that sinks the whole question: no part is answered."""
@@ -81,7 +84,7 @@ class Reply(_Base):
 
     @computed_field  # derived for a header line, never set: one source of truth
     @property
-    def status(self) -> Literal["answered", "partial", "asked", "refused"]:
+    def status(self) -> ReplyStatus:
         outcomes = {part.outcome for part in self.parts}
         if self.blocking is not None or not outcomes:
             return "refused"
@@ -189,6 +192,13 @@ class ConversationSummary(_Base):
     created_at: datetime
     rounds: int = Field(ge=1)
     status: JobStatus  # of the latest round
+    reply_status: ReplyStatus | None = None  # its reply's, once done: "asked" awaits the reader
+
+    @model_validator(mode="after")
+    def _reply_status_when_done(self) -> ConversationSummary:
+        if (self.reply_status is not None) != (self.status == "done"):
+            raise ValueError("reply_status is set exactly when the latest round is done")
+        return self
 
 
 class GivenAnswer(_Base):

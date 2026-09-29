@@ -1,20 +1,24 @@
 import { Component, effect, inject, input } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 
 import type { AnswerIn, ConversationView, JobStage, RoundView } from '../api/types';
 import { ConversationStore } from './conversation-store';
 import { ReplyView } from './reply-view';
+import { ReportData, ReportDialog } from './report-dialog';
 import { StageLine } from './stage-line';
 
 /** `/c/:conversationId` -- one conversation, as its rounds. */
 @Component({
   selector: 'vf-thread-page',
-  imports: [ReplyView, StageLine],
+  imports: [MatButtonModule, ReplyView, StageLine],
   providers: [ConversationStore], // one store per open thread, gone when the page is
   templateUrl: './thread-page.html',
   styleUrl: './thread-page.scss',
 })
 export class ThreadPage {
   protected readonly store = inject(ConversationStore);
+  private readonly dialog = inject(MatDialog);
 
   readonly conversationId = input.required<string>(); // from the route
 
@@ -48,5 +52,10 @@ export class ThreadPage {
 
   protected answer(picks: readonly AnswerIn[]): void {
     void this.store.answer(picks);
+  }
+
+  protected report(round: RoundView): void {
+    const data: ReportData = { send: (note) => this.store.report(round.job_id, note) };
+    this.dialog.open(ReportDialog, { data, width: '480px' });
   }
 }

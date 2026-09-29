@@ -1305,6 +1305,23 @@
               "failed"
             ],
             "title": "Status"
+          },
+          "reply_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "answered",
+                  "partial",
+                  "asked",
+                  "refused"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Status"
           }
         },
         "additionalProperties": false,
@@ -1314,7 +1331,8 @@
           "question",
           "created_at",
           "rounds",
-          "status"
+          "status",
+          "reply_status"
         ],
         "title": "ConversationSummary",
         "description": "One line of \"my past questions\"."

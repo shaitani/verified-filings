@@ -9,6 +9,7 @@ import {
   FakeEventSource,
   conversation,
   fakeEventSource,
+  fakeHistory,
   round,
 } from './conversation.testing';
 
@@ -19,7 +20,12 @@ describe('ThreadPage', () => {
     FakeEventSource.opened = [];
     TestBed.configureTestingModule({
       imports: [ThreadPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), fakeEventSource],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        fakeEventSource,
+        fakeHistory().provider,
+      ],
     });
     http = TestBed.inject(HttpTestingController);
   });

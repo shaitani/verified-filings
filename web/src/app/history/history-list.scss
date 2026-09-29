@@ -1,0 +1,25 @@
+.heading {
+  font: var(--mat-sys-title-small);
+  margin: 16px 16px 4px;
+}
+
+.question {
+  font: var(--mat-sys-body-medium);
+}
+
+.line {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.waiting {
+  color: var(--mat-sys-tertiary);
+  font-weight: 500;
+}
+
+.problem,
+.empty {
+  margin: 8px 16px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}

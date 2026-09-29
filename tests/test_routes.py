@@ -228,6 +228,7 @@ async def test_a_reader_s_history_is_theirs_newest_first(server) -> None:
     listed = (await mine.get("/api/conversations")).json()
     assert [c["conversation_id"] for c in listed] == [second, first]
     assert [c["status"] for c in listed] == ["done", "done"]
+    assert [c["reply_status"] for c in listed] == ["asked", "partial"]  # "asked": awaits the reader
 
 
 async def test_a_curated_question_is_answered_and_the_thread_reopens(server) -> None:

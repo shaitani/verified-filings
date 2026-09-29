@@ -229,7 +229,8 @@ async def job_view(session_factory: async_sessionmaker, user_id: UUID, job_id: U
 async def conversations(
     session_factory: async_sessionmaker, user_id: UUID, limit: int = 50
 ) -> list[ConversationSummary]:
-    """The reader's conversations, newest first, each with its latest round's status."""
+    """The reader's conversations, newest first, each with its latest round's status
+    and, once done, its reply's -- read from the stored reply, not the whole of it."""
     latest = (
         select(Job.conversation_id, func.max(Job.round).label("rounds"))
         .group_by(Job.conversation_id)
@@ -237,7 +238,7 @@ async def conversations(
     )
     async with session_factory() as session:
         rows = await session.execute(
-            select(Conversation, latest.c.rounds, Job.status)
+            select(Conversation, latest.c.rounds, Job.status, Job.reply["status"].astext)
             .join(latest, latest.c.conversation_id == Conversation.id)
             .join(Job, (Job.conversation_id == Conversation.id) & (Job.round == latest.c.rounds))
             .where(Conversation.user_id == user_id)
@@ -251,8 +252,9 @@ async def conversations(
                 created_at=conversation.created_at,
                 rounds=rounds,
                 status=status,
+                reply_status=reply_status,
             )
-            for conversation, rounds, status in rows
+            for conversation, rounds, status, reply_status in rows
         ]
 
 

@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import type { JobStage } from '../api/types';
@@ -13,7 +13,7 @@ const DOING: Readonly<Record<JobStage, string>> = {
   presenting: 'Preparing the answer',
 };
 
-/** A running round: what it is doing, and for how long. */
+/** A running round: what it is doing, and how long since it was asked -- a running clock. */
 @Component({
   selector: 'vf-stage-line',
   imports: [MatProgressBarModule],
@@ -21,7 +21,7 @@ const DOING: Readonly<Record<JobStage, string>> = {
     <p class="doing" aria-live="polite">
       {{ doing() }}…
       @if (seconds() !== null) {
-        <span class="seconds">{{ seconds() }} s</span>
+        <span class="seconds" aria-hidden="true">{{ seconds() }} s</span>
       }
     </p>
     <mat-progress-bar mode="indeterminate" />
@@ -39,11 +39,20 @@ const DOING: Readonly<Record<JobStage, string>> = {
 })
 export class StageLine {
   readonly stage = input.required<JobStage>();
-  readonly elapsed = input<number | null>(null); // seconds since the round was queued
+  readonly startedAt = input<number | null>(null); // when the round was queued, in ms
+
+  // One tick a second. The seconds are hidden from screen readers so they do not
+  // announce every tick; the stage itself is still announced when it changes.
+  private readonly now = signal(Date.now());
+
+  constructor() {
+    const ticker = setInterval(() => this.now.set(Date.now()), 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(ticker));
+  }
 
   protected readonly doing = computed(() => DOING[this.stage()]);
   protected readonly seconds = computed(() => {
-    const elapsed = this.elapsed();
-    return elapsed === null ? null : Math.round(elapsed);
+    const started = this.startedAt();
+    return started === null ? null : Math.max(0, Math.round((this.now() - started) / 1000));
   });
 }
