@@ -484,3 +484,27 @@ through the same coverage check, so a pick with no facts for a filer is still
 reported, never bound on trust. `resolved_by = "pinned"`, which `ResolvedBy`
 gained for it; the similarity bar and the tie report apply only to
 `"embedding"`, so neither can fire on a pick.
+
+## 8h. A loss is the profit line filed negative: `losses_only`
+
+"Operating losses" and "net loss" are not concepts of their own; they are
+`OperatingIncomeLoss` / `NetIncomeLoss` when the filed value is below zero.
+Left to the embedding search the phrase either asked which concept was meant or
+bound the profit line and ranked the biggest *profits*. So `operating_loss` and
+`net_loss` are alias entries with `losses_only: true` (valid only on a plain
+single-operand `c0` entry). For an element bound through one, `map_query`:
+
+- adds an implied `PlanThreshold(comparison="lt", value=0)`, so retrieval and
+  the Presenter treat it like a stated one. A threshold is the one narrowing
+  allowed to return fewer rows than the grid, which is right: only the filers
+  with a loss qualify, possibly none;
+- flips the rank, since the largest loss is the lowest value;
+- refuses that metric (not the question) if it also carries a user threshold
+  ("losses of more than $1B" states a positive size against negative values) or
+  an `over_time` (the growth of a negative number misleads).
+
+The figure stays as filed, negative; a rewritten sign would no longer be the
+filed value. The entry's `caveats` sentence becomes the `narrower_than_asked`
+note and says so, and is the only explanation when no company qualified. The
+plurals are listed because the singular fallback strips only a final `s`
+("losses" -> "losse"). A pinned element skips all of this.

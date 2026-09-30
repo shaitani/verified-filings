@@ -236,6 +236,8 @@ RULES
    lookup   one figure           compare  several entities side by side
    trend    change over time     rank     ordered by a metric
    derive   something computed from the figures
+   A ranking whose question states a count ("top 3", "the five lowest") sets
+   `top_n` on the ranked metric to that number. No count stated, no `top_n`.
 
 8. `wants_chart` is true only when the question asks to SEE the figures
    drawn -- "chart", "graph", "plot", "show me visually", "draw". It is
@@ -478,6 +480,15 @@ _EXAMPLES: list[tuple[str, str]] = [
         """{"intent":"rank","elements":[
   {"id":"e1","kind":"metric","text":"operating income","rank":"highest"},
   {"id":"e2","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
+    ),
+    # A count in the question is `top_n` on the ranked metric, in the reader's
+    # own number. Only when the question states one: the acceptor refuses a
+    # count it does not find there.
+    (
+        "Show me the top 5 companies with the lowest gross profit in 2022",
+        """{"intent":"rank","elements":[
+  {"id":"e1","kind":"metric","text":"gross profit","rank":"lowest","top_n":5},
+  {"id":"e2","kind":"period","text":"2022","fiscal_year":2022}],"wants_chart":false}""",
     ),
     # The same side of 5e, asked the other way round. The one above ranks
     # companies; this one ranks the periods themselves, which is the case the

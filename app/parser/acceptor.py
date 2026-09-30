@@ -211,7 +211,7 @@ _YEAR = re.compile(r"\b\d{4}\b")
 #: Which optional wire fields each kind may carry. Anything outside its set
 #: is a confusion, not a spare field -- see gate 3.
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
-    "metric": frozenset({"clarify_as", "over_time", "rank"}),
+    "metric": frozenset({"clarify_as", "over_time", "rank", "top_n"}),
     "company": frozenset(),
     "period": frozenset(
         {
@@ -469,6 +469,37 @@ def _check_clarify_as(element: WireElement) -> None:
         )
 
 
+_NUMBER_WORDS = {
+    word: number
+    for number, word in enumerate(
+        "one two three four five six seven eight nine ten eleven twelve thirteen "
+        "fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(),
+        start=1,
+    )
+} | {"thirty": 30, "forty": 40, "fifty": 50, "hundred": 100}
+
+
+def _check_top_n(element: WireElement, question: str) -> None:
+    """``top_n`` is a count the question states, in digits or in words.
+
+    Same reason as a period's year: a count the reader never wrote is invented,
+    and it would silently cut the answer short. "the top 3" and "the five
+    lowest" pass; "which company is highest" carries no count and gets none.
+    """
+    if element.top_n is None:
+        return
+    stated = {
+        int(token) if token.isdigit() else _NUMBER_WORDS.get(token)
+        for token in re.findall(r"[a-z]+|\d+", normalize(question))
+    }
+    if element.top_n not in stated:
+        raise MalformedProposal(
+            f"metric {element.id!r} has top_n {element.top_n}, which the question does "
+            "not state. A count is only what the question says (\"top 3\", \"the five "
+            "lowest\"); a question that names none has no top_n: leave it out."
+        )
+
+
 def _check_period(element: WireElement, span: str, question: str) -> None:
     """The period rules a schema cannot state.
 
@@ -572,12 +603,14 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
     try:
         if element.kind == "metric":
             _check_clarify_as(element)
+            _check_top_n(element, question)
             return MetricElementIn(
                 id=element.id,
                 text=span,
                 clarify_as=element.clarify_as,
                 over_time=element.over_time,
                 rank=element.rank,
+                top_n=element.top_n,
             )
         if element.kind == "company":
             # No ticker, no name: see wire.py. The span alone reaches the

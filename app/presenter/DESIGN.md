@@ -46,6 +46,13 @@ order, **sorted here from the values**, not trusted from the statement
 Anything else by company, then filed before derived, annual before quarterly,
 then date.
 
+A count the question put on a ranking (`ResultSpec.top_n`) is applied **after**
+that sort, so the rows kept are the top because everything else was ranked
+below them; retrieval still returns and proves the whole ranking. When rows were
+cut, a condition says so ("showing the first 3 of 16 in the ranking"); a count
+at or above the ranking's size says nothing. A row with no value sorts last, so
+it is kept only if the count reaches it.
+
 ## 3. Display strings
 
 | unit | kind | shown as |

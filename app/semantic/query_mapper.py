@@ -112,7 +112,10 @@ async def map_query(
     companies = [e for e in query.elements if isinstance(e, CompanyElementIn)]
     groups = [e for e in query.elements if isinstance(e, CompanyGroupElementIn)]
     periods = [e for e in query.elements if isinstance(e, PeriodElementIn)]
-    metrics = [e for e in query.elements if isinstance(e, MetricElementIn)]
+    asked_metrics = [e for e in query.elements if isinstance(e, MetricElementIn)]
+    loss_ids, loss_problems = _losses_only_metrics(query, asked_metrics, pins or {})
+    refused = {problem.element_id for problem in loss_problems}
+    metrics = [m for m in asked_metrics if m.id not in refused]
 
     async with session_factory() as session:
         ciks, company_problems, missing_companies = await _resolve_companies(
@@ -245,6 +248,17 @@ async def map_query(
         for element in query.elements
         if isinstance(element, MetricThresholdElementIn)
         and element.qualifies in bound_elements
+    ] + [
+        # "Operating losses" keeps only the filers below zero. Implied by the
+        # phrase, so it reaches retrieval and the Presenter like a stated one.
+        PlanThreshold(
+            element_id=element.id,
+            element_text=element.text,
+            comparison="lt",
+            value=Decimal(0),
+        )
+        for element in metrics
+        if element.id in loss_ids and element.id in bound_elements
     ]
 
     over_time, over_time_problems, over_time_notes = _over_time(
@@ -257,8 +271,13 @@ async def map_query(
         ciks=_answering_ciks(ciks, bindings),
         periods=_answered_periods(resolved_periods, over_time, metrics),
         metrics=_answering_metrics(metrics, bindings),
-        rank={m.id: m.rank for m in metrics if m.rank and m.id in bound_elements},
+        rank={
+            m.id: _loss_rank(m.rank) if m.id in loss_ids else m.rank
+            for m in metrics
+            if m.rank and m.id in bound_elements
+        },
         thresholds=thresholds,
+        top_n={m.id: m.top_n for m in metrics if m.top_n and m.id in bound_elements},
     )
     over_time += _series_growth(metrics, bindings, result, query.intent, over_time, thresholds)
 
@@ -266,14 +285,18 @@ async def map_query(
     # part's answer; a refused company or period is every part's, because every
     # figure depends on it. Decided here from the element's kind, once, rather
     # than at each of the dozen places an Unresolved is made.
-    per_part = {e.id for e in metrics} | {
+    per_part = {e.id for e in asked_metrics} | {
         e.id for e in query.elements if isinstance(e, NarrativeElementIn)
     }
     unresolved = [
         problem.model_copy(update={"blocks_question": False})
         if problem.element_id in per_part
         else problem
-        for problem in company_problems + period_problems + metric_problems + narrative_problems
+        for problem in company_problems
+        + period_problems
+        + metric_problems
+        + loss_problems
+        + narrative_problems
     ]
     return QueryPlan(
         question=query.question,
@@ -295,6 +318,56 @@ async def map_query(
         + _alignment_notes(resolved_periods, result)
         + _granularity_notes(result),
     )
+
+
+def _losses_only_metrics(
+    query: QueryIn,
+    metrics: list[MetricElementIn],
+    pins: Mapping[str, ConceptRef],
+) -> tuple[set[str], list[Unresolved]]:
+    """The metric elements bound through a ``losses_only`` alias, and a refusal
+    for each one that cannot be answered as a loss.
+
+    A loss is the profit line filed negative, so "the largest operating losses"
+    is the most negative figure among the filers below zero. Two things do not
+    survive that reading and are refused, that metric only: a stated threshold
+    ("losses of more than $1B" compares a positive amount with negative values)
+    and a movement over time (the growth of a negative number misleads).
+    """
+    tested = {
+        e.qualifies for e in query.elements if isinstance(e, MetricThresholdElementIn)
+    }
+    index = alias_index()
+    kept: set[str] = set()
+    refusals: list[Unresolved] = []
+    for element in metrics:
+        if element.id in pins:  # the asker chose a concept outright
+            continue
+        hit = index.lookup(element.text)
+        if hit is None or not hit.losses_only:
+            continue
+        if element.id in tested:
+            reason = (
+                f"{element.text!r} is answered as the companies whose figure is "
+                "below zero, and a loss is filed as a negative number, so a "
+                "threshold on its size cannot be applied to it"
+            )
+        elif element.over_time:
+            reason = (
+                f"the change over time in {element.text!r} is not available: "
+                "the growth of a negative figure misleads, since a loss that "
+                "shrinks would read as a decline"
+            )
+        else:
+            kept.add(element.id)
+            continue
+        refusals.append(Unresolved(element_id=element.id, reason=reason))
+    return kept, refusals
+
+
+def _loss_rank(rank: RankDirection) -> RankDirection:
+    """The largest loss is the lowest value, and the reverse."""
+    return "lowest" if rank == "highest" else "highest"
 
 
 def _qualifier_is_satisfiable(qualifier: MetricQualifierElementIn) -> str | None:
@@ -579,6 +652,7 @@ def _describe_result(
     metrics: int,
     rank: dict[str, RankDirection],  # only metrics that bound: nothing else has rows to order
     thresholds: list[PlanThreshold],  # the plan's own list; the Presenter states them
+    top_n: dict[str, int] | None = None,  # how many of a ranking the question asked for
 ) -> ResultSpec:
     """What the answer has to contain, from what actually resolved.
 
@@ -619,6 +693,7 @@ def _describe_result(
         granularities=sorted({p.granularity for p in periods}),
         rank=rank,
         thresholds=thresholds,
+        top_n=top_n or {},
     )
 
 

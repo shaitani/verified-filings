@@ -50,6 +50,8 @@ def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
     rows = [_row(annotated, result, metrics) for annotated in result.rows]
     rows = _order(_collapse_aggregates(rows, result), result, metrics)
     conditions = _conditions(rows, result, metrics)
+    rows, shown = _top_n(rows, result, metrics)
+    conditions += shown
 
     shape = result.result.shape
     if len(rows) == 1:
@@ -197,6 +199,31 @@ def _order(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str])
                 ),
             )
     return ordered
+
+
+def _top_n(
+    rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]
+) -> tuple[list[AnswerRow], list[str]]:
+    """Only the top N of a ranking the question put a count on, and a sentence
+    saying how many there were.
+
+    Cut here, after the whole ranking has been ordered, so the rows kept are the
+    top because everything else was ranked below them. A row with no value sorts
+    last (``_order``), so it is only kept when the count reaches it.
+    """
+    kept: list[AnswerRow] = []
+    stated: list[str] = []
+    seen: dict[str, int] = {}
+    for row in rows:
+        limit = result.result.top_n.get(row.element_id)
+        seen[row.element_id] = seen.get(row.element_id, 0) + 1
+        if limit is None or seen[row.element_id] <= limit:
+            kept.append(row)
+    for element_id, limit in result.result.top_n.items():
+        total = seen.get(element_id, 0)
+        if total > limit:
+            stated.append(f"showing the first {limit} of {total} in the ranking")
+    return kept, stated
 
 
 def _conditions(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]) -> list[str]:

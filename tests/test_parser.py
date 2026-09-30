@@ -418,6 +418,41 @@ def test_rank_belongs_to_metrics_only():
         accept(reply, RANKING)
 
 
+TOP_THREE = "Show me the top 3 companies with the highest operating income in 2024"
+
+
+@pytest.mark.parametrize(
+    ("question", "count"),
+    [(TOP_THREE, 3), ("Show me the five companies with the highest operating income in 2024", 5)],
+)
+def test_top_n_is_a_count_the_question_states(question, count):
+    (metric,) = [e for e in accept(_ranking(rank="highest", top_n=count), question).elements
+                 if e.kind == "metric"]
+    assert metric.top_n == count
+
+
+def test_a_count_the_question_never_states_is_refused():
+    with pytest.raises(MalformedProposal, match="top_n 3, which the question does not state"):
+        accept(_ranking(rank="highest", top_n=3), RANKING)
+
+
+def test_top_n_needs_a_direction():
+    with pytest.raises(MalformedProposal, match="needs `rank`"):
+        accept(_ranking(top_n=3), TOP_THREE)
+
+
+def test_top_n_belongs_to_metrics_only():
+    reply = _reply(
+        intent="rank",
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "operating income", "rank": "highest"},
+            {"id": "e2", "kind": "period", "text": "2024", "fiscal_year": 2024, "top_n": 3},
+        ],
+    )
+    with pytest.raises(MalformedProposal, match="only a metric"):
+        accept(reply, TOP_THREE)
+
+
 def test_the_grammar_allows_exactly_two_directions():
     rank = WIRE_SCHEMA["$defs"]["WireElement"]["properties"]["rank"]["anyOf"]
     assert {"enum": ["highest", "lowest"], "type": "string"} in rank

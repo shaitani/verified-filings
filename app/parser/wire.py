@@ -105,6 +105,10 @@ class WireElement(BaseModel):
     # some metric of a "rank" question and refuses it anywhere else.
     rank: RankDirection | None = None
 
+    # Metric only: how many of the ranking the question asks for ("top 3").
+    # Only with `rank`, and only a number the question itself states.
+    top_n: int | None = None
+
 
 class WireQuery(BaseModel):
     """The whole reply. Mirrors ``QueryIn`` minus ``version`` and ``question``,

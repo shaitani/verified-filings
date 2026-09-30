@@ -73,10 +73,42 @@ metrics:
     label: Net income
     # Bare "profit" and "bottom line" live on the `profit` clarify entry
     # instead: unqualified, they are not specifically net income.
-    synonyms: [net earnings, net profit, net loss]
+    synonyms: [net earnings, net profit]
     terms:
       - - us-gaap:NetIncomeLoss
         - us-gaap:ProfitLoss
+
+  # A loss is the same concept filed negative, not a concept of its own. These
+  # two entries bind the profit lines and the mapper keeps only the filers below
+  # zero, most negative first (`losses_only`). Plurals are listed because the
+  # singular fallback does not strip "losses" to "loss".
+  operating_loss:
+    label: Operating income (loss)
+    synonyms: [operating loss, operating losses, loss from operations, losses from operations]
+    losses_only: true
+    terms:
+      - [us-gaap:OperatingIncomeLoss]
+    caveats:
+      us-gaap:OperatingIncomeLoss: >-
+        A loss is filed as a negative figure and is shown as filed, so a larger
+        loss is a more negative number. Companies with an operating profit in
+        the period are left out, so fewer companies than asked for may appear,
+        or none.
+
+  net_loss:
+    label: Net income (loss)
+    synonyms: [net loss, net losses]
+    losses_only: true
+    terms:
+      - - us-gaap:NetIncomeLoss
+        - us-gaap:ProfitLoss
+    caveats:
+      us-gaap:NetIncomeLoss: &net_loss_caveat >-
+        A loss is filed as a negative figure and is shown as filed, so a larger
+        loss is a more negative number. Companies with a net profit in the
+        period are left out, so fewer companies than asked for may appear, or
+        none.
+      us-gaap:ProfitLoss: *net_loss_caveat
 
   research_and_development:
     label: Research and development expense

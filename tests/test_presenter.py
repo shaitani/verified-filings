@@ -68,6 +68,31 @@ def test_a_ranking_is_drawn_in_the_direction_asked() -> None:
     assert [n.kind for n in view.notes] == ["partial_coverage", "period_misalignment"]
 
 
+def test_a_count_keeps_the_top_of_the_ranking_and_says_so() -> None:
+    result, metrics = _load("q009")  # highest operating margin, 16 filers
+    full = present(result, metrics)
+    (element_id,) = result.result.rank
+    counted = result.model_copy(
+        update={"result": result.result.model_copy(update={"top_n": {element_id: 3}})}
+    )
+    view = present(counted, metrics)
+    assert [r.company for r in view.rows] == [r.company for r in full.rows[:3]]
+    assert "showing the first 3 of 16 in the ranking" in view.conditions
+    (bar,) = view.views
+    assert len(bar.rows) == 3 and "top 10 of" not in bar.title
+
+
+def test_a_count_larger_than_the_ranking_says_nothing() -> None:
+    result, metrics = _load("q009")
+    (element_id,) = result.result.rank
+    counted = result.model_copy(
+        update={"result": result.result.model_copy(update={"top_n": {element_id: 50}})}
+    )
+    view = present(counted, metrics)
+    assert len(view.rows) == 16
+    assert not any("showing the first" in c for c in view.conditions)
+
+
 def test_a_largest_decline_ranks_lowest_first() -> None:
     view = _present("q038")  # 359 quarter-on-quarter changes
     (bar,) = view.views

@@ -229,6 +229,18 @@ class MetricElementIn(_ElementBase):
 
     rank: RankDirection | None = None  # set on the metrics a "rank" question orders by
 
+    #: How many of the ranking to show: "the top 3 ...", "the five lowest ...".
+    #: Only a number the question states -- the parser's acceptor checks it
+    #: appears there. Applied by the Presenter over the full ranking, which
+    #: stays the proof the ones shown are the top.
+    top_n: int | None = Field(default=None, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _top_n_needs_a_direction(self) -> MetricElementIn:
+        if self.top_n is not None and self.rank is None:
+            raise ValueError("`top_n` needs `rank`: a count of what, from which end?")
+        return self
+
 
 class CompanyElementIn(_ElementBase):
     """A filer. Resolved by deterministic lookup, never by embedding.
@@ -985,6 +997,10 @@ class ResultSpec(_Base):
     #: element_id -> which end comes first, for each bound metric a ranking
     #: orders by. Rides on ResultSet so the Presenter never needs the plan.
     rank: dict[str, RankDirection] = Field(default_factory=dict)
+
+    #: element_id -> how many of that ranking to show, for the metrics whose
+    #: question stated a count. Absent means show them all.
+    top_n: dict[str, int] = Field(default_factory=dict)
 
     #: The plan's thresholds, for the same reason: a list filtered by "revenue
     #: over 100 billion" has to say so, and the Presenter never sees the plan.

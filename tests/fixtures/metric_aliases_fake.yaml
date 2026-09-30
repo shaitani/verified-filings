@@ -70,3 +70,13 @@ metrics:
           description: What widgets sold for.
         - metric: widget_margin
           description: What was left of it.
+
+  # ZzzTestNetLoss is filed negative, so this is the loss reading of it:
+  # "widget losses" keeps only the companies below zero and ranks the most
+  # negative first.
+  widget_loss:
+    label: Widget income (loss)
+    synonyms: [widget losses]
+    losses_only: true
+    terms:
+      - [us-gaap:ZzzTestNetLoss]

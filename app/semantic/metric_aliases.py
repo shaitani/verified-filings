@@ -157,6 +157,13 @@ class MetricAlias(_Base):
     #: current ratio of 0.89 is "0.89x", not "89%". Only on a metric that resolves.
     display_as: DisplayAs | None = None
 
+    #: The phrase asks about a *loss*: "operating losses", "net loss". A loss is
+    #: not a separate concept, it is the same one filed negative, so the mapper
+    #: keeps only the companies whose figure is below zero and ranks the most
+    #: negative first. The figure itself stays as filed. Only on a plain
+    #: single-concept lookup, where "below zero" means one thing.
+    losses_only: bool = False
+
     @property
     def slots(self) -> list[tuple[list[str], OperandSign]]:
         """``terms`` with the two spellings collapsed to one shape."""
@@ -186,6 +193,13 @@ class MetricAlias(_Base):
             raise ValueError("`terms` must list at least one operand slot")
         if self.display_as is not None and self.terms is None:
             raise ValueError("`display_as` needs `terms`: only a figure is displayed")
+        if self.losses_only and (
+            self.terms is None or len(self.terms) != 1 or self.expression != "c0"
+        ):
+            raise ValueError(
+                "`losses_only` needs `terms` with a single operand and the default "
+                "expression `c0`: it tests the filed value against zero"
+            )
         return self
 
     @model_validator(mode="after")
@@ -369,6 +383,8 @@ class AliasHit:
 
     display_as: DisplayAs | None = None  # carried onto every binding this makes
 
+    losses_only: bool = False  # the mapper adds "below zero" and flips the rank
+
 
 class AliasIndex:
     """Normalized surface form -> ``AliasHit``."""
@@ -393,6 +409,7 @@ class AliasIndex:
                     split_concept_ref(ref): message for ref, message in alias.caveats.items()
                 },
                 display_as=alias.display_as,
+                losses_only=alias.losses_only,
                 option_labels=tuple(
                     document.metrics[o.metric].label for o in alias.clarify.options
                 )

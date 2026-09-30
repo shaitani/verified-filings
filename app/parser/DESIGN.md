@@ -506,7 +506,18 @@ DESIGN §4.6) and the Presenter sorts by it without seeing the plan.
 **Taught by example, like `clarify_as`**: the five ranking examples carry it,
 one of them `lowest`, and a test holds every ranking example to showing it.
 
-**What adding it broke, and how that was found.** The eval set passed cold, 13
+**`top_n` — how many.** "The top 3 ..." is a count beside `rank` on the same
+metric element (`top_n`, 1–100, refused without `rank`). It is only ever a number
+the question states: `accept()` looks for it in the question, in digits or as a
+word up to twenty (and 30/40/50/100), the same reason a `fiscal_year` must be
+named — a count the reader never wrote would silently cut the answer short. One
+ranking example teaches it (`top 5 ... lowest gross profit`); the model leaves
+it out otherwise, so "which company had the highest ..." still returns the whole
+ranking. Measured 2026-09-29 after adding the example: the colon lists, q009-q018
+and q038-q041 unchanged. The mapper copies it onto `ResultSpec.top_n` for the
+metrics that bound; the Presenter applies it (presenter DESIGN §2).
+
+**What adding `rank` broke, and how that was found.** The eval set passed cold, 13
 of 13 including the colon lists. The clarification round trip is not in the
 eval set, and it broke: "Which quarter is Costco's strongest?" answered
 "Total revenue" re-parsed with **no company element** on 2 of 2 cold runs —

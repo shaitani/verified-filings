@@ -1887,3 +1887,125 @@ async def test_a_pin_to_a_concept_not_loaded_is_refused(
     assert plan.bindings == []
     (problem,) = plan.unresolved
     assert "us-gaap:ZzzTestNeverLoaded" in problem.reason and "not loaded" in problem.reason
+
+
+# --------------------------------------------------------------------------- #
+# Losses -- the profit line filed negative, kept only where it is below zero
+# --------------------------------------------------------------------------- #
+
+
+def _loss_query(*extra, text: str = "widget losses", **metric):
+    return _query(
+        {"id": "m", "text": text, "kind": "metric", **metric},
+        {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+        {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+        *extra,
+        intent="rank",
+    )
+
+
+async def test_a_loss_is_a_threshold_below_zero_with_the_rank_flipped(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    """The largest loss is the most negative figure, so "highest" becomes
+    "lowest", and only filers below zero qualify."""
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(_loss_query(rank="highest"), session_factory=test_session_factory)
+
+    assert plan.is_complete
+    (threshold,) = plan.thresholds
+    assert (threshold.element_id, threshold.comparison, threshold.value) == ("m", "lt", 0)
+    assert threshold.element_text == "widget losses"
+    assert plan.result.rank == {"m": "lowest"}
+
+
+async def test_the_smallest_loss_flips_to_highest(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(_loss_query(rank="lowest"), session_factory=test_session_factory)
+
+    assert plan.result.rank == {"m": "highest"}
+
+
+async def test_a_metric_that_is_not_a_loss_gains_no_threshold(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _loss_query(text="widget signed burn", rank="highest"),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.thresholds == []
+    assert plan.result.rank == {"m": "highest"}
+
+
+async def test_a_loss_with_a_stated_threshold_is_refused_for_that_metric_only(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _loss_query(
+            {
+                "id": "t",
+                "text": "of more than $1B",
+                "kind": "metric_threshold",
+                "qualifies": "m",
+                "comparison": "gt",
+                "value": 1_000_000_000,
+            },
+            {"id": "r", "text": "widget sales", "kind": "metric"},
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert {b.element_id for b in plan.bindings} == {"r"}
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m"
+    assert "threshold" in problem.reason
+    assert problem.blocks_question is False
+    assert plan.thresholds == []
+
+
+async def test_a_loss_over_time_is_refused_for_that_metric_only(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _loss_query(
+            {"id": "r", "text": "widget sales", "kind": "metric"}, over_time="growth"
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert {b.element_id for b in plan.bindings} == {"r"}
+    (problem,) = plan.unresolved
+    assert problem.element_id == "m"
+    assert "over time" in problem.reason
+    assert problem.blocks_question is False
+
+
+async def test_a_count_reaches_the_result_for_bound_metrics_only(
+    test_session_factory, clean_fake_company, fake_aliases
+) -> None:
+    await load_file(FIXTURE_PATH, session_factory=test_session_factory)
+
+    plan = await map_query(
+        _query(
+            {"id": "m", "text": "widget sales", "kind": "metric", "rank": "highest", "top_n": 3},
+            {"id": "x", "text": "nothing like this", "kind": "metric", "rank": "lowest",
+             "top_n": 2},
+            {"id": "c", "text": FIXTURE_TICKER, "kind": "company", "ticker": FIXTURE_TICKER},
+            {"id": "p", "text": "fy", "kind": "period", "fiscal_year": WINDOW_YEAR},
+            intent="rank",
+        ),
+        session_factory=test_session_factory,
+    )
+
+    assert plan.result.top_n == {"m": 3}

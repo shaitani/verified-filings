@@ -467,3 +467,45 @@ def test_a_multiple_is_read_as_one() -> None:
 def test_display_as_needs_a_figure_to_display() -> None:
     with pytest.raises(ValidationError, match="`display_as` needs `terms`"):
         MetricAlias(label="X", unavailable="not filed", display_as="multiple")
+
+
+def test_losses_only_reaches_the_index() -> None:
+    document = AliasFile.model_validate(
+        _document({"loss": {"label": "L", "terms": [["us-gaap:A"]], "losses_only": True}})
+    )
+    assert AliasIndex(document).lookup("loss").losses_only is True
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"unavailable": "not filed"},
+        {"expression": "c0 / c1", "terms": [["us-gaap:A"], ["us-gaap:B"]]},
+        {"expression": "-c0", "terms": [["us-gaap:A"]]},
+        {"terms": [["us-gaap:A"], ["us-gaap:B"]]},
+    ],
+)
+def test_losses_only_needs_one_plain_operand(entry: dict) -> None:
+    with pytest.raises(ValidationError, match="`losses_only` needs"):
+        MetricAlias(label="X", losses_only=True, **entry)
+
+
+@pytest.mark.parametrize(
+    ("phrase", "metric"),
+    [
+        ("operating losses", "operating_loss"),
+        ("operating loss", "operating_loss"),
+        ("loss from operations", "operating_loss"),
+        ("net loss", "net_loss"),
+        ("net losses", "net_loss"),
+        ("operating income", "operating_income"),
+        ("net income", "net_income"),
+        ("net profit", "net_income"),
+    ],
+)
+def test_loss_phrasings_reach_the_loss_entries_and_income_stays_put(
+    phrase: str, metric: str
+) -> None:
+    hit = alias_index().lookup(phrase)
+    assert hit.metric == metric
+    assert hit.losses_only is metric.endswith("_loss")
