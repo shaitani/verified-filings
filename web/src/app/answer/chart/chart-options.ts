@@ -85,7 +85,6 @@ const COMMON: ApexOptions = {
     animations: { enabled: false },
     fontFamily: 'Roboto, sans-serif',
     background: 'transparent',
-    foreColor: '#364e6a', // axis and legend text, readable on the light surface
   },
   dataLabels: { enabled: false }, // the table carries the exact figures
   legend: { position: 'top' },

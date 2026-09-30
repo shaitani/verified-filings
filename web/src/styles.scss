@@ -20,34 +20,61 @@ html {
 }
 
 body {
-  // Light theme in a blue-tinted slate / teal / amber scheme. Angular Material's system variables
-  // resolve to their light values.
+  // Light is the default; `body.dark` (below) swaps in the dark set. Angular Material's
+  // system variables resolve to their light values here.
   color-scheme: light;
 
-  // The page (surface) is the lightest large area; the past-questions panel and the banner
-  // are tinted steps below it, and the panel's rows are near-white on the panel.
-  --mat-sys-surface: #f5f8fc;
-  --mat-sys-surface-container: #e2e9f4;
-  --mat-sys-surface-container-high: #fbfdff;
-  --mat-sys-surface-container-highest: #e4ebf6;
+  // The page (surface) is the lightest large area; the past-questions panel is a tinted
+  // step below it, the banner and the panel's rows are white.
+  --mat-sys-surface: #f7f9fb;
+  --mat-sys-surface-container: #eef2f5;
+  --mat-sys-surface-container-high: #ffffff;
+  --mat-sys-surface-container-highest: #ffffff;
 
-  --mat-sys-on-surface: #364e6a;
-  --mat-sys-on-surface-variant: #637c9a;
-  --mat-sys-outline-variant: #b4c3d8;
+  --mat-sys-on-surface: #1f2d3a;
+  --mat-sys-on-surface-variant: #64748b;
+  --mat-sys-outline-variant: #d5dde4;
+
+  // The one accent: buttons, links, the open thread, focus.
+  --vf-accent: #0f8b8d;
+  --vf-on-accent: #ffffff;
+  --vf-title: #0f3d4a;
+  --vf-accent-disabled: #b9c9d3;
+  --vf-field-outline: #9fb0bf;
+  --mat-sys-primary: var(--vf-accent);
+  --mat-sys-on-primary: var(--vf-on-accent);
+  --mat-sys-secondary: var(--vf-accent);
 
   // Accent boxes (answer notes, citation tags, question tags, errors).
-  --mat-sys-secondary-container: #cbe9ed;
-  --mat-sys-on-secondary-container: #10393f;
-  --mat-sys-tertiary-container: #d3e3f4;
-  --mat-sys-on-tertiary-container: #15304a;
+  --mat-sys-secondary-container: #d6eeee;
+  --mat-sys-on-secondary-container: #0b3a3b;
+  --mat-sys-tertiary-container: #dde7f3;
+  --mat-sys-on-tertiary-container: #1b2f4a;
   --mat-sys-error-container: #f6d3d0;
   --mat-sys-on-error-container: #5a1914;
 
   // The clarification question ("which figure did you mean?") is amber, so it stands
-  // apart from the blue and teal answer boxes.
+  // apart from the teal and blue answer boxes.
   --vf-ask-background: #fbeec4;
   --vf-ask-accent: #c98f0a;
   --vf-ask-text: #4a3800;
+
+  // "Sign in with GitHub": GitHub's near-black plate in light mode.
+  --vf-github-bg: #24292f;
+  --vf-github-bg-hover: #32383f;
+  --vf-github-text: #ffffff;
+
+  // The status tags on past questions.
+  --vf-tag-done-bg: #d6eeee;
+  --vf-tag-done-text: #0b3a3b;
+  --vf-tag-partial-bg: #dde7f3;
+  --vf-tag-partial-text: #1b2f4a;
+  --vf-tag-busy-bg: #e6ecf2;
+  --vf-tag-busy-text: #465a72;
+  --vf-tag-waiting-bg: #fbeec4;
+  --vf-tag-waiting-text: #6b4d00;
+  --vf-tag-bad-bg: #f8dedb;
+  --vf-tag-bad-text: #7a2a24;
 
   // Cards, citation panels and tables: a step above the page.
   --mat-card-elevated-container-color: var(--mat-sys-surface-container);
@@ -68,6 +95,52 @@ body {
   margin: 0;
   height: 100%;
 }
+// The dark set: midnight navy, cyan accent. Toggled from the banner.
+body.dark {
+  color-scheme: dark;
+
+  --mat-sys-surface: #172a45;
+  --mat-sys-surface-container: #13233a;
+  --mat-sys-surface-container-high: #1b3150;
+  --mat-sys-surface-container-highest: #0f1b2d;
+
+  --mat-sys-on-surface: #e3ecf7;
+  --mat-sys-on-surface-variant: #93a8c4;
+  --mat-sys-outline-variant: #27426a;
+
+  --vf-accent: #4cc9f0;
+  --vf-on-accent: #0b1626;
+  --vf-title: #e6f0ff;
+  --vf-accent-disabled: #34507a;
+  --vf-field-outline: #4a6a96;
+
+  --mat-sys-secondary-container: #1f4d66;
+  --mat-sys-on-secondary-container: #dff4fb;
+  --mat-sys-tertiary-container: #2b4a75;
+  --mat-sys-on-tertiary-container: #dbe8fb;
+  --mat-sys-error-container: #5c2a33;
+  --mat-sys-on-error-container: #ffd9dc;
+
+  --vf-ask-background: #4a3a14;
+  --vf-ask-accent: #f0b955;
+  --vf-ask-text: #fbeed4;
+
+  --vf-github-bg: #f0f6fc;
+  --vf-github-bg-hover: #ffffff;
+  --vf-github-text: #24292f;
+
+  --vf-tag-done-bg: #15485a;
+  --vf-tag-done-text: #9fe3f5;
+  --vf-tag-partial-bg: #243f66;
+  --vf-tag-partial-text: #b6d0f5;
+  --vf-tag-busy-bg: #2a3a55;
+  --vf-tag-busy-text: #b4c2d9;
+  --vf-tag-waiting-bg: #4a3a14;
+  --vf-tag-waiting-text: #f6d98a;
+  --vf-tag-bad-bg: #5c2a33;
+  --vf-tag-bad-text: #ffb8bf;
+}
+
 // Chart tooltips: ApexCharts builds them outside any component, so they are styled here.
 .vf-tooltip {
   padding: 6px 8px;
@@ -85,8 +158,29 @@ body {
   border-color: var(--mat-sys-outline-variant);
 }
 
-// Text fields are white, not the tint of whatever they sit on.
+// Text fields are the row colour (white in light mode), not the tint of whatever they sit on.
 .mat-mdc-text-field-wrapper.mdc-text-field--outlined {
-  background: #fff;
+  background: var(--mat-sys-surface-container-high);
   border-radius: var(--mat-form-field-outlined-container-shape, 4px); // match the outline
+}
+
+// Chart text and gridlines follow the theme; ApexCharts paints them with its own colours.
+.apexcharts-canvas text {
+  fill: var(--mat-sys-on-surface-variant);
+}
+
+.apexcharts-legend-text {
+  color: var(--mat-sys-on-surface) !important;
+}
+
+.apexcharts-gridline {
+  stroke: var(--mat-sys-outline-variant);
+}
+
+// The theme switch is a View Transition: the browser takes a picture of the old page, flips the
+// theme, and cross-fades to the new one on the GPU, so it stays smooth however much is on screen.
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 450ms;
+  animation-timing-function: ease-in-out;
 }

@@ -32,6 +32,16 @@
     }
     <button mat-button type="button" (click)="signOut()">Sign out</button>
   }
+  <button
+    mat-icon-button
+    type="button"
+    class="theme-toggle"
+    [attr.aria-label]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
+    [attr.title]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
+    (click)="toggleTheme()"
+  >
+    <mat-icon>{{ dark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
 </mat-toolbar>
 
 <mat-sidenav-container class="body">

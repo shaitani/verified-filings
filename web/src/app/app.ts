@@ -18,6 +18,16 @@ import { HistoryStore } from './history/history-store';
 /** Wide enough for the past questions to sit beside the thread rather than over it. */
 const WIDE = '(min-width: 960px)';
 
+const THEME_KEY = 'vf-theme';
+
+function readTheme(): string | null {
+  try {
+    return localStorage.getItem(THEME_KEY);
+  } catch {
+    return null;
+  }
+}
+
 @Component({
   imports: [
     HistoryList,
@@ -48,12 +58,40 @@ export class App {
   );
   protected readonly drawerOpen = signal(false); // narrow screens only: wide ones always show it
 
+  // Light or dark; remembered in this browser, light until the reader picks otherwise.
+  protected readonly dark = signal(readTheme() === 'dark');
+
   constructor() {
+    effect(() => {
+      const dark = this.dark();
+      document.body.classList.toggle('dark', dark);
+      try {
+        localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+      } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+      }
+    });
     // The list belongs to whoever is signed in, and to nobody after they sign out.
     effect(() => {
       if (this.auth.signedIn()) void this.history.refresh();
       else this.history.clear();
     });
+  }
+
+  /**
+   * Flip the theme as a cross-fade between two pictures of the page (View Transitions), which
+   * stays smooth where transitioning every element's colours stutters. Browsers without it,
+   * and readers who prefer reduced motion, get an instant switch.
+   */
+  protected toggleTheme(): void {
+    const next = !this.dark();
+    const apply = () => {
+      this.dark.set(next);
+      document.body.classList.toggle('dark', next); // now, not in the effect: the new picture is taken after this
+    };
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || !document.startViewTransition) apply();
+    else document.startViewTransition(apply);
   }
 
   protected async signOut(): Promise<void> {

@@ -41,28 +41,28 @@
 }
 
 .status[data-tone='done'] {
-  --tag-bg: #dcf0f2;
-  --tag-text: #14565f;
+  --tag-bg: var(--vf-tag-done-bg);
+  --tag-text: var(--vf-tag-done-text);
 }
 
 .status[data-tone='partial'] {
-  --tag-bg: #dfe8f7;
-  --tag-text: #24406b;
+  --tag-bg: var(--vf-tag-partial-bg);
+  --tag-text: var(--vf-tag-partial-text);
 }
 
 .status[data-tone='busy'] {
-  --tag-bg: #e6ecf6;
-  --tag-text: #465e7a;
+  --tag-bg: var(--vf-tag-busy-bg);
+  --tag-text: var(--vf-tag-busy-text);
 }
 
 .status[data-tone='waiting'] {
-  --tag-bg: #fbeec4;
-  --tag-text: #6b4d00;
+  --tag-bg: var(--vf-tag-waiting-bg);
+  --tag-text: var(--vf-tag-waiting-text);
 }
 
 .status[data-tone='bad'] {
-  --tag-bg: #f8dedb;
-  --tag-text: #7a2a24;
+  --tag-bg: var(--vf-tag-bad-bg);
+  --tag-text: var(--vf-tag-bad-text);
 }
 
 .problem,

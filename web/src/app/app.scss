@@ -10,6 +10,7 @@ mat-toolbar {
   position: relative;
   z-index: 2; // keeps the shadow over the panels below
   box-shadow: var(--mat-sys-level2);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 .body {
@@ -43,26 +44,32 @@ main {
   width: 28px;
   height: 28px;
   font-size: 28px;
-  color: #1f7a86;
+  color: var(--vf-accent);
 }
 
-// The whole name in one soft serif, deep navy, sitting straight on the banner.
+// The whole name in one soft serif, deep forest green, sitting straight on the banner.
 .word {
   font-family: Fraunces, Georgia, serif;
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.005em;
-  color: #2b3e55;
+  color: var(--vf-title);
 }
 
 .spacer {
   flex: 1;
 }
 
+.theme-toggle {
+  margin-left: 4px;
+}
+
 .new-question {
-  background-color: #fff; // the outlined button has no container-color token
+  background-color: var(
+    --mat-sys-surface-container-high
+  ); // the outlined button has no container-color token
   --mat-button-outlined-label-text-color: var(--mat-sys-on-surface);
-  --mat-button-outlined-outline-color: #fff;
+  --mat-button-outlined-outline-color: var(--mat-sys-outline-variant);
   margin-right: 16px;
 }
 
@@ -93,7 +100,7 @@ main {
 .github-mark {
   width: 18px;
   height: 18px;
-  fill: #24292f; // GitHub's own mark colour
+  fill: var(--mat-sys-on-surface);
 }
 
 .visually-hidden {

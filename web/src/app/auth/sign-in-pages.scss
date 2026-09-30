@@ -4,11 +4,11 @@
   margin: 48px auto;
   // A white card, so the floating field labels (which straddle the field's top edge) sit on
   // white rather than half on a tint, and read at full contrast.
-  --mat-card-outlined-container-color: #fff;
+  --mat-card-outlined-container-color: var(--mat-sys-surface-container-high);
   --mat-form-field-outlined-label-text-color: var(--mat-sys-on-surface);
   --mat-form-field-outlined-hover-label-text-color: var(--mat-sys-on-surface);
-  --mat-form-field-outlined-focus-label-text-color: #1f7a86;
-  --mat-form-field-outlined-outline-color: #8b9db5;
+  --mat-form-field-outlined-focus-label-text-color: var(--vf-accent);
+  --mat-form-field-outlined-outline-color: var(--vf-field-outline);
 }
 
 form {
@@ -32,22 +32,22 @@ form button,
   justify-content: center;
   gap: 10px;
   height: 44px;
-  --mat-button-outlined-label-text-color: #fff;
-  --mat-button-outlined-outline-color: #24292f;
+  --mat-button-outlined-label-text-color: var(--vf-github-text);
+  --mat-button-outlined-outline-color: var(--vf-github-bg);
   --mat-button-outlined-outline-width: 2px;
-  --mat-button-outlined-disabled-outline-color: #8b9db5;
-  background-color: #24292f;
+  --mat-button-outlined-disabled-outline-color: var(--vf-field-outline);
+  background-color: var(--vf-github-bg);
   font-weight: 500;
 
   &:hover:not(:disabled) {
-    background-color: #32383f;
+    background-color: var(--vf-github-bg-hover);
   }
 }
 
 .github-mark {
   width: 20px;
   height: 20px;
-  fill: #fff;
+  fill: var(--vf-github-text);
 }
 
 .problem {

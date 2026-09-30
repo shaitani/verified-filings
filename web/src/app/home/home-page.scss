@@ -9,7 +9,7 @@
   margin-top: 32px;
   margin-bottom: 4px;
   font: var(--mat-sys-headline-medium);
-  color: #2b3e55;
+  color: var(--vf-title);
 }
 
 .sub {
@@ -29,15 +29,15 @@
   position: relative;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(54 78 106 / 8%);
+  background: var(--mat-sys-surface-container-high);
+  box-shadow: 0 1px 3px rgb(54 106 80 / 8%);
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
 
   &:focus-within {
-    border-color: #1f7a86;
-    box-shadow: 0 2px 8px rgb(54 78 106 / 12%);
+    border-color: var(--vf-accent);
+    box-shadow: 0 2px 8px rgb(54 106 80 / 12%);
   }
 
   textarea {
@@ -58,13 +58,13 @@
   position: absolute;
   right: 10px;
   bottom: 10px;
-  --mat-icon-button-icon-color: #fff;
-  --mat-icon-button-disabled-icon-color: #fff;
-  background: #1f7a86;
+  --mat-icon-button-icon-color: var(--vf-on-accent);
+  --mat-icon-button-disabled-icon-color: var(--vf-on-accent);
+  background: var(--vf-accent);
   border-radius: 50%;
 
   &:disabled {
-    background: #b6c3d6;
+    background: var(--vf-accent-disabled);
   }
 }
 
