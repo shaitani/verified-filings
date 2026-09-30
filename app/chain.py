@@ -22,6 +22,7 @@ from app.api.schemas import Ask, Option, Part, Refusal, Reply
 from app.parser import ProposalError, UnacceptableProposal, parse_question
 from app.parser.acceptor import normalize
 from app.presenter import PresentationError, present
+from app.presenter.format import condition
 from app.retrieval import GenerationError, InvalidSQL, UnsupportedPlan, answer
 from app.schemas.answer_view import AnswerView
 from app.schemas.job import JobStage
@@ -329,7 +330,7 @@ async def _answer(
     with_rows = {row.row.element_id for row in result.rows} & wanted.keys()
     for element in elements:
         if element.id not in with_rows:
-            decided[element.id] = _refused(element, _no_figures(element, plan))
+            decided[element.id] = _no_figures(element, plan)
     shown = {eid: text for eid, text in wanted.items() if eid in with_rows}
     if not shown:
         return {}, None
@@ -404,10 +405,22 @@ def _asked(element, ask_id, kind, question, options, descriptions, outcome: Outc
     )
 
 
-def _no_figures(element, plan: QueryPlan) -> str:
-    if any(threshold.element_id == element.id for threshold in plan.thresholds):
-        return f"None of the figures for '{element.text}' met the condition asked for."
-    return f"No figures came back for '{element.text}' for the periods asked about."
+def _no_figures(element, plan: QueryPlan) -> Part:
+    """A part with no figure to show. Where the question set a condition, that is
+    an answer -- nothing met it -- stated with the condition and any caveat the
+    binding carries; otherwise the figures went missing, and it is refused."""
+    thresholds = [t for t in plan.thresholds if t.element_id == element.id]
+    if not thresholds:
+        reason = f"No figures came back for '{element.text}' for the periods asked about."
+        return _refused(element, reason)
+    bindings = [b for b in plan.bindings if b.element_id == element.id]
+    unit = bindings[0].unit if bindings else "USD"
+    conditions = "; ".join(
+        condition(element.text, t.comparison, t.value, unit) for t in thresholds
+    )
+    notes = (n.message for b in bindings for n in b.notes if n.kind == "narrower_than_asked")
+    reason = _joined([f"No figure met the condition: {conditions}.", *notes])
+    return Part(part_id=element.id, text=element.text, outcome="none", reason=reason)
 
 
 # --------------------------------------------------------------------------- #

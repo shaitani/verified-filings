@@ -128,16 +128,26 @@ def test_figures_a_refusal_and_a_question_travel_together() -> None:
         (["answered", "refused"], "partial"),
         (["asked", "refused"], "asked"),
         (["refused"], "refused"),
+        (["none"], "answered"),  # nothing qualified is still an answer
+        (["answered", "none"], "answered"),
+        (["none", "refused"], "partial"),
+        (["none", "asked"], "partial"),
     ],
 )
 def test_status_is_derived_from_the_parts(outcomes: list[str], status: str) -> None:
     parts = []
     for index, outcome in enumerate(outcomes):
-        extra = {"reason": "r"} if outcome == "refused" else {}
+        extra = {"reason": "r"} if outcome in ("refused", "none") else {}
         extra |= {"ask": _ask(f"a{index}")} if outcome == "asked" else {}
         parts.append(Part(part_id=f"e{index}", text="t", outcome=outcome, **extra))
     answer = _answer("e0") if "answered" in outcomes else None
     assert _reply(parts=parts, answer=answer).status == status
+
+
+def test_a_none_part_carries_a_reason() -> None:
+    assert Part(part_id="e1", text="net loss", outcome="none", reason="No figure met it.").reason
+    with pytest.raises(ValidationError, match="refused or none"):
+        Part(part_id="e1", text="net loss", outcome="none")
 
 
 def test_a_parser_refusal_has_no_parts() -> None:

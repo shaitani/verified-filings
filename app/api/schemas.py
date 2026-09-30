@@ -20,7 +20,9 @@ from app.schemas.query import _Base
 #: "parse" and "execute"; the model-facing message goes to the trace (§1, §8).
 Stage = Literal["parse", "map", "execute"]
 
-PartOutcome = Literal["answered", "asked", "refused"]
+#: "none" is an answer, not a refusal: the question was understood and run, and
+#: no figure met the condition it set ("net loss" in a year nobody had one).
+PartOutcome = Literal["answered", "asked", "refused", "none"]
 
 #: A whole reply, derived from its parts (``Reply.status``).
 ReplyStatus = Literal["answered", "partial", "asked", "refused"]
@@ -61,20 +63,20 @@ class Part(_Base):
     part_id: str = Field(min_length=1, max_length=32)  # the element id, as AnswerRow.element_id
     text: str = Field(min_length=1, max_length=256)  # the asker's phrase, verbatim
     outcome: PartOutcome
-    reason: str | None = Field(default=None, max_length=512)  # set exactly when refused
+    reason: str | None = Field(default=None, max_length=512)  # set when refused, or none
     ask: Ask | None = None  # set exactly when asked
 
     @model_validator(mode="after")
     def _fields_match_outcome(self) -> Part:
-        if (self.reason is not None) != (self.outcome == "refused"):
-            raise ValueError(f"part {self.part_id!r}: reason is set exactly when refused")
+        if (self.reason is not None) != (self.outcome in ("refused", "none")):
+            raise ValueError(f"part {self.part_id!r}: reason is set exactly when refused or none")
         if (self.ask is not None) != (self.outcome == "asked"):
             raise ValueError(f"part {self.part_id!r}: ask is set exactly when asked")
         return self
 
 
 class Reply(_Base):
-    """Everything one job sends back. Parts may mix answered, asked and refused."""
+    """Everything one job sends back. Parts may mix answered, none, asked and refused."""
 
     conversation_id: UUID
     job_id: UUID
@@ -88,9 +90,10 @@ class Reply(_Base):
         outcomes = {part.outcome for part in self.parts}
         if self.blocking is not None or not outcomes:
             return "refused"
-        if outcomes == {"answered"}:
+        settled = {"answered", "none"}  # a part with no qualifying figure is still answered
+        if outcomes <= settled:
             return "answered"
-        if "answered" in outcomes:
+        if outcomes & settled:
             return "partial"
         return "asked" if "asked" in outcomes else "refused"
 

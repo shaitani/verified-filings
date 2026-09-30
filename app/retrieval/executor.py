@@ -216,6 +216,27 @@ def _threshold_violations(rows: list[AnnotatedRow], plan: QueryPlan) -> list[int
     ]
 
 
+def _cut_by_threshold(plan: QueryPlan) -> bool:
+    """Whether zero rows is the plan's own doing: every bound metric carries a
+    threshold, so "nothing met it" fully explains an empty result. A metric with
+    no threshold has no such excuse, and its absence is still a fault."""
+    bound = {binding.element_id for binding in plan.bindings}
+    return bool(bound) and bound <= {threshold.element_id for threshold in plan.thresholds}
+
+
+def _verdict_of(status, expected, rows, missing, unattributable, plan) -> ResultVerdict:
+    cut = status == "empty" and _cut_by_threshold(plan)
+    return ResultVerdict(
+        status=status,
+        expected_rows=len(expected),
+        returned_rows=len(rows),
+        # The cells a threshold left out are not missing, as for any other row it cuts.
+        missing=[] if cut else missing,
+        unattributable=unattributable,
+        cut_by_threshold=cut,
+    )
+
+
 def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     expected = plan_cells(plan)
     if not needs_the_model(plan):
@@ -277,13 +298,7 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
     else:
         status = "complete"
 
-    return ResultVerdict(
-        status=status,
-        expected_rows=len(expected),
-        returned_rows=len(rows),
-        missing=missing,
-        unattributable=unattributable,
-    )
+    return _verdict_of(status, expected, rows, missing, unattributable, plan)
 
 
 def _verdict_exact(rows: list[AnnotatedRow], plan: QueryPlan, expected) -> ResultVerdict:
@@ -335,13 +350,7 @@ def _verdict_exact(rows: list[AnnotatedRow], plan: QueryPlan, expected) -> Resul
         status = "partial"
     else:
         status = "complete"
-    return ResultVerdict(
-        status=status,
-        expected_rows=len(expected),
-        returned_rows=len(rows),
-        missing=missing,
-        unattributable=unattributable,
-    )
+    return _verdict_of(status, expected, rows, missing, unattributable, plan)
 
 
 def _notes(plan: QueryPlan, verdict: ResultVerdict) -> list[Note]:

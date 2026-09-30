@@ -389,3 +389,14 @@ def test_a_derived_row_can_span_two_bindings() -> None:
     )
     assert result.rows[0].row.derivation == "yoy_growth"
     assert len(result.rows[0].binding_keys) == 2
+
+
+def test_an_empty_result_is_an_answer_only_when_a_threshold_cut_it() -> None:
+    cut = ResultVerdict(
+        status="empty", expected_rows=1, returned_rows=0, cut_by_threshold=True
+    )
+    assert cut.is_answerable
+    with pytest.raises(ValidationError, match="explains an empty result"):
+        ResultVerdict(
+            status="complete", expected_rows=1, returned_rows=1, cut_by_threshold=True
+        )

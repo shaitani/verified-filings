@@ -31,6 +31,31 @@ describe('ReplyView', () => {
     expect(text()).toContain(REPLIES.partial.answer!.rows[0].display); // as the Presenter wrote it
   });
 
+  it('shows a part nothing qualified for as answered, with its reason and no error colour', async () => {
+    const reply: Reply = {
+      conversation_id: 'c1',
+      job_id: 'j1',
+      blocking: null,
+      parts: [
+        {
+          part_id: 'e2',
+          text: 'net loss',
+          outcome: 'none',
+          reason: 'No figure met the condition: net loss under $0.',
+          ask: null,
+        },
+      ],
+      answer: null,
+      status: 'answered',
+    };
+    const { page } = await shown(reply);
+    const none = page.querySelector('.parts > li.none')!;
+    expect(none.querySelector('.answered-mark')).not.toBeNull();
+    expect(none.querySelector('.reason')?.textContent?.trim()).toBe(reply.parts[0].reason);
+    expect(page.querySelector('.refused')).toBeNull();
+    expect(page.querySelector('vf-answer-panel')).toBeNull();
+  });
+
   it('shows a blocking refusal first, as an alert', async () => {
     const { page } = await shown(REPLIES.blocking);
     const alert = page.querySelector('[role=alert]');

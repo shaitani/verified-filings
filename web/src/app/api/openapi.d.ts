@@ -649,7 +649,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            readonly outcome: "answered" | "asked" | "refused";
+            readonly outcome: "answered" | "asked" | "refused" | "none";
             /** Reason */
             readonly reason: string | null;
             readonly ask: components["schemas"]["Ask"] | null;
@@ -669,7 +669,7 @@ export interface components {
         };
         /**
          * Reply
-         * @description Everything one job sends back. Parts may mix answered, asked and refused.
+         * @description Everything one job sends back. Parts may mix answered, none, asked and refused.
          */
         readonly Reply: {
             /**

@@ -247,6 +247,11 @@ class ResultVerdict(_Base):
     #: (``executor._wrong_unit``) or a value that fails the plan's threshold.
     unattributable: list[int] = Field(default_factory=list)
 
+    #: An empty result that is the answer: every bound metric carried a
+    #: threshold ("net loss", "revenue over $1T") and no figure met it. Set by
+    #: the executor only, and only on an ``empty`` verdict.
+    cut_by_threshold: bool = False
+
     @property
     def is_answerable(self) -> bool:
         """Answer only when the shortfall was already disclosed.
@@ -267,6 +272,10 @@ class ResultVerdict(_Base):
             return False
         if self.status == "complete":
             return True
+        if self.status == "empty":
+            # Nothing met the bar the question set. Any other empty result is a
+            # fault: coverage was proved, so rows should have come back.
+            return self.cut_by_threshold
         if self.status == "partial":
             return all(cell.anticipated for cell in self.missing)
         return False
@@ -278,6 +287,8 @@ class ResultVerdict(_Base):
                 f"status={self.status!r} disagrees with returned_rows="
                 f"{self.returned_rows}: no rows is 'empty' and 'empty' is no rows"
             )
+        if self.cut_by_threshold and self.status != "empty":
+            raise ValueError("cut_by_threshold explains an empty result and nothing else")
         if self.status == "over" and self.returned_rows <= self.expected_rows:
             raise ValueError(
                 f"status='over' needs returned_rows > expected_rows, got "

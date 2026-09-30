@@ -19,7 +19,7 @@ from app.chain import BUG, EXECUTE_FAILED, PARSE_FAILED, PRESENT_FAILED, ask
 from app.parser import UnacceptableProposal
 from app.presenter import PresentationError
 from app.retrieval import InvalidSQL
-from app.schemas.query import QueryIn, QueryPlan, Unresolved
+from app.schemas.query import Note, PlanThreshold, QueryIn, QueryPlan, Unresolved
 from app.schemas.result import ResultSet
 
 FIXTURES = Path(__file__).parent / "fixtures" / "chain"
@@ -318,3 +318,33 @@ def test_a_pin_finds_its_element_by_phrase_not_by_id() -> None:
     concept = _load("ambiguous_round2")[1].bindings[0].concepts[0]
     found = chain._pins_by_element(query, {"  Accounts   PAYABLE ": concept, "vanished": concept})
     assert found == {"e2": concept}
+
+
+async def test_a_condition_nothing_met_is_answered_none_not_refused(monkeypatch) -> None:
+    """The bar was set by the question, so "nobody qualified" is the answer. It
+    names the condition, and the binding's caveat travels with it."""
+    query, plan, result = _load("q052")
+    element = next(e for e in query.elements if e.text == "assets")
+    binding = next(b for b in plan.bindings if b.element_id == element.id)
+    note = Note(kind="narrower_than_asked", message="A loss is filed as a negative figure.")
+    plan = plan.model_copy(
+        update={
+            "thresholds": [
+                PlanThreshold(
+                    element_id=element.id, element_text="assets", comparison="lt", value=0
+                )
+            ],
+            "bindings": [
+                b.model_copy(update={"notes": [note]}) if b is binding else b
+                for b in plan.bindings
+            ],
+        }
+    )
+    rows = [row for row in result.rows if row.row.element_id != element.id]
+    _stub(monkeypatch, "q052", plan=plan, result=result.model_copy(update={"rows": rows}))
+
+    part = next(p for p in _reply(await ask("q")).parts if p.text == "assets")
+
+    assert part.outcome == "none"
+    assert part.reason.startswith("No figure met the condition: assets under $0.")
+    assert "A loss is filed as a negative figure." in part.reason

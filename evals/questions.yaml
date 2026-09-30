@@ -545,3 +545,8 @@ questions:
     question: Show me the top 3 companies with the highest operating losses in 2023
     expect: [answered]
     needs: [retrieval, ranking]
+
+  - id: q062
+    question: What was Apple's net loss in 2024?
+    expect: [answered]  # no loss to report: the part is answered "none", with the condition nothing met
+    needs: [retrieval]

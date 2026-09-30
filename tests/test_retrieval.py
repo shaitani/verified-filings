@@ -849,3 +849,29 @@ def test_the_verdict_holds_a_series_and_its_growth_to_every_row() -> None:
     assert executor._verdict(full, plan).status == "complete"
     short = executor._verdict(full[:2], plan)
     assert short.status == "partial" and not short.is_answerable
+
+
+def test_nothing_meeting_a_threshold_is_an_answer_not_a_fault() -> None:
+    """Zero rows is the honest result of a bar nobody clears -- "net loss" in a
+    year with no loss. Only when a threshold covers every bound metric."""
+    plan = _plan([_binding()], [_annual()]).model_copy(update={"thresholds": [_threshold()]})
+
+    verdict = executor._verdict([], plan)
+
+    assert verdict.status == "empty" and verdict.cut_by_threshold
+    assert verdict.missing == []
+    assert verdict.is_answerable
+
+
+def test_an_empty_result_with_no_threshold_is_still_a_fault() -> None:
+    verdict = executor._verdict([], _plan([_binding()], [_annual()]))
+    assert verdict.status == "empty" and not verdict.cut_by_threshold
+    assert not verdict.is_answerable
+
+
+def test_a_threshold_on_one_metric_does_not_excuse_another_being_absent() -> None:
+    plan = _plan(
+        [_binding(), _binding().model_copy(update={"element_id": "e2"})],
+        [_annual()],
+    ).model_copy(update={"thresholds": [_threshold()]})  # the bar is on e1 only
+    assert not executor._verdict([], plan).is_answerable

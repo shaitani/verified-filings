@@ -1731,7 +1731,8 @@
             "enum": [
               "answered",
               "asked",
-              "refused"
+              "refused",
+              "none"
             ],
             "title": "Outcome"
           },
@@ -1859,7 +1860,7 @@
           "status"
         ],
         "title": "Reply",
-        "description": "Everything one job sends back. Parts may mix answered, asked and refused."
+        "description": "Everything one job sends back. Parts may mix answered, none, asked and refused."
       },
       "RoundView": {
         "properties": {

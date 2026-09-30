@@ -302,6 +302,13 @@ the number, so the predicate is re-applied to what came back). A threshold is
 the one narrowing *meant* to return fewer rows than the grid: eleven of twenty
 companies clearing $100B is `complete`.
 
+Zero rows follows the same rule. `empty` is a fault — coverage was proved, so
+rows should have come back — unless a threshold covers **every** bound metric,
+when it is the answer: `cut_by_threshold` is set, `missing` is cleared and
+`is_answerable` holds. A bar on one metric does not excuse another metric's
+absence. The chain then reports each such part as `none` (api DESIGN §1) rather
+than refusing it.
+
 ## 7. The grant narrowing
 
 The other half of the fence. The view alone is a convention; the grant makes

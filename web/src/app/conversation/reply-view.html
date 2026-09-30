@@ -18,6 +18,13 @@
         @case ('refused') {
           <span class="reason">{{ part.reason }}</span>
         }
+        @case ('none') {
+          <!-- An answer, not a failure: the question ran and nothing met its condition. -->
+          <mat-icon class="answered-mark" aria-label="answered, with no matching figures"
+            >check</mat-icon
+          >
+          <span class="reason">{{ part.reason }}</span>
+        }
         @case ('asked') {
           @if (part.ask; as ask) {
             <vf-ask-view

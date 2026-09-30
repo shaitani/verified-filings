@@ -49,13 +49,21 @@ Reply
   blocking     Refusal | null     stage + reason. Set → no part carries figures.
   parts[]      one per thing asked (metric and narrative elements)
                  text       the asker's phrase, verbatim
-                 outcome    answered | asked | refused
-                 reason     when refused
+                 outcome    answered | none | asked | refused
+                 reason     when refused, or none (why nothing is shown)
                  ask        when asked (§3)
   answer       AnswerView | null  the figures for the answered parts, with notes
                                   and citations (§5, §6)
   status       derived from the parts, never decided separately
 ```
+
+**`none` is an answer.** The question ran and nothing met the condition it set —
+"net loss" in a year nobody had one, "revenue over $10T". It carries no figures;
+`reason` states the condition and any caveat the binding has, and the client
+shows it with the answered tick, not the error colour. The reply's `status`
+counts it as answered (a reply of only `none` parts is `answered` with
+`answer: null`). It arises only where a threshold covers every bound metric
+(retrieval DESIGN §6); an empty result with none is still a refusal.
 
 Notes travel on the answer, not the reply: with no figures there is nothing
 for them to qualify. A blocking refusal is shown alone — a knock-on refusal it
@@ -145,7 +153,7 @@ write — and binds it through the same per-company coverage check as any other
 `UnknownChoice` for anything else.
 
 **In the client** (`web/src/app/conversation/`): a blocking refusal first, as
-an alert; then each part — answered, refused with its reason, or asked. An ask
+an alert; then each part — answered, none (answered, with the condition nothing met), refused with its reason, or asked. An ask
 is a radio list of its options. The latest round's asks are answered
 together: **"Continue" waits for a pick on every one**, because the server
 would take some and ask the rest again. An earlier round's asks stay on the
