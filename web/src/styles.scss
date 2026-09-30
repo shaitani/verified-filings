@@ -20,20 +20,20 @@ html {
 }
 
 body {
-  // Light theme in the same indigo / teal / amber scheme. Angular Material's system variables
+  // Light theme in a blue-tinted slate / teal / amber scheme. Angular Material's system variables
   // resolve to their light values.
   color-scheme: light;
 
   // The page (surface) is the lightest large area; the past-questions panel and the banner
   // are tinted steps below it, and the panel's rows are near-white on the panel.
-  --mat-sys-surface: #f6f5fc;
-  --mat-sys-surface-container: #e4e2f4;
-  --mat-sys-surface-container-high: #fbfbff;
-  --mat-sys-surface-container-highest: #e6e4f6;
+  --mat-sys-surface: #f5f8fc;
+  --mat-sys-surface-container: #e2e9f4;
+  --mat-sys-surface-container-high: #fbfdff;
+  --mat-sys-surface-container-highest: #e4ebf6;
 
-  --mat-sys-on-surface: #38366a;
-  --mat-sys-on-surface-variant: #66639a;
-  --mat-sys-outline-variant: #b7b4d8;
+  --mat-sys-on-surface: #364e6a;
+  --mat-sys-on-surface-variant: #637c9a;
+  --mat-sys-outline-variant: #b4c3d8;
 
   // Accent boxes (answer notes, citation tags, question tags, errors).
   --mat-sys-secondary-container: #cbe9ed;
@@ -44,7 +44,7 @@ body {
   --mat-sys-on-error-container: #5a1914;
 
   // The clarification question ("which figure did you mean?") is amber, so it stands
-  // apart from the indigo and teal answer boxes.
+  // apart from the blue and teal answer boxes.
   --vf-ask-background: #fbeec4;
   --vf-ask-accent: #c98f0a;
   --vf-ask-text: #4a3800;

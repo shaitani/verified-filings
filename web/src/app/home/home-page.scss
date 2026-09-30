@@ -9,7 +9,7 @@
   margin-top: 32px;
   margin-bottom: 4px;
   font: var(--mat-sys-headline-medium);
-  color: #2d2b55;
+  color: #2b3e55;
 }
 
 .sub {
@@ -30,14 +30,14 @@
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 20px;
   background: #fff;
-  box-shadow: 0 1px 3px rgb(56 54 106 / 8%);
+  box-shadow: 0 1px 3px rgb(54 78 106 / 8%);
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
 
   &:focus-within {
     border-color: #1f7a86;
-    box-shadow: 0 2px 8px rgb(56 54 106 / 12%);
+    box-shadow: 0 2px 8px rgb(54 78 106 / 12%);
   }
 
   textarea {
@@ -64,7 +64,7 @@
   border-radius: 50%;
 
   &:disabled {
-    background: #b9b6d6;
+    background: #b6c3d6;
   }
 }
 
