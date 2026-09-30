@@ -16,10 +16,10 @@ them carry the whole safety argument for using a 7B model at all:
   a wrong answer.
 
 The period rules are the fiddly part, and they are dictated by
-``_resolve_periods``: one element resolves to one ``fiscal_period`` label
-across whichever years it selects, so quarterly coverage needs one element per
-quarter. Getting this wrong is quiet -- the plan is well-formed, it simply
-contains fewer periods than were asked for.
+``_resolve_periods``: one element resolves to one ``fiscal_period`` label, or
+to all four quarters for ``"quarterly"``, across whichever years it selects.
+Getting this wrong is quiet -- the plan is well-formed, it simply contains
+fewer periods than were asked for.
 """
 
 from __future__ import annotations
@@ -134,17 +134,20 @@ RULES
     no threshold element.
 
 5. A period element MUST carry at least one of `fiscal_year`,
-   `from_fiscal_year`, `last_n_years` or `fiscal_period`, or it names no time
-   at all.
+   `fiscal_years`, `from_fiscal_year`, `last_n_years` or `fiscal_period`, or it
+   names no time at all.
      "in 2024"            -> fiscal_year: 2024
+     "in 2022 and 2024"   -> fiscal_years: [2022, 2024]
+     "2023, 2024 and 2025" -> fiscal_years: [2023, 2024, 2025]
      "2021 to 2023"       -> from_fiscal_year: 2021, to_fiscal_year: 2023
      "the last 3 years"   -> last_n_years: 3
      "Q3 2024"            -> fiscal_year: 2024, fiscal_period: "Q3"
+     "quarterly in 2024"  -> fiscal_year: 2024, fiscal_period: "quarterly"
    With no `fiscal_period`, a period means the full fiscal year.
 
 5a. YOU ARE NOT TOLD WHAT YEAR IT IS NOW. Never guess one. Set a year --
-    `fiscal_year`, `from_fiscal_year` or `to_fiscal_year` -- only when the
-    question states that year in digits. Everything relative goes
+    `fiscal_year`, `fiscal_years`, `from_fiscal_year` or `to_fiscal_year` --
+    only when the question states that year in digits. Everything relative goes
     in `last_n_years`, counted back from the most recent year on file:
       "last year"          -> last_n_years: 1
       "this year"          -> last_n_years: 1
@@ -165,8 +168,9 @@ RULES
     period element with last_n_years: 1, which is the most recent year.
 
 5c. A RANGE OF YEARS IS ONE ELEMENT, with `from_fiscal_year` for its first
-    year and `to_fiscal_year` for its last. Do not write the years out one by
-    one:
+    year and `to_fiscal_year` for its last. A LIST of years -- "2022 and 2024",
+    "2023, 2024 and 2025" -- is `fiscal_years` with EVERY year listed. Do not
+    write the years out one by one:
       "between 2023 and 2024"    -> from_fiscal_year 2023, to_fiscal_year 2024
       "from 2021 through 2025"   -> from_fiscal_year 2021, to_fiscal_year 2025
       "2023 to 2025"             -> from_fiscal_year 2023, to_fiscal_year 2025
@@ -226,11 +230,18 @@ RULES
     for "last quarter": the newest quarter on file is only a Q4 while the data
     happens to stop at a year end.
 
-6. One period element covers ONE quarter label. "by quarter", "each quarter"
-   or "quarterly" therefore needs FOUR elements -- Q1, Q2, Q3 and Q4 -- each
-   repeating the same year selector. A range of years by quarter is still
-   four elements, each carrying the same from_fiscal_year and to_fiscal_year.
-   Emitting fewer silently answers a smaller question.
+6. "QUARTERLY" IS fiscal_period: "quarterly". When the question says
+   "quarterly", "by quarter", "each quarter" or "per quarter" -- ANYWHERE in
+   the question, even on the metric ("quarterly profits") -- set
+   fiscal_period: "quarterly" on EVERY period element. It means all four
+   quarters of the years that element selects. The years are written exactly
+   as they would be without it:
+     "quarterly revenue in 2023 and 2024"
+        -> fiscal_years: [2023, 2024], fiscal_period: "quarterly"
+     "revenue by quarter from 2021-2023"
+        -> from_fiscal_year 2021, to_fiscal_year 2023, fiscal_period: "quarterly"
+   Never leave it off: without it every figure is annual, which answers a
+   question that was not asked.
 
 7. `intent` is one of:
    lookup   one figure           compare  several entities side by side
@@ -280,16 +291,13 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e2","kind":"metric","text":"gross revenue"},
   {"id":"e3","kind":"period","text":"2024","fiscal_year":2024}],"wants_chart":false}""",
     ),
-    # Rule 6. Four period elements out of two words.
+    # Rule 6. "by quarter" is one field on the period, not more elements.
     (
         "Chart Apple's gross margin by quarter in 2024.",
         """{"intent":"trend","elements":[
   {"id":"e1","kind":"company","text":"Apple"},
   {"id":"e2","kind":"metric","text":"gross margin"},
-  {"id":"e3","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q1"},
-  {"id":"e4","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q2"},
-  {"id":"e5","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q3"},
-  {"id":"e6","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"Q4"}],"wants_chart":true}""",
+  {"id":"e3","kind":"period","text":"by quarter in 2024","fiscal_year":2024,"fiscal_period":"quarterly"}],"wants_chart":true}""",
     ),
     # `clarify_as` on a word the alias file does not list: "fare" matches
     # nothing there, so without it the metric would fall to the embedding
@@ -362,19 +370,16 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e2","kind":"period","text":"between 2023 and 2024","from_fiscal_year":2023,"to_fiscal_year":2024}],"wants_chart":false}""",
     ),
     # Rules 5c and 6 together, beside the annual range above on purpose: the
-    # same shape of range, asked quarterly, is four elements carrying it.
-    # Measured 2026-09-29: "quarterly gross profits from 2020-2025" came back
-    # as six annual elements, "quarterly" dropped -- every range example was
-    # annual.
+    # same shape of range, asked quarterly, is the same element with
+    # "quarterly" on it. Measured 2026-09-29: "quarterly gross profits from
+    # 2020-2025" came back as six annual elements, "quarterly" dropped --
+    # every range example was annual.
     (
         "Show me Apple's quarterly net income from 2021-2023",
         """{"intent":"trend","elements":[
   {"id":"e1","kind":"company","text":"Apple"},
   {"id":"e2","kind":"metric","text":"net income"},
-  {"id":"e3","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q1"},
-  {"id":"e4","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q2"},
-  {"id":"e5","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q3"},
-  {"id":"e6","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"Q4"}],"wants_chart":false}""",
+  {"id":"e3","kind":"period","text":"quarterly from 2021-2023","from_fiscal_year":2021,"to_fiscal_year":2023,"fiscal_period":"quarterly"}],"wants_chart":false}""",
     ),
     # Rule 5d. "since 2021" has no closing year to name, so the element names
     # none either. Measured: it came back as fiscal_year 2021 alone, which
@@ -387,20 +392,15 @@ _EXAMPLES: list[tuple[str, str]] = [
   {"id":"e3","kind":"period","text":"since 2021","from_fiscal_year":2021}],"wants_chart":false}""",
     ),
     # Rules 5d and 6 together, the open-ended twin of the quarterly range
-    # above: four elements, and no annual one beside them. Measured
-    # 2026-09-29 without it, "quarterly ... from 2020 until today" came back
-    # as the open annual range plus four quarterly ones on 2 of 2 cold runs;
-    # a sentence in 5d saying "instead of, never as well as" made it drop
-    # the quarters instead.
+    # above, and no annual element beside it. Measured 2026-09-29 without it,
+    # "quarterly ... from 2020 until today" came back as the open annual range
+    # plus the quarters on 2 of 2 cold runs.
     (
         "Show Microsoft's operating income each quarter from 2022 onwards",
         """{"intent":"trend","elements":[
   {"id":"e1","kind":"company","text":"Microsoft"},
   {"id":"e2","kind":"metric","text":"operating income"},
-  {"id":"e3","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q1"},
-  {"id":"e4","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q2"},
-  {"id":"e5","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q3"},
-  {"id":"e6","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"Q4"}],"wants_chart":false}""",
+  {"id":"e3","kind":"period","text":"each quarter from 2022 onwards","from_fiscal_year":2022,"fiscal_period":"quarterly"}],"wants_chart":false}""",
     ),
     # Rule 5b. No time in the question at all, so the period element's text is
     # a description rather than a span -- the only kind of element allowed
@@ -458,16 +458,13 @@ _EXAMPLES: list[tuple[str, str]] = [
     # The other side of rule 5e, and it sits next to the example above on
     # purpose: these two questions both name quarters and want opposite
     # things. Here the quarters are being compared TO EACH OTHER, so no year
-    # is attached and each element means that quarter in every year. Adding
-    # last_n_years: 1 here would ask about one quarter of one year.
+    # is attached and the element means every quarter in every year. Adding
+    # last_n_years: 1 here would ask about the quarters of one year.
     (
         "Which company had the largest single-quarter revenue decline?",
         """{"intent":"rank","elements":[
   {"id":"e1","kind":"metric","text":"revenue","over_time":"change","rank":"lowest"},
-  {"id":"e2","kind":"period","text":"single-quarter","fiscal_period":"Q1"},
-  {"id":"e3","kind":"period","text":"single-quarter","fiscal_period":"Q2"},
-  {"id":"e4","kind":"period","text":"single-quarter","fiscal_period":"Q3"},
-  {"id":"e5","kind":"period","text":"single-quarter","fiscal_period":"Q4"}],"wants_chart":false}""",
+  {"id":"e2","kind":"period","text":"single-quarter","fiscal_period":"quarterly"}],"wants_chart":false}""",
     ),
     # Rule 3. No company element at all, because naming none means all. It sits
     # beside the Apple ranking below on purpose: measured 2026-09-27, once
@@ -500,10 +497,7 @@ _EXAMPLES: list[tuple[str, str]] = [
         """{"intent":"rank","elements":[
   {"id":"e1","kind":"company","text":"Apple"},
   {"id":"e2","kind":"metric","text":"revenue","rank":"highest"},
-  {"id":"e3","kind":"period","text":"which quarter","fiscal_period":"Q1"},
-  {"id":"e4","kind":"period","text":"which quarter","fiscal_period":"Q2"},
-  {"id":"e5","kind":"period","text":"which quarter","fiscal_period":"Q3"},
-  {"id":"e6","kind":"period","text":"which quarter","fiscal_period":"Q4"}],"wants_chart":false}""",
+  {"id":"e3","kind":"period","text":"which quarter","fiscal_period":"quarterly"}],"wants_chart":false}""",
     ),
     # Rules 1a and 3 together. Measured: this came back with a metric of
     # "average R&D spend", which no filer reports, and a company_group built

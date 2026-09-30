@@ -61,6 +61,14 @@ ResolvedBy = Literal["alias", "embedding", "pinned"]
 #: job -- rejecting Q4 at the boundary would just make it unanswerable.
 QueryFiscalPeriod = Literal["FY", "Q1", "Q2", "Q3", "Q4"]
 
+#: What a period *element* may carry: one label, or ``"quarterly"`` -- all four
+#: quarters of whatever years the element selects. Only elements take it; the
+#: mapper expands it, so every resolved period and row is still one label.
+ElementFiscalPeriod = Literal["FY", "Q1", "Q2", "Q3", "Q4", "quarterly"]
+
+#: The labels ``"quarterly"`` stands for.
+QUARTERS: tuple[QueryFiscalPeriod, ...] = ("Q1", "Q2", "Q3", "Q4")
+
 #: What the answer has to *be*, which decides how much data has to come back.
 #: A chart needs a point per period per company; a single figure needs one row.
 #: Nothing here describes drawing -- only cardinality.
@@ -255,19 +263,30 @@ class CompanyElementIn(_ElementBase):
 
 
 class PeriodElementIn(_ElementBase):
-    """A time span. Absolute (``fiscal_year`` / ``fiscal_period``), a range of
-    years (``from_fiscal_year`` / ``to_fiscal_year``), relative by year
-    (``last_n_years``), or relative by quarter (``last_n_quarters``); the
-    mapper turns all four into concrete windows.
+    """A time span. Absolute (``fiscal_year`` / ``fiscal_period``), a list of
+    years (``fiscal_years``), a range of years (``from_fiscal_year`` /
+    ``to_fiscal_year``), relative by year (``last_n_years``), or relative by
+    quarter (``last_n_quarters``); the mapper turns all five into concrete
+    windows.
 
-    ``fiscal_period`` uses ``QueryFiscalPeriod``, which accepts "Q4" even
-    though no Q4 filing exists -- see that alias. The mapper turns it into the
-    windows a Q4 can be computed from.
+    ``fiscal_period`` accepts "Q4" even though no Q4 filing exists -- see
+    ``QueryFiscalPeriod``; the mapper turns it into the windows a Q4 can be
+    computed from. It also accepts ``"quarterly"``, every quarter of the years
+    selected: "quarterly" used to be four elements, Q1 to Q4, and the model
+    dropped the word whenever it sat on the metric ("quarterly profits across
+    2023, 2024 and 2025") rather than inside the span it copied.
     """
 
     kind: Literal["period"] = "period"
     fiscal_year: int | None = Field(default=None, ge=2000, le=2100)
-    fiscal_period: QueryFiscalPeriod | None = None
+
+    #: "2022 and 2024", "2023, 2024 and 2025" -- the years listed, which need
+    #: not be consecutive. Answered like a range: the years on file are
+    #: answered and the rest noted, not refused.
+    fiscal_years: list[Annotated[int, Field(ge=2000, le=2100)]] | None = Field(
+        default=None, min_length=1, max_length=20
+    )
+    fiscal_period: ElementFiscalPeriod | None = None
     last_n_years: int | None = Field(default=None, ge=1, le=20)
 
     #: "the last quarter", "the last four quarters" -- the N most recent
@@ -311,6 +330,7 @@ class PeriodElementIn(_ElementBase):
         """
         ways = {
             "fiscal_year": self.fiscal_year,
+            "fiscal_years": self.fiscal_years,
             "from_fiscal_year": self.from_fiscal_year,
             "last_n_years": self.last_n_years,
             "last_n_quarters": self.last_n_quarters,

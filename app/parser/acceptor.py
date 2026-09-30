@@ -208,6 +208,11 @@ class _SharedHead:
 #: actually resolve.
 _YEAR = re.compile(r"\b\d{4}\b")
 
+#: Words that ask for figures by quarter. A small closed class, like
+#: ``_TIME_WORDS``, matched on normalized text. Not "quarter" alone: "which
+#: quarter is strongest" and "the last quarter" ask for no quarterly series.
+_QUARTERLY = re.compile(r"\b(?:quarterly|(?:by|each|every|per) quarter)\b")
+
 #: Which optional wire fields each kind may carry. Anything outside its set
 #: is a confusion, not a spare field -- see gate 3.
 _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
@@ -216,6 +221,7 @@ _FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "period": frozenset(
         {
             "fiscal_year",
+            "fiscal_years",
             "from_fiscal_year",
             "to_fiscal_year",
             "fiscal_period",
@@ -445,9 +451,82 @@ def _refuse_one_span_at_two_granularities(elements: list[WireElement]) -> None:
                 f"period elements {annual} and {quarterly} were all copied from "
                 f"{group[0].text!r}, but {annual} are annual and {quarterly} are "
                 "quarters. One phrase is one or the other: asked quarterly, it is "
-                "four elements, Q1, Q2, Q3 and Q4, each with the same years and no "
-                "annual element beside them."
+                'fiscal_period: "quarterly" on the element with the years, and no '
+                "annual element beside it."
             )
+
+
+def _refuse_quarterly_asked_as_annual(elements: list[ElementIn], question: str) -> None:
+    """A question that says "quarterly" gets at least one quarter.
+
+    Measured 2026-09-30: "Compare Microsoft, Apple, and Nvidia quarterly profits
+    across 2023, 2024 and 2025" came back as the three years alone, and so did
+    "Nvidia's quarterly net income in 2023, 2024 and 2025". The word sits on the
+    metric, outside the span the model copies for the period; where it sits
+    inside ("each quarter in 2021, 2022 and 2023") it was set every time. On
+    repair both came back quarterly -- one field to add, not elements to
+    rebuild. Structural: it compares the reply to the question, whatever the
+    wording in between.
+    """
+    asked = _QUARTERLY.search(normalize(question))
+    if asked is None:
+        return
+    if any(
+        element.kind == "period"
+        and (element.fiscal_period not in (None, "FY") or element.last_n_quarters)
+        for element in elements
+    ):
+        return
+    raise MalformedProposal(
+        f"the question says {asked.group(0)!r}, but no period element has "
+        'fiscal_period: "quarterly", so every figure would be annual. Set '
+        'fiscal_period: "quarterly" on the period elements, keeping their years.'
+    )
+
+
+def _refuse_a_named_year_left_out(elements: list[ElementIn], question: str) -> None:
+    """Every year the question names is selected by some period element.
+
+    Measured 2026-09-30, before ``fiscal_years`` existed: "in 2023, 2024 and
+    2025" came back as ``fiscal_year: 2023`` alone, and "for 2022 and 2024" as
+    2022 alone -- a clean answer about fewer years than were asked, which
+    nothing downstream would notice. Kept since as the net under any way of
+    dropping a year.
+
+    A year inside another element's span is not a period ("more than 2000
+    employees"), and a period naming no year at all -- every year on file, a
+    relative span -- selects years this cannot know, so the check stands down.
+    """
+    periods = [e for e in elements if e.kind == "period"]
+    if any(
+        (e.fiscal_year, e.fiscal_years, e.from_fiscal_year) == (None,) * 3 for e in periods
+    ):
+        return
+    covered: set[int] = set()
+    open_from: int | None = None
+    for e in periods:
+        if e.fiscal_year is not None:
+            covered.add(e.fiscal_year)
+        covered.update(e.fiscal_years or ())
+        if e.from_fiscal_year is not None:
+            if e.to_fiscal_year is None:
+                open_from = min(e.from_fiscal_year, open_from or e.from_fiscal_year)
+            else:
+                covered.update(range(e.from_fiscal_year, e.to_fiscal_year + 1))
+    elsewhere = " ".join(normalize(e.text) for e in elements if e.kind != "period")
+    named = {int(y) for y in _YEAR.findall(question)} - {
+        int(y) for y in _YEAR.findall(elsewhere)
+    }
+    missing = sorted(
+        y for y in named if y not in covered and (open_from is None or y < open_from)
+    )
+    if missing:
+        raise MalformedProposal(
+            f"the question names {', '.join(map(str, missing))}, but no period element "
+            "selects it, so the answer would leave it out. A list of years is "
+            "fiscal_years with every year listed; a range is from_fiscal_year and "
+            "to_fiscal_year."
+        )
 
 
 def _check_clarify_as(element: WireElement) -> None:
@@ -530,39 +609,40 @@ def _check_period(element: WireElement, span: str, question: str) -> None:
     """
     if (
         element.fiscal_year,
+        element.fiscal_years,
         element.from_fiscal_year,
         element.to_fiscal_year,
         element.last_n_years,
         element.last_n_quarters,
         element.fiscal_period,
-    ) == (None,) * 6:
+    ) == (None,) * 7:
         raise MalformedProposal(
             f"period element {element.id!r} ({span!r}) carries no fiscal_year, "
-            "from_fiscal_year, last_n_years, last_n_quarters or fiscal_period, so "
-            "it names no time at all. Set fiscal_year for a stated year, "
-            "from_fiscal_year (and to_fiscal_year) for a range of years, "
-            "last_n_years for a relative span of years, or last_n_quarters for "
-            "the most recent quarters."
+            "fiscal_years, from_fiscal_year, last_n_years, last_n_quarters or "
+            "fiscal_period, so it names no time at all. Set fiscal_year for a "
+            "stated year, fiscal_years for a list of years, from_fiscal_year (and "
+            "to_fiscal_year) for a range of years, last_n_years for a relative "
+            "span of years, or last_n_quarters for the most recent quarters."
         )
 
-    years = {
-        name: getattr(element, name)
+    years = [
+        (name, getattr(element, name))
         for name in ("fiscal_year", "from_fiscal_year", "to_fiscal_year")
         if getattr(element, name) is not None
-    }
+    ] + [("fiscal_years", year) for year in element.fiscal_years or ()]
     if not years:
         return
 
     stated = [int(year) for year in _YEAR.findall(question)]
     if not stated:
-        name, year = next(iter(years.items()))
+        name, year = years[0]
         raise MalformedProposal(
             f"period element {element.id!r} has {name} {year}, but the question "
             "names no year at all. You are not told what year it is now, so do not "
             'guess one: use last_n_years for a relative span ("last year" is '
             "last_n_years: 1)."
         )
-    for name, year in years.items():
+    for name, year in years:
         if year < min(stated) - 1:
             raise MalformedProposal(
                 f"period element {element.id!r} has {name} {year}, which is more "
@@ -622,6 +702,7 @@ def _build_element(element: WireElement, span: str, question: str) -> ElementIn:
                 id=element.id,
                 text=span,
                 fiscal_year=element.fiscal_year,
+                fiscal_years=element.fiscal_years,
                 from_fiscal_year=element.from_fiscal_year,
                 to_fiscal_year=element.to_fiscal_year,
                 fiscal_period=element.fiscal_period,
@@ -739,6 +820,8 @@ def accept(
         )
 
     _refuse_one_span_at_two_granularities(elements)
+    _refuse_quarterly_asked_as_annual(elements, question)
+    _refuse_a_named_year_left_out(elements, question)
 
     ranked = [e.id for e in elements if e.kind == "metric" and e.rank is not None]
     if wire.intent == "rank" and not ranked:

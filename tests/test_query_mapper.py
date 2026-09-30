@@ -31,6 +31,7 @@ from app.schemas.query import (
     Coverage,
     MetricElementIn,
     NarrativeElementIn,
+    PeriodElementIn,
     PlanFilters,
     QueryIn,
     QueryPlan,
@@ -2009,3 +2010,67 @@ async def test_a_count_reaches_the_result_for_bound_metrics_only(
     )
 
     assert plan.result.top_n == {"m": 3}
+
+
+# --------------------------------------------------------------------------- #
+# A list of years, and "quarterly" -- resolved in memory, windows stubbed
+# --------------------------------------------------------------------------- #
+
+
+def _stub_windows(monkeypatch, windows: dict[tuple[int, int, str], tuple[date, date]]) -> None:
+    async def _load(_session, _ciks):
+        return windows
+
+    async def _scope(ciks, _session):
+        return f"cik {', '.join(map(str, ciks))}"
+
+    monkeypatch.setattr(query_mapper, "_load_windows", _load)
+    monkeypatch.setattr(query_mapper, "_describe_scope", _scope)
+
+
+def _quarters(cik: int, year: int, *, annual: bool) -> dict[tuple[int, int, str], tuple[date, date]]:
+    """Q1-Q3 of a calendar fiscal year, and the 10-K a Q4 is derived from."""
+    ends = {"Q1": date(year, 3, 31), "Q2": date(year, 6, 30), "Q3": date(year, 9, 30)}
+    windows = {(cik, year, q): (end - timedelta(days=89), end) for q, end in ends.items()}
+    if annual:
+        windows[(cik, year, "FY")] = (date(year, 1, 1), date(year, 12, 31))
+    return windows
+
+
+async def test_quarterly_list_selects_every_quarter_of_the_listed_years(monkeypatch) -> None:
+    """ "Quarterly ... in 2022 and 2024": all four labels of each listed year,
+    no annual row, nothing from the year between -- and the Q4 that cannot be
+    derived (no 10-K for 2022) is noted, not silently missing."""
+    _stub_windows(
+        monkeypatch,
+        _quarters(11, 2022, annual=False)
+        | _quarters(11, 2023, annual=True)
+        | _quarters(11, 2024, annual=True),
+    )
+    element = PeriodElementIn(
+        id="e1", text="2022 and 2024", fiscal_years=[2022, 2024], fiscal_period="quarterly"
+    )
+
+    periods, problems, notes = await query_mapper._resolve_periods([element], None, ciks=[11])
+
+    assert problems == []
+    assert [(p.fiscal_year, p.fiscal_period) for p in periods] == [
+        (2022, "Q1"), (2022, "Q2"), (2022, "Q3"),
+        (2024, "Q1"), (2024, "Q2"), (2024, "Q3"), (2024, "Q4"),
+    ]  # fmt: skip
+    [note] = notes
+    assert "for Q4 of fiscal 2022;" in note.message
+
+
+async def test_annual_list_answers_the_years_it_has_and_notes_the_rest(monkeypatch) -> None:
+    """A list behaves like a range: "2019 and 2024" with no 2019 on file is
+    answered for 2024 with 2019 named, where a lone missing year refuses."""
+    _stub_windows(monkeypatch, _quarters(11, 2024, annual=True))
+    element = PeriodElementIn(id="e1", text="2019 and 2024", fiscal_years=[2019, 2024])
+
+    periods, problems, notes = await query_mapper._resolve_periods([element], None, ciks=[11])
+
+    assert problems == []
+    assert [(p.fiscal_year, p.fiscal_period) for p in periods] == [(2024, "FY")]
+    [note] = notes
+    assert "for fiscal 2019;" in note.message

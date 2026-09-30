@@ -60,6 +60,7 @@ from app.schemas.query import (
     PlanFilters,
     PlanOverTime,
     PlanThreshold,
+    QUARTERS,
     QueryIn,
     QueryPlan,
     RankDirection,
@@ -1029,8 +1030,10 @@ async def _resolve_periods(
     ``last_n_quarters`` is resolved **per company, by date**, which the year
     path is not -- see ``_recent_quarters``.
 
-    A **range** (``from_fiscal_year``) is answered over the years it has, and
-    the ones it does not are noted rather than refused. A single
+    A **range** (``from_fiscal_year``) or a **list** (``fiscal_years``) is
+    answered over the years it has, and the ones it does not are noted rather
+    than refused. ``fiscal_period="quarterly"`` selects all four quarter labels
+    for each of its years. A single
     ``fiscal_year`` with no window still refuses: "revenue in 2019" has no
     answer, while "revenue from 2020 through 2025" has five sixths of one, and
     refusing it withholds figures the store holds. The note is what keeps the
@@ -1071,20 +1074,23 @@ async def _resolve_periods(
 
         if (
             element.fiscal_year,
+            element.fiscal_years,
             element.from_fiscal_year,
             element.last_n_years,
             element.fiscal_period,
-        ) == (None,) * 4:
+        ) == (None,) * 5:
             problems.append(
                 Unresolved(
                     element_id=element.id,
                     reason=f"period {element.text!r} carries no fiscal_year, "
-                    "from_fiscal_year, last_n_years or fiscal_period",
+                    "fiscal_years, from_fiscal_year, last_n_years or fiscal_period",
                 )
             )
             continue
 
-        wanted_period = element.fiscal_period or "FY"
+        # "quarterly" is every quarter label; anything else is the one it names.
+        label = element.fiscal_period or "FY"
+        wanted_periods = set(QUARTERS) if label == "quarterly" else {label}
 
         def _wanted(company_cik: int, element: PeriodElementIn = element) -> set[int] | None:
             """The years this element selects *for this company*.
@@ -1096,6 +1102,8 @@ async def _resolve_periods(
             """
             if element.fiscal_year is not None:
                 return {element.fiscal_year}
+            if element.fiscal_years is not None:
+                return set(element.fiscal_years)
             newest = newest_by_company.get(company_cik)
             if element.from_fiscal_year is not None:
                 last = element.to_fiscal_year or newest
@@ -1110,7 +1118,7 @@ async def _resolve_periods(
 
         matched = {}
         for key, period in windows.items():
-            if key[2] != wanted_period:
+            if key[2] not in wanted_periods:
                 continue
             years = _wanted(key[0])
             if years is None or key[1] in years:
@@ -1119,16 +1127,18 @@ async def _resolve_periods(
             problems.append(
                 Unresolved(
                     element_id=element.id,
-                    reason=f"no {wanted_period} reporting window found for {element.text!r}",
+                    reason=f"no {label} reporting window found for {element.text!r}",
                 )
             )
-        elif element.from_fiscal_year is not None:
-            # Only a range that found something is noted: one that found
-            # nothing is refused above, and a note would say it twice.
+        elif element.from_fiscal_year is not None or element.fiscal_years is not None:
+            # A range or a list answers the years it has and notes the rest.
+            # Only one that found something is noted: one that found nothing
+            # is refused above, and a note would say it twice.
             asked_by_range.update(
-                (company_cik, year, wanted_period)
+                (company_cik, year, fiscal_period)
                 for company_cik in ciks
                 for year in _wanted(company_cik)
+                for fiscal_period in wanted_periods
             )
         resolved.update(matched)
 

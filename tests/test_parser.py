@@ -604,13 +604,18 @@ def test_a_period_span_need_not_be_in_the_question():
 def test_a_range_may_expand_to_years_the_question_never_names():
     """q025: "from 2021 through 2025" has to become five elements, and only
     two of them can quote a year from the question."""
+    span = "from 2021 through 2025"
     reply = _reply(
         elements=[
             {"id": "e1", "kind": "metric", "text": "revenue"},
-            {"id": "e2", "kind": "period", "text": "from 2021 through 2025", "fiscal_year": 2023},
+            *(
+                {"id": f"e{year - 2019}", "kind": "period", "text": span, "fiscal_year": year}
+                for year in range(2021, 2026)
+            ),
         ]
     )
-    assert accept(reply, "Show revenue from 2021 through 2025.").elements[1].fiscal_year == 2023
+    years = [e.fiscal_year for e in accept(reply, f"Show revenue {span}.").elements[1:]]
+    assert years == [2021, 2022, 2023, 2024, 2025]
 
 
 def test_a_year_far_earlier_than_any_the_question_names_is_refused():
@@ -723,6 +728,93 @@ def test_two_phrases_may_ask_for_two_granularities():
     assert len(accept(reply, "Show revenue for 2024 and for Q4 2024").elements) == 3
 
 
+def _periods_reply(*periods: dict) -> str:
+    return _reply(
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "revenue"},
+            *({"id": f"e{i}", "kind": "period", **p} for i, p in enumerate(periods, 2)),
+        ]
+    )
+
+
+def test_a_list_of_years_is_one_element_with_every_year():
+    [period] = accept(
+        _periods_reply(
+            {"text": "2023, 2024 and 2025", "fiscal_years": [2023, 2024, 2025],
+             "fiscal_period": "quarterly"}
+        ),
+        "Show quarterly revenue in 2023, 2024 and 2025",
+    ).elements[1:]
+    assert (period.fiscal_years, period.fiscal_period) == ([2023, 2024, 2025], "quarterly")
+
+
+def test_a_listed_year_the_question_never_names_is_refused():
+    with pytest.raises(MalformedProposal, match="fiscal_years 2019"):
+        accept(
+            _periods_reply({"text": "2023 and 2024", "fiscal_years": [2019, 2024]}),
+            "Show revenue in 2023 and 2024",
+        )
+
+
+def test_a_quarterly_question_answered_with_years_is_refused():
+    """Measured cold: "quarterly profits across 2023, 2024 and 2025" came back
+    as the years alone -- the word sits on the metric, outside the span."""
+    reply = _periods_reply({"text": "2023 and 2024", "fiscal_years": [2023, 2024]})
+    with pytest.raises(MalformedProposal, match="'quarterly'.*annual"):
+        accept(reply, "Show quarterly revenue across 2023 and 2024")
+
+
+@pytest.mark.parametrize(
+    ("question", "period"),
+    [
+        ("Show revenue by quarter in 2024", {"text": "2024", "fiscal_year": 2024,
+                                             "fiscal_period": "quarterly"}),
+        ("Show quarterly revenue for the last 4 quarters", {"text": "the last 4 quarters",
+                                                            "last_n_quarters": 4}),
+        ("Which quarter was strongest for revenue in 2024?", {"text": "2024",
+                                                              "fiscal_year": 2024}),
+    ],
+)
+def test_a_quarter_or_no_quarterly_word_passes(question, period):
+    accept(_periods_reply(period), question)
+
+
+def test_a_named_year_left_out_is_refused():
+    """Measured cold, before fiscal_years: "in 2023, 2024 and 2025" came back
+    as fiscal_year 2023 alone -- a clean answer about fewer years."""
+    reply = _periods_reply({"text": "2023, 2024 and 2025", "fiscal_year": 2023})
+    with pytest.raises(MalformedProposal, match="names 2024, 2025"):
+        accept(reply, "Show revenue in 2023, 2024 and 2025")
+
+
+@pytest.mark.parametrize(
+    ("question", "periods"),
+    [
+        # an open range reaches every later year
+        ("Show revenue since 2021, and 2023 in particular",
+         [{"text": "since 2021", "from_fiscal_year": 2021}]),
+        # a period naming no year selects years this cannot know
+        ("Compare 2024 revenue with every year on file",
+         [{"text": "2024", "fiscal_year": 2024}, {"text": "every year", "fiscal_period": "FY"}]),
+    ],
+)
+def test_a_named_year_covered_another_way_passes(question, periods):
+    accept(_periods_reply(*periods), question)
+
+
+def test_a_year_inside_another_elements_span_is_not_a_period():
+    reply = _reply(
+        elements=[
+            {"id": "e1", "kind": "metric", "text": "revenue", "rank": "highest"},
+            {"id": "e2", "kind": "metric_threshold", "text": "more than 2000 dollars",
+             "qualifies": "e1", "comparison": "gt", "threshold": 2000},
+            {"id": "e3", "kind": "period", "text": "2024", "fiscal_year": 2024},
+        ],
+        intent="rank",
+    )
+    accept(reply, "Which companies had revenue of more than 2000 dollars in 2024?")
+
+
 def test_a_quarter_and_a_year_may_share_an_element():
     """They are orthogonal, not alternatives. Measured: the model dropped the
     quarter from "Q4 revenue last year" and returned the annual figure."""
@@ -817,19 +909,23 @@ def test_a_stated_year_is_allowed():
 def test_a_year_range_may_name_a_year_inside_it():
     """A quarterly range legitimately repeats one span across several years,
     so the check asks only that the span names *a* year -- not that one."""
+    span = "from 2023 to 2025 by quarter"
     reply = _reply(
         elements=[
             {"id": "e1", "kind": "metric", "text": "revenue"},
-            {
-                "id": "e2",
-                "kind": "period",
-                "text": "from 2023 to 2025 by quarter",
-                "fiscal_year": 2024,
-                "fiscal_period": "Q2",
-            },
+            *(
+                {
+                    "id": f"e{year - 2021}",
+                    "kind": "period",
+                    "text": span,
+                    "fiscal_year": year,
+                    "fiscal_period": "quarterly",
+                }
+                for year in (2023, 2024, 2025)
+            ),
         ]
     )
-    assert accept(reply, "revenue from 2023 to 2025 by quarter").elements[1]
+    assert accept(reply, f"revenue {span}").elements[2].fiscal_year == 2024
 
 
 def test_no_elements_is_refused():

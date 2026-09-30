@@ -82,6 +82,8 @@ def _elements(query) -> list[str]:
             bits = []
             if element.fiscal_year:
                 bits.append(f"fiscal_year {element.fiscal_year}")
+            if element.fiscal_years:
+                bits.append(f"fiscal_years {', '.join(map(str, element.fiscal_years))}")
             if element.from_fiscal_year:
                 bits.append(
                     f"fiscal years {element.from_fiscal_year}–"

@@ -162,16 +162,16 @@ becomes `shape="series"`; false leaves `shape` unset for the mapper to infer.
 ## 6. The period gates
 
 Periods are the part the model gets wrong most, and the rules here were
-rewritten once already after the first full eval run. Four gates:
+rewritten once already after the first full eval run. Six gates:
 
-**A period must name a time.** With no `fiscal_year`, `from_fiscal_year`,
-`last_n_years` or `fiscal_period` it reaches the mapper and returns
-`Unresolved` — a refusal the reader sees. Caught here it costs one more
+**A period must name a time.** With no `fiscal_year`, `fiscal_years`,
+`from_fiscal_year`, `last_n_years` or `fiscal_period` it reaches the mapper and
+returns `Unresolved` — a refusal the reader sees. Caught here it costs one more
 generation instead.
 
 **Every year on a period must be one the question names, and not earlier than
-the earliest one** — `fiscal_year`, `from_fiscal_year` and `to_fiscal_year`
-alike. Checked against the *question*, not the span. The model is told
+the earliest one** — `fiscal_year`, each of `fiscal_years`, `from_fiscal_year`
+and `to_fiscal_year` alike. Checked against the *question*, not the span. The model is told
 nothing about today's date; measured on the first live run, "last year" came
 back as `fiscal_year: 2023`, which resolves cleanly and answers about the wrong
 year. One year below the earliest is allowed, for the growth rule (5f).
@@ -186,11 +186,51 @@ are all annual or all quarterly (`_refuse_one_span_at_two_granularities`).
 Structural, like `_SharedHead`: it reads which elements share a span, not what
 the words say.
 
+**A question that says "quarterly" gets a quarter**
+(`_refuse_quarterly_asked_as_annual`). "Quarterly", "by quarter", "each
+quarter", "every quarter" or "per quarter" in the question, and no period
+element with a quarter, is refused for repair. Not "quarter" alone: "which
+quarter is strongest" and "the last quarter" ask for no series.
+
+**Every year the question names is selected** (`_refuse_a_named_year_left_out`).
+A year inside another element's span ("more than 2000 dollars") is not a
+period, and a period naming no year — every year, a relative span — stands the
+check down, since the years it selects are not known here.
+
+### "Quarterly" is one field, and a list of years is one element
+
+`fiscal_period: "quarterly"` means all four quarters of the years the element
+selects, and `fiscal_years` is a list of years that need not be consecutive.
+"Quarterly" used to be four elements, Q1 to Q4, and a list one element per
+year, so "quarterly profits across 2023, 2024 and 2025" needed twelve. The
+model wrote three annual ones: "quarterly" sits on the metric, outside the
+span it copies for the period. Measured cold, 2026-09-30, over nine quarterly
+questions (lists, ranges, "until today", q038) and up to nine that must not
+become quarterly (plain years and lists, ranges, "since", single quarters,
+"which quarter", "last quarter"):
+
+| prompt | quarterly kept | years right | the others unchanged |
+|---|---|---|---|
+| four elements per "quarterly" (five questions) | 3 of 5 | 5 of 5 | — |
+| + `"quarterly"` | 9 of 9 | 6 of 9 — "2022 and 2024" became 2022 alone | 7 of 7 |
+| + `fiscal_years`, placed after `fiscal_period` | 5 of 9 | 9 of 9 | 9 of 9 |
+| `fiscal_years` beside `fiscal_year` + the quarterly gate | **9 of 9**, two on repair | 9 of 9 | 9 of 9 |
+
+**Key order is part of the design.** Ollama's grammar writes optional keys in
+schema order. With `fiscal_years` after `fiscal_period`, a model that had
+written the list could no longer set "quarterly", and a repair naming exactly
+that came back byte-identical, four times out of four. Every year field sits
+before `fiscal_period` in `wire.py`.
+
+A repair that only asks for one field works where one asking for new elements
+did not: the same gate over the four-element form came back as the three
+years *plus* four quarters, a result mixing annual and quarterly figures.
+
 ### A range is one element
 
 "From 2021 through 2025", "2020-2025" and "since 2021" are one period element
 with `from_fiscal_year` and, when the question states one, `to_fiscal_year`;
-asked quarterly, four elements carrying the same range. The mapper expands it
+asked quarterly, the same element with `fiscal_period: "quarterly"`. The mapper expands it
 per company (semantic DESIGN §8c). This took the expansion away from the
 model, which used to write one element per year — slow (24 elements for six
 years by quarter, 40 s to generate) and unable to say "since 2021" at all:

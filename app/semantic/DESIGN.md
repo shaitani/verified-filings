@@ -379,7 +379,10 @@ the question names no company element at all.
 A **range** (`from_fiscal_year`, optionally `to_fiscal_year`) is resolved per
 company, to that company's newest year when it has no end, and the years in
 it with no window are noted rather than refused (`_range_gap_notes`, a
-`partial_coverage` note). "Quarterly gross profit from 2020 through 2025" for
+`partial_coverage` note). A **list** (`fiscal_years`, "2022 and 2024") is
+treated the same way. `fiscal_period: "quarterly"` on either selects all four
+quarter labels of each year, and a quarter with no window is named in the
+note by itself ("Q4 of fiscal 2022"). "Quarterly gross profit from 2020 through 2025" for
 NVIDIA answers FY2021 Q3 through FY2025 Q4 and says:
 
 > Nothing is on file for NVIDIA CORP (NVDA) for fiscal 2020, or Q1 and Q2 of

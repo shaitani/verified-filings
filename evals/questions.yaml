@@ -550,3 +550,13 @@ questions:
     question: What was Apple's net loss in 2024?
     expect: [answered]  # no loss to report: the part is answered "none", with the condition nothing met
     needs: [retrieval]
+
+  - id: q063
+    question: Compare Microsoft, Apple, and Nvidia quarterly profits across 2023, 2024 and 2025
+    expect: [asked]  # profits -- bare, curated; the periods must be the twelve quarters, not three years
+    needs: [retrieval]
+
+  - id: q064
+    question: What was Nvidia's quarterly net income in 2023, 2024 and 2025?
+    expect: [answered]  # net income, by quarter: "quarterly" sits on the metric, away from the years
+    needs: [retrieval]

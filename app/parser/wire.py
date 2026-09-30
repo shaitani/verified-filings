@@ -32,7 +32,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.query import Comparison, Intent, OverTime, QueryFiscalPeriod, RankDirection
+from app.schemas.query import Comparison, ElementFiscalPeriod, Intent, OverTime, RankDirection
 from app.semantic.metric_aliases import alias_index
 
 #: The ``ElementIn`` kinds, flattened into one enum. Kept in step with
@@ -68,12 +68,18 @@ class WireElement(BaseModel):
     # dropping them, since a field on the wrong kind means the model was
     # confused about the element and silence would hide that.
     fiscal_year: int | None = None
-    # A range of years, as one element. Placed beside `fiscal_year` and in the
-    # order the prompt's examples write them: the grammar fixes the order of
-    # the keys, and an example the grammar cannot produce teaches nothing.
+    # A list of years, and a range of years, each as one element. Placed beside
+    # `fiscal_year` and in the order the prompt's examples write them: the
+    # grammar fixes the order of the keys, and an example the grammar cannot
+    # produce teaches nothing. Every year field comes BEFORE `fiscal_period`.
+    # Measured 2026-09-30 with `fiscal_years` placed last: the model wrote the
+    # list and could no longer reach `fiscal_period`, so "quarterly" was lost
+    # on all four listed-year questions -- and a repair naming exactly that
+    # came back unchanged, because the grammar did not allow the fix.
+    fiscal_years: list[int] | None = None
     from_fiscal_year: int | None = None
     to_fiscal_year: int | None = None
-    fiscal_period: QueryFiscalPeriod | None = None
+    fiscal_period: ElementFiscalPeriod | None = None
     last_n_years: int | None = None
     last_n_quarters: int | None = None
 

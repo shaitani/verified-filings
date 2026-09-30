@@ -133,6 +133,8 @@ def test_rank_is_only_carried_by_a_ranking() -> None:
         {"fiscal_year": 2024, "from_fiscal_year": 2021},
         {"from_fiscal_year": 2021, "last_n_years": 3},
         {"from_fiscal_year": 2021, "last_n_quarters": 2},
+        {"fiscal_years": [2022, 2024], "fiscal_year": 2024},
+        {"fiscal_years": [2022, 2024], "from_fiscal_year": 2021},
     ],
 )
 def test_a_period_says_when_in_exactly_one_way(fields) -> None:
