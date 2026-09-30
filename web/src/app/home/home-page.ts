@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -13,13 +13,7 @@ import { ApiService } from '../api/api.service';
 /** `/` -- ask a new question. */
 @Component({
   selector: 'vf-home-page',
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    ReactiveFormsModule,
-    TextFieldModule,
-  ],
+  imports: [MatButtonModule, MatIconModule, MatInputModule, ReactiveFormsModule, TextFieldModule],
   templateUrl: './home-page.html',
   styleUrl: './home-page.scss',
 })

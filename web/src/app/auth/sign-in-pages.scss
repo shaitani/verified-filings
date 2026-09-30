@@ -2,6 +2,13 @@
 .panel {
   max-width: 420px;
   margin: 48px auto;
+  // A white card, so the floating field labels (which straddle the field's top edge) sit on
+  // white rather than half on a tint, and read at full contrast.
+  --mat-card-outlined-container-color: #fff;
+  --mat-form-field-outlined-label-text-color: var(--mat-sys-on-surface);
+  --mat-form-field-outlined-hover-label-text-color: var(--mat-sys-on-surface);
+  --mat-form-field-outlined-focus-label-text-color: #1f7a86;
+  --mat-form-field-outlined-outline-color: #8e8bb5;
 }
 
 form {
@@ -9,6 +16,38 @@ form {
   flex-direction: column;
   gap: 4px;
   margin-top: 16px;
+}
+
+// The actions fill the card, so the buttons line up with the fields above them.
+form button,
+.github {
+  width: 100%;
+}
+
+.github {
+  // GitHub's own look: near-black plate, white mark and label. Icon and label are one
+  // centred group.
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 44px;
+  --mat-button-outlined-label-text-color: #fff;
+  --mat-button-outlined-outline-color: #24292f;
+  --mat-button-outlined-outline-width: 2px;
+  --mat-button-outlined-disabled-outline-color: #8e8bb5;
+  background-color: #24292f;
+  font-weight: 500;
+
+  &:hover:not(:disabled) {
+    background-color: #32383f;
+  }
+}
+
+.github-mark {
+  width: 20px;
+  height: 20px;
+  fill: #fff;
 }
 
 .problem {
@@ -24,4 +63,9 @@ form {
 .hint {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
+}
+
+// The link under the card ("Have an invite code?") sits centred beneath the buttons.
+mat-card-actions {
+  justify-content: center;
 }

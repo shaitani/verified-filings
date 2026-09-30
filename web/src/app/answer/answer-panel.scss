@@ -15,6 +15,17 @@
   color: var(--mat-sys-on-secondary-container);
 }
 
+// A flex item shrinks by default, which squeezed the icon narrower than its glyph once the
+// message wrapped onto several lines.
+.note mat-icon {
+  flex: none;
+}
+
+.note .message {
+  flex: 1;
+  min-width: 0;
+}
+
 .condition {
   margin: 0;
   font: var(--mat-sys-title-small);

@@ -1,4 +1,5 @@
 import { Component, computed, input } from '@angular/core';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 
 import type { AnswerView, BarView, LineView, StatView, View } from '../api/types';
@@ -14,7 +15,7 @@ import { StatCard } from './stat-card';
  */
 @Component({
   selector: 'vf-answer-panel',
-  imports: [AnswerChart, AnswerTable, CitationsList, MatIconModule, StatCard],
+  imports: [AnswerChart, AnswerTable, CitationsList, MatExpansionModule, MatIconModule, StatCard],
   template: `
     @for (note of answer().notes; track $index) {
       <p class="note" [attr.data-kind]="note.kind">
@@ -36,7 +37,14 @@ import { StatCard } from './stat-card';
       }
     </div>
 
-    <vf-answer-table [rows]="answer().rows" [footnotes]="footnotes()" />
+    <!-- The table always ships (DESIGN §5); it starts open, and the reader can fold it away. -->
+    <mat-expansion-panel expanded>
+      <mat-expansion-panel-header>
+        <mat-panel-title>Source figures</mat-panel-title>
+        <mat-panel-description>{{ answer().rows.length }} figure(s)</mat-panel-description>
+      </mat-expansion-panel-header>
+      <vf-answer-table [rows]="answer().rows" [footnotes]="footnotes()" />
+    </mat-expansion-panel>
     <vf-citations-list
       [citations]="answer().citations"
       [rows]="answer().rows"

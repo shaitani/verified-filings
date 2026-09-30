@@ -791,6 +791,8 @@ export interface components {
              * @default false
              */
             readonly is_verified?: boolean;
+            /** Sign In Providers */
+            readonly sign_in_providers?: readonly string[];
         };
         /** ValidationError */
         readonly ValidationError: {

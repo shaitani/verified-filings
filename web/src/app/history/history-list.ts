@@ -11,21 +11,23 @@ interface Marker {
   icon: string;
   text: string;
   waiting?: boolean; // the reader has a question to answer
+  tone: 'done' | 'partial' | 'busy' | 'waiting' | 'bad'; // the tag's tint
 }
 
 /** What a past question's latest round came to, in a word and an icon. */
 export function marker(conversation: ConversationSummary): Marker {
-  if (conversation.status === 'failed') return { icon: 'error', text: 'failed' };
-  if (conversation.status !== 'done') return { icon: 'hourglass_top', text: 'running' };
+  if (conversation.status === 'failed') return { icon: 'error', text: 'failed', tone: 'bad' };
+  if (conversation.status !== 'done')
+    return { icon: 'hourglass_top', text: 'running', tone: 'busy' };
   switch (conversation.reply_status) {
     case 'answered':
-      return { icon: 'check_circle', text: 'answered' };
+      return { icon: 'check_circle', text: 'answered', tone: 'done' };
     case 'partial':
-      return { icon: 'rule', text: 'partly answered' };
+      return { icon: 'rule', text: 'partly answered', tone: 'partial' };
     case 'asked':
-      return { icon: 'help', text: 'waiting for your answer', waiting: true };
+      return { icon: 'help', text: 'waiting for your answer', waiting: true, tone: 'waiting' };
     default:
-      return { icon: 'block', text: 'refused' };
+      return { icon: 'block', text: 'refused', tone: 'bad' };
   }
 }
 
@@ -44,7 +46,7 @@ export function marker(conversation: ConversationSummary): Marker {
         <a
           mat-list-item
           [routerLink]="['/c', conversation.conversation_id]"
-          routerLinkActive
+          routerLinkActive="current"
           #active="routerLinkActive"
           [activated]="active.isActive"
           (click)="opened.emit()"
@@ -53,8 +55,11 @@ export function marker(conversation: ConversationSummary): Marker {
             conversation.question
           }}</span>
           <span matListItemLine class="line" [class.waiting]="mark.waiting">
-            <mat-icon inline aria-hidden="true">{{ mark.icon }}</mat-icon>
-            {{ mark.text }} · {{ conversation.created_at | date: 'MMM d, y' }}
+            <span class="status" [attr.data-tone]="mark.tone">
+              <mat-icon inline aria-hidden="true">{{ mark.icon }}</mat-icon>
+              {{ mark.text }}
+            </span>
+            {{ conversation.created_at | date: 'MMM d, y' }}
           </span>
         </a>
       } @empty {

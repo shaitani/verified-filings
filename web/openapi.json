@@ -2072,6 +2072,13 @@
             "type": "boolean",
             "title": "Is Verified",
             "default": false
+          },
+          "sign_in_providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sign In Providers"
           }
         },
         "type": "object",

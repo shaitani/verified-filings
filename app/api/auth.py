@@ -36,8 +36,9 @@ from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.clients.github import GitHubOAuth2
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy import delete, text
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.web import AccessToken, OAuthAccount, User
@@ -67,7 +68,30 @@ INVITE_REQUIRED = "INVITE_REQUIRED"
 
 
 class UserRead(user_schemas.BaseUser[uuid.UUID]):
-    pass
+    #: How this account signs in beyond a password: ``["github"]`` for one made
+    #: through GitHub. Only the provider names leave the server -- never the linked
+    #: account's id or token.
+    sign_in_providers: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _providers_from_row(cls, data):
+        """Read the names off a ``User`` row's linked accounts. A row that has not
+        loaded them (one just registered) has none, and is not loaded here: the
+        response is built outside the session."""
+        if not isinstance(data, User):
+            return data
+        loaded = "oauth_accounts" not in sa_inspect(data).unloaded
+        return {
+            "id": data.id,
+            "email": data.email,
+            "is_active": data.is_active,
+            "is_superuser": data.is_superuser,
+            "is_verified": data.is_verified,
+            "sign_in_providers": (
+                sorted({account.oauth_name for account in data.oauth_accounts}) if loaded else []
+            ),
+        }
 
 
 class UserCreate(user_schemas.BaseUserCreate):

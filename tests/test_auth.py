@@ -22,6 +22,7 @@ from app.api.auth import (
     INVITE_REQUIRED,
     SESSION_COOKIE,
     AuthConfig,
+    UserRead,
     hash_invite_code,
     purge_expired_sessions,
     user_manager_class,
@@ -357,3 +358,20 @@ def test_the_server_will_not_start_without_its_secrets() -> None:
 
     with pytest.raises(RuntimeError, match="AUTH_OAUTH_STATE_SECRET shorter than 32"):
         AuthConfig.from_settings(Weak)
+
+
+async def test_me_names_the_providers_an_account_signs_in_with(client, web_factory) -> None:
+    web, owner = web_factory
+    await _registered(client, owner, "zz-auth-pw@example.com")
+    await _login(client, "zz-auth-pw@example.com")
+    assert (await client.get("/api/me")).json()["sign_in_providers"] == []
+
+    await admin.create_github_invite(owner, "zz-gh-9")
+    await _github(web, "zz-gh-9", "zz-auth-gh9@example.com")
+    async with web() as session:
+        row = await SQLAlchemyUserDatabase(session, User, OAuthAccount).get_by_email(
+            "zz-auth-gh9@example.com"
+        )
+        shown = UserRead.model_validate(row).model_dump()
+    assert shown["sign_in_providers"] == ["github"]
+    assert "oauth_accounts" not in shown  # no account id or token reaches the browser
