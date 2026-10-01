@@ -249,6 +249,20 @@ orphaned and failed rather than waited on forever. The gate and the streams
 live in the process, so **the Web Server runs one worker**, and a job found
 unfinished at startup — cut off by a restart — is marked `failed`.
 
+**How many may queue** (`limits.py`, checked in `routes._admit`). Every round
+is a GPU job, asking or answering, so every round is counted:
+
+| limit | refusal |
+|---|---|
+| 2 unfinished rounds per reader | `429 TOO_MANY_QUESTIONS`, no `Retry-After`: it frees when one finishes |
+| 200 rounds per reader in any 24 hours; administrators exempt | `429 DAILY_LIMIT`, `Retry-After` when the oldest leaves the 24 hours |
+| 25 unfinished rounds across the server | `503 SERVER_BUSY`, `Retry-After: 60` |
+
+Counted from the rows in one statement (`storage.admission`), so a restart
+resets nothing and a round counts the moment it is written. Counting and
+writing share one lock, so two requests at once cannot both take the last
+place.
+
 **Reopening.** `GET /api/conversations/{id}` returns a `ConversationView`: the
 question, then each round in order with its `job_id`, status, the picks that
 started it (`GivenAnswer`, in words — the option's label) and its reply. A
@@ -423,9 +437,44 @@ Read from its source:
 - **Email lookup is case-insensitive, the uniqueness is not**, so two
   concurrent registrations as `Bob@x.com` and `bob@x.com` could both land. Our
   migration adds a unique index on `lower(email)`.
-- **No brute-force protection** on login — it belongs with rate limiting,
-  needed before the site is public ([docs/FUTURE.md](../../docs/FUTURE.md)).
+- **No brute-force protection** on login — ours is below.
+- **The password check runs on the event loop.** Argon2 at 64 MB and ~50 ms a
+  hash, synchronously, on the one worker that streams every reader's stages:
+  a login flood would freeze the site. Ours runs it in a thread (Argon2 frees
+  the GIL; measured, the longest stall fell from 162 ms to the timer's 19).
 - **No first administrator.** The owner's CLI makes one.
+
+### Limits on signing in
+
+`SignInGuard` (`auth.py`), every number in `limits.py`, counted in memory over
+a sliding window (the server is one process; a restart only forgets).
+
+| limit | counts | stops |
+|---|---|---|
+| 10 per 15 min per **address and IP** | password attempts | guessing from one machine — a stranger spends their own budget, not the owner's |
+| 10 per 15 min per **address**, from browsers without `vf_device` | password attempts | guessing one address from many IPs |
+| 30 per 15 min per **IP** | logins, registrations, GitHub | one machine trying many addresses or codes |
+| 5 a second across the server | password attempts | a flood from any number of IPs taking the CPU |
+
+**Attempts are counted, not failures**, so every check runs before the hash
+and needs no outcome; a session lasts weeks, so a real reader never comes near.
+A refusal is `429 TOO_MANY_ATTEMPTS` with `Retry-After`, charged to no limit —
+hammering while refused does not push the wait out.
+
+**No stranger can lock an owner out.** A plain lockout per address is a switch
+anyone who knows the address can throw. So a successful sign-in, by password
+or GitHub, leaves `vf_device`: a signed JWT (`AUTH_DEVICE_SECRET`) naming the
+SHA-256 of the address, httpOnly, `SameSite=Strict`, sent only to
+`/api/auth`, a year long. A browser carrying it for the address tried is
+exempt from the per-address limit. It signs no one in, so a stolen one only
+exempts its holder from one limit. The cost: when strangers have spent an
+address's budget, a browser it has never signed in on waits 15 minutes —
+existing sessions and GitHub sign-in still work.
+
+**Who is asking** is `limits.client_ip`, the connecting address. Behind a
+proxy that is the proxy, so the deployment's front door must be trusted for
+the real one (docs/FUTURE.md). Two-factor sign-in and a CAPTCHA after
+failures are later options in the same file.
 
 ### Guard rails on GitHub sign-in
 
@@ -453,7 +502,7 @@ deletes the row, and an old cookie replayed afterwards gets 401. **30 days**,
 a setting (`AUTH_SESSION_DAYS`) expected to shorten before deployment. [A] is
 served from the same origin as the API, so there is no CORS to configure.
 
-Configuration, in `.env`, never in git: three signing secrets (each at least
+Configuration, in `.env`, never in git: four signing secrets (each at least
 32 characters, checked at startup), the GitHub client id and secret, the
 redirect URL, the session length, the cookie's `Secure` flag. Passwords need
 12 characters.

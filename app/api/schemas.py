@@ -146,6 +146,9 @@ class Reply(_Base):
 #: schemas. A test holds the two equal.
 MAX_QUESTION = 2000
 
+#: The most answers one round may carry (``AnswersIn``).
+MAX_ANSWERS = 32
+
 
 class NewConversationIn(_Base):
     question: str = Field(min_length=1, max_length=MAX_QUESTION)
@@ -163,7 +166,9 @@ AnswerIn = OptionAnswerIn
 
 
 class AnswersIn(_Base):
-    answers: list[AnswerIn] = Field(min_length=1)
+    #: A round asks one question per part, and a question has far fewer parts than
+    #: this; the bound only keeps a hand-made request from being arbitrarily long.
+    answers: list[AnswerIn] = Field(min_length=1, max_length=MAX_ANSWERS)
 
     @model_validator(mode="after")
     def _one_answer_per_ask(self) -> AnswersIn:

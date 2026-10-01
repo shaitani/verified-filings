@@ -12,21 +12,26 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request, Response
 from fastapi_users import exceptions as user_errors
+from fastapi_users.password import PasswordHelper
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import select, text
 
 from app.api import admin
 from app.api.auth import (
+    DEVICE_COOKIE,
     INVITE_REQUIRED,
     SESSION_COOKIE,
     AuthConfig,
+    SignInGuard,
     UserRead,
+    address_key,
     hash_invite_code,
     purge_expired_sessions,
     user_manager_class,
 )
+from app.api.limits import TOO_MANY_ATTEMPTS, Window
 from app.api.server import create_app
 from app.db import roles
 from app.db.web import Invite, OAuthAccount, User
@@ -36,6 +41,7 @@ CONFIG = AuthConfig(
     reset_secret="test-reset-" + "r" * 32,
     verify_secret="test-verify-" + "v" * 32,
     oauth_state_secret="test-state-" + "s" * 32,
+    device_secret="test-device-" + "d" * 32,
     session_days=30,
     cookie_secure=False,  # the test client speaks http; browsers treat localhost as secure
     github_client_id="test-client",
@@ -45,16 +51,39 @@ CONFIG = AuthConfig(
 PASSWORD = "correct horse battery"
 
 
+def _web_url(test_db_url: str) -> str:
+    scheme, rest = test_db_url.split("://", 1)
+    return f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
+
+
 @pytest.fixture
 async def client(web_factory, test_db_url):
     """The app, started and stopped as uvicorn would, and an http client for it."""
-    scheme, rest = test_db_url.split("://", 1)
-    web_url = f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
-    app = create_app(CONFIG, web_url)
+    app = create_app(CONFIG, _web_url(test_db_url))
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
             yield http
+
+
+@pytest.fixture
+async def browsers(web_factory, test_db_url):
+    """The app, and ``browser(ip)``: a client with its own cookies, connecting from
+    ``ip`` -- what the sign-in limits key on."""
+    app = create_app(CONFIG, _web_url(test_db_url))
+    opened: list[httpx.AsyncClient] = []
+
+    def browser(ip: str) -> httpx.AsyncClient:
+        transport = httpx.ASGITransport(app=app, client=(ip, 50000))
+        opened.append(httpx.AsyncClient(transport=transport, base_url="http://test"))
+        return opened[-1]
+
+    async with app.router.lifespan_context(app):
+        try:
+            yield app, browser
+        finally:
+            for http in opened:
+                await http.aclose()
 
 
 async def _invite(owner, email: str, *, days: int = 14) -> str:
@@ -348,15 +377,18 @@ async def test_a_github_username_is_looked_up_to_its_numeric_id(monkeypatch) -> 
 def test_the_server_will_not_start_without_its_secrets() -> None:
     class Incomplete:
         auth_reset_secret, auth_verify_secret, auth_oauth_state_secret = "a", None, ""
+        auth_device_secret = None
 
-    with pytest.raises(RuntimeError, match="AUTH_VERIFY_SECRET, AUTH_OAUTH_STATE_SECRET"):
+    with pytest.raises(
+        RuntimeError, match="AUTH_VERIFY_SECRET, AUTH_OAUTH_STATE_SECRET, AUTH_DEVICE_SECRET"
+    ):
         AuthConfig.from_settings(Incomplete)
 
     class Weak:
-        auth_reset_secret = auth_verify_secret = "x" * 43
-        auth_oauth_state_secret = "too-short"
+        auth_reset_secret = auth_verify_secret = auth_oauth_state_secret = "x" * 43
+        auth_device_secret = "too-short"
 
-    with pytest.raises(RuntimeError, match="AUTH_OAUTH_STATE_SECRET shorter than 32"):
+    with pytest.raises(RuntimeError, match="AUTH_DEVICE_SECRET shorter than 32"):
         AuthConfig.from_settings(Weak)
 
 
@@ -375,3 +407,134 @@ async def test_me_names_the_providers_an_account_signs_in_with(client, web_facto
         shown = UserRead.model_validate(row).model_dump()
     assert shown["sign_in_providers"] == ["github"]
     assert "oauth_accounts" not in shown  # no account id or token reaches the browser
+
+
+# --------------------------------------------------------------------------- #
+# Limits on signing in (limits.py)
+# --------------------------------------------------------------------------- #
+
+
+def _unhurried(app) -> None:
+    """A test logs in faster than the 5-a-second server-wide cap, which has its own
+    test below; lift it so the limit under test is the one that refuses."""
+    app.state.auth.guard.across_server = Window(1000, 1)
+
+
+def _refused(response) -> bool:
+    if response.status_code != 429:
+        return False
+    assert response.json()["detail"] == TOO_MANY_ATTEMPTS
+    assert int(response.headers["Retry-After"]) >= 1
+    return True
+
+
+async def test_a_login_leaves_a_known_browser_cookie(browsers, web_factory) -> None:
+    _, browser = browsers
+    _, owner = web_factory
+    http = browser("10.0.0.1")
+    await _registered(http, owner, "zz-auth-dev@example.com")
+    response = await _login(http, "zz-auth-dev@example.com")
+    cookie = next(c for c in response.headers.get_list("set-cookie") if c.startswith(DEVICE_COOKIE))
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Path=/api/auth" in cookie
+    assert f"Max-Age={365 * 24 * 3600}" in cookie
+    assert "zz-auth-dev" not in cookie  # the address is hashed, not carried
+
+
+async def test_a_stranger_cannot_lock_the_owner_out_of_their_own_browser(
+    browsers, web_factory
+) -> None:
+    """Failures from strangers' IPs spend the per-address budget for browsers it has
+    never signed in on -- not the owner's, which carries the known-browser cookie."""
+    app, browser = browsers
+    _, owner = web_factory
+    _unhurried(app)
+    email = "zz-auth-lock@example.com"
+    mine = browser("10.0.0.1")
+    await _registered(mine, owner, email)
+    assert (await _login(mine, email)).status_code == 204  # 1 attempt from a new browser
+
+    stranger = browser("10.0.0.66")
+    for _ in range(9):  # 10 attempts from new browsers, with the owner's first
+        assert (await _login(stranger, email, "wrong-password-1")).status_code == 400
+    assert _refused(await _login(stranger, email, "wrong-password-1"))
+    assert _refused(await _login(browser("10.0.0.67"), email, "wrong-password-1"))  # many IPs
+
+    assert (await _login(mine, email)).status_code == 204  # the owner's browser: still in
+    # The cost, by design: a browser it has never signed in on waits it out.
+    assert _refused(await _login(browser("10.0.0.2"), email))
+
+
+async def test_too_many_attempts_are_refused_before_any_password_is_checked(
+    browsers, web_factory, monkeypatch
+) -> None:
+    """Per address and IP, even from a known browser -- and refused before the
+    hash, so a refused attempt costs nothing, right password or not."""
+    app, browser = browsers
+    _, owner = web_factory
+    _unhurried(app)
+    email = "zz-auth-hash@example.com"
+    checked: list[str] = []
+    verify = PasswordHelper.verify_and_update
+
+    def counting(self, password, hashed):
+        checked.append(password)
+        return verify(self, password, hashed)
+
+    monkeypatch.setattr(PasswordHelper, "verify_and_update", counting)
+    http = browser("10.0.0.1")
+    await _registered(http, owner, email)
+    assert (await _login(http, email)).status_code == 204
+    for _ in range(9):
+        assert (await _login(http, email, "wrong-password-1")).status_code == 400
+    assert len(checked) == 10
+    assert _refused(await _login(http, email))  # the right password, too many tries
+    assert len(checked) == 10
+
+
+async def test_an_unknown_address_is_hashed_all_the_same(browsers, monkeypatch) -> None:
+    """So timing does not say which addresses have accounts."""
+    _, browser = browsers
+    hashed: list[str] = []
+    real = PasswordHelper.hash
+    monkeypatch.setattr(PasswordHelper, "hash", lambda self, p: hashed.append(p) or real(self, p))
+    response = await _login(browser("10.0.0.1"), "zz-auth-nobody@example.com", "whatever-it-is")
+    assert response.status_code == 400 and hashed == ["whatever-it-is"]
+
+
+async def test_logins_across_the_server_are_capped_whatever_the_ip(browsers) -> None:
+    app, browser = browsers
+    app.state.auth.guard.across_server = Window(2, 60)  # 5 a second, made countable
+    for n in range(2):
+        assert (await _login(browser(f"10.0.1.{n}"), f"zz-auth-{n}@example.com")).status_code == 400
+    assert _refused(await _login(browser("10.0.1.9"), "zz-auth-9@example.com"))
+
+
+async def test_registration_and_github_are_limited_per_ip(browsers) -> None:
+    app, browser = browsers
+    app.state.auth.guard.per_ip = Window(2, 60)  # 30 per 15 minutes, made countable
+    http = browser("10.0.2.1")
+    for n in range(2):
+        response = await _register(http, f"zz-auth-ip{n}@example.com", "AAAA-BBBB-CCCC")
+        assert response.status_code == 400
+    assert _refused(await _register(http, "zz-auth-ip2@example.com", "AAAA-BBBB-CCCC"))
+    assert _refused(await http.get("/api/auth/github/authorize"))
+    assert _refused(await _login(http, "zz-auth-ip3@example.com"))  # one budget for all
+    assert (await browser("10.0.2.2").get("/api/auth/github/authorize")).status_code == 200
+
+
+def _with_device_cookie(token: str) -> Request:
+    return Request({"type": "http", "headers": [(b"cookie", f"{DEVICE_COOKIE}={token}".encode())]})
+
+
+def test_a_known_browser_cookie_counts_only_for_its_own_address() -> None:
+    guard = SignInGuard(CONFIG.device_secret)
+    response = Response()
+    guard.remember_device(response, "Zz-Owner@Example.com")
+    token = response.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
+    assert guard.known_device(_with_device_cookie(token), address_key("zz-owner@example.com"))
+    assert not guard.known_device(_with_device_cookie(token), address_key("zz-other@example.com"))
+    assert not guard.known_device(
+        _with_device_cookie(token + "x"), address_key("zz-owner@example.com")
+    )
+    other = SignInGuard("another-secret-" + "o" * 32)  # a cookie signed with any other secret
+    assert not other.known_device(_with_device_cookie(token), address_key("zz-owner@example.com"))

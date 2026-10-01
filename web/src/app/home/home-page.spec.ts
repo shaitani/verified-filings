@@ -63,4 +63,9 @@ describe('askProblem', () => {
   it('tells an outage from a refusal', () => {
     expect(askProblem(new HttpErrorResponse({ status: 0 }))).toContain('could not be reached');
   });
+
+  it('reads a busy server as busy, though it is a 503', () => {
+    const busy = new HttpErrorResponse({ status: 503, error: { detail: 'SERVER_BUSY' } });
+    expect(askProblem(busy)).toContain('The server is busy with other questions');
+  });
 });

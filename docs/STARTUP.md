@@ -68,10 +68,10 @@ cd ..
 
 Copy `.env.example` to `.env`. Choose three role passwords and put them in
 `DATABASE_URL_QUERY_MAPPER`, `DATABASE_URL_RETRIEVAL` and `DATABASE_URL_WEB`
-(uncomment the last). Generate the three signing secrets and paste them in:
+(uncomment the last). Generate the four signing secrets and paste them in:
 
 ```
-uv run python -c "import secrets; [print(f'{n}={secrets.token_urlsafe(32)}') for n in ('AUTH_RESET_SECRET', 'AUTH_VERIFY_SECRET', 'AUTH_OAUTH_STATE_SECRET')]"
+uv run python -c "import secrets; [print(f'{n}={secrets.token_urlsafe(32)}') for n in ('AUTH_RESET_SECRET', 'AUTH_VERIFY_SECRET', 'AUTH_OAUTH_STATE_SECRET', 'AUTH_DEVICE_SECRET')]"
 ```
 
 GitHub sign-in is optional: see the comments in `.env.example`.

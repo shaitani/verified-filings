@@ -312,3 +312,10 @@ def test_a_given_answer_keeps_its_words() -> None:
     assert PICK.model_dump(mode="json") == {
         "ask_id": "a1", "kind": "option", "option_id": "o2", "text": "Gross margin",
     }
+
+
+def test_a_round_carries_a_bounded_number_of_answers() -> None:
+    answer = {"kind": "option", "option_id": "o1"}
+    AnswersIn.model_validate({"answers": [{**answer, "ask_id": f"a{n}"} for n in range(32)]})
+    with pytest.raises(ValidationError, match="at most 32"):
+        AnswersIn.model_validate({"answers": [{**answer, "ask_id": f"a{n}"} for n in range(33)]})

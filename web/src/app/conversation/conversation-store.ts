@@ -11,6 +11,7 @@ import {
 import { Subscription, firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../api/api.service';
+import { limitProblem } from '../api/limits';
 import { HistoryStore } from '../history/history-store';
 import type { AnswerIn, ConversationView, JobStatus, StageEvent } from '../api/types';
 import { JobEvents } from './job-events';
@@ -41,6 +42,8 @@ const ANSWER_REFUSED: Readonly<Record<string, string>> = {
 
 /** Why picks could not be sent. */
 export function answerProblem(error: unknown): string {
+  const limited = limitProblem(error);
+  if (limited) return limited;
   if (error instanceof HttpErrorResponse) {
     const detail: unknown = error.error?.detail;
     if (typeof detail === 'string' && detail in ANSWER_REFUSED) return ANSWER_REFUSED[detail];

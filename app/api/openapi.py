@@ -25,6 +25,7 @@ _DESCRIBE_ONLY = AuthConfig(
     reset_secret="describe-only",
     verify_secret="describe-only",
     oauth_state_secret="describe-only",
+    device_secret="describe-only",
     github_client_id="describe-only",
     github_client_secret="describe-only",
 )

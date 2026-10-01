@@ -17,7 +17,7 @@ import uuid
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -200,6 +200,47 @@ async def sweep_unfinished(session_factory: async_sessionmaker) -> int:
         )
         await session.commit()
     return swept.rowcount
+
+
+@dataclass(frozen=True)
+class Admission:
+    """What a new round would join (limits.py): counted in one statement."""
+
+    unfinished_mine: int
+    unfinished_all: int
+    today_mine: int
+    #: Seconds until the reader's oldest round in the last 24 hours drops out of
+    #: them -- when the daily cap next frees one. ``None`` with none.
+    first_frees_in: float | None
+
+
+async def admission(session_factory: async_sessionmaker, user_id: UUID) -> Admission:
+    """Counted from the rows, so a restart resets nothing -- and a round counts the
+    moment it is written, before the runner sees it."""
+    unfinished = Job.status.not_in(FINISHED)
+    mine = Conversation.user_id == user_id
+    today = Job.created_at > func.now() - text("interval '24 hours'")
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(
+                    func.count().filter(unfinished & mine),
+                    func.count().filter(unfinished),
+                    func.count().filter(mine & today),
+                    func.extract(
+                        "epoch",
+                        func.min(Job.created_at).filter(mine & today)
+                        + text("interval '24 hours'")
+                        - func.now(),
+                    ),
+                )
+                .select_from(Job)
+                .join(Conversation, Conversation.id == Job.conversation_id)
+                .where(unfinished | (mine & today))
+            )
+        ).one()
+    frees_in = None if row[3] is None else max(0.0, float(row[3]))
+    return Admission(row[0], row[1], row[2], frees_in)
 
 
 # --------------------------------------------------------------------------- #

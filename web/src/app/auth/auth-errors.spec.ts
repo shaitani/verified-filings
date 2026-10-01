@@ -1,4 +1,4 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 
 import { signInProblem } from './auth-errors';
 
@@ -25,6 +25,17 @@ describe('signInProblem', () => {
       reason: 'A password needs at least 12 characters.',
     });
     expect(signInProblem(weak, 'register')).toBe('A password needs at least 12 characters.');
+  });
+
+  it('says how long to wait after too many attempts', () => {
+    const limited = new HttpErrorResponse({
+      status: 429,
+      error: { detail: 'TOO_MANY_ATTEMPTS' },
+      headers: new HttpHeaders({ 'Retry-After': '900' }),
+    });
+    expect(signInProblem(limited, 'login')).toBe(
+      'Too many sign-in attempts. Please try again in 15 minutes.',
+    );
   });
 
   it('tells an outage from a refusal', () => {

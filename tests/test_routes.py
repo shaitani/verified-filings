@@ -4,6 +4,7 @@ model and XBRL stages are stood in for, by the captures in tests/fixtures/chain/
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import uuid
@@ -15,7 +16,7 @@ from fastapi import routing
 from sqlalchemy import text
 
 import app.chain as chain
-from app.api import admin, storage
+from app.api import admin, limits, storage
 from app.api.auth import SESSION_COOKIE
 from app.api.server import create_app
 from app.db import roles
@@ -310,6 +311,92 @@ async def test_another_reader_s_rounds_do_not_exist(server) -> None:
     assert (await theirs.post(f"/api/jobs/{job}/feedback", json={})).status_code == 404
     refused = await theirs.post(f"/api/conversations/{conversation}/answers", json=answer)
     assert refused.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Limits on questions (limits.py)
+# --------------------------------------------------------------------------- #
+
+
+def _held(monkeypatch, app) -> None:
+    """Rounds stay queued: the runner never sees them."""
+
+    async def never_runs(job_id):
+        return None
+
+    monkeypatch.setattr(app.state.runner, "submit", never_runs)
+
+
+def _ask_only(http, question: str = "Apple's balances?"):
+    return http.post("/api/conversations", json={"question": question})
+
+
+async def test_a_reader_may_have_two_questions_waiting_not_three(server, monkeypatch) -> None:
+    signed_in, app, _ = server
+    mine, theirs = await signed_in("a"), await signed_in("b")
+    _held(monkeypatch, app)
+    for _ in range(limits.UNFINISHED_PER_READER):
+        assert (await _ask_only(mine)).status_code == 201
+    refused = await _ask_only(mine)
+    assert (refused.status_code, refused.json()["detail"]) == (429, limits.TOO_MANY_QUESTIONS)
+    assert "Retry-After" not in refused.headers  # it frees when one finishes, not at a time
+    assert (await _ask_only(theirs)).status_code == 201  # their own count
+
+
+async def test_two_asks_at_once_cannot_share_the_last_place(server, monkeypatch) -> None:
+    signed_in, app, _ = server
+    http = await signed_in("a")
+    _held(monkeypatch, app)
+    assert (await _ask_only(http)).status_code == 201
+    both = await asyncio.gather(_ask_only(http), _ask_only(http))
+    assert sorted(r.status_code for r in both) == [201, 429]
+
+
+async def test_a_busy_server_turns_new_questions_away(server, monkeypatch) -> None:
+    signed_in, app, _ = server
+    monkeypatch.setattr(limits, "UNFINISHED_ACROSS_SERVER", 2)
+    _held(monkeypatch, app)
+    for name in ("a", "b"):
+        assert (await _ask_only(await signed_in(name))).status_code == 201
+    refused = await _ask_only(await signed_in("c"))
+    assert (refused.status_code, refused.json()["detail"]) == (503, limits.SERVER_BUSY)
+    assert refused.headers["Retry-After"] == str(limits.BUSY_RETRY_AFTER)
+
+
+async def test_the_daily_cap_counts_finished_questions_and_spares_administrators(
+    server, monkeypatch
+) -> None:
+    signed_in, _, owner = server
+    monkeypatch.setattr(limits, "DAILY_PER_READER", 2)
+    http = await signed_in("a")
+    for _ in range(2):
+        await _ask(http, "Apple's balances?")  # run to the end: finished still counts
+    refused = await _ask_only(http)
+    assert (refused.status_code, refused.json()["detail"]) == (429, limits.DAILY_LIMIT)
+    # When the first of the two leaves the last 24 hours: nearly a day from now.
+    assert 86_000 < int(refused.headers["Retry-After"]) <= 86_400
+
+    async with owner() as session:
+        await session.execute(
+            text('UPDATE web."user" SET is_superuser = true WHERE email = :e'),
+            {"e": "zz-routes-a@example.com"},
+        )
+        await session.commit()
+    assert (await _ask_only(http)).status_code == 201
+
+
+async def test_answering_a_question_back_counts_as_a_question(server, monkeypatch) -> None:
+    """Each round is a GPU job, whether it asks or answers."""
+    signed_in, _, _ = server
+    monkeypatch.setattr(limits, "DAILY_PER_READER", 1)
+    http = await signed_in("a")
+    conversation, _, frames = await _ask(http, "Apple's accounts payable?")
+    ask = frames[-1][1]["reply"]["parts"][0]["ask"]
+    refused = await http.post(
+        f"/api/conversations/{conversation}/answers",
+        json={"answers": [{"kind": "option", "ask_id": ask["ask_id"], "option_id": "o1"}]},
+    )
+    assert (refused.status_code, refused.json()["detail"]) == (429, limits.DAILY_LIMIT)
 
 
 # --------------------------------------------------------------------------- #

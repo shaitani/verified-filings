@@ -132,6 +132,25 @@ describe('ConversationStore', () => {
     expect(store.problem()).toBe('That choice is no longer on offer. Please reload the page.');
   });
 
+  it('says how long to wait when the daily limit refuses an answer', async () => {
+    await opened(round({ status: 'done', reply: REPLIES.clarification }));
+    const sent = store.answer([{ kind: 'option', ask_id: 'a1', option_id: 'o1' }]);
+    http
+      .expectOne('/api/conversations/c1/answers')
+      .flush(
+        { detail: 'DAILY_LIMIT' },
+        { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '5400' } },
+      );
+    await settle();
+    http
+      .expectOne('/api/conversations/c1')
+      .flush(conversation(round({ status: 'done', reply: REPLIES.clarification })));
+    await sent;
+    expect(store.problem()).toBe(
+      "You have reached today's limit of questions. You can ask again in 2 hours.",
+    );
+  });
+
   it('refreshes the past questions when a round ends', async () => {
     await opened(round({ status: 'parsing' }));
     history.refresh.mockClear(); // opening refreshed once already

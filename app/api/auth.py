@@ -8,21 +8,26 @@ What the library does is used as it is; what it leaves to us is here:
 * **GitHub's scopes narrowed** to ``read:user`` and ``user:email`` whatever the
   caller asks for, and its two convenience flags forced off;
 * **sessions** as ``web.access_token`` rows behind an httpOnly cookie, and a
-  cleanup of expired ones, which the library leaves to us.
+  cleanup of expired ones, which the library leaves to us;
+* **attempts limited** (``SignInGuard``, numbers in ``limits.py``), and the
+  password check run off the event loop, so a flood of logins neither guesses
+  far nor stalls every other reader's stream.
 """
 
 # No `from __future__ import annotations`: FastAPI resolves a dependency's
 # annotations at runtime, and these dependencies are closures it could not see.
 
+import asyncio
 import hashlib
 import secrets
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+import jwt
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi_users import (
     BaseUserManager,
     FastAPIUsers,
@@ -33,17 +38,26 @@ from fastapi_users import (
 )
 from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
+from fastapi_users.jwt import decode_jwt, generate_jwt
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.clients.github import GitHubOAuth2
 from pydantic import Field, model_validator
-from sqlalchemy import delete, text
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import delete, inspect as sa_inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api import limits
+from app.api.limits import TooMany, Window, admit, client_ip, retry_after
 from app.db.web import AccessToken, OAuthAccount, User
 
 SESSION_COOKIE = "vf_session"
+
+#: "This browser has signed in as this address before" -- exempts it from the
+#: per-address limit, so a stranger's failures cannot lock its owner out. It signs
+#: no one in. Sent only to the sign-in routes.
+DEVICE_COOKIE = "vf_device"
+DEVICE_DAYS = 365
+DEVICE_AUDIENCE = "verified-filings:device"
 
 #: What GitHub is asked for -- identity and a verified-or-not email, nothing else.
 GITHUB_SCOPES = ["read:user", "user:email"]
@@ -171,9 +185,47 @@ def user_manager_class(reset_secret: str, verify_secret: str) -> type[BaseUserMa
         reset_password_token_secret = reset_secret
         verification_token_secret = verify_secret
 
+        def __init__(
+            self,
+            user_db,
+            *,
+            guard: "SignInGuard | None" = None,
+            request: Request | None = None,
+        ) -> None:
+            super().__init__(user_db)
+            self.guard, self.request = guard, request
+
         @property
         def _session(self) -> AsyncSession:
             return self.user_db.session
+
+        async def authenticate(self, credentials):
+            """A password login: the limits first, before the expensive part; then
+            the library's own check, with each hash run in a thread. Argon2 releases
+            the GIL, so the event loop -- every reader's stream -- keeps running.
+            An unknown address is hashed all the same, so timing tells nothing."""
+            if self.guard is None or self.request is None:
+                raise RuntimeError("a password login needs the request and its guard")
+            self.guard.admit_login(self.request, credentials.username)
+            helper = self.password_helper
+            try:
+                user = await self.get_by_email(credentials.username)
+            except user_errors.UserNotExists:
+                await asyncio.to_thread(helper.hash, credentials.password)
+                return None
+            verified, updated_hash = await asyncio.to_thread(
+                helper.verify_and_update, credentials.password, user.hashed_password
+            )
+            if not verified:
+                return None
+            if updated_hash is not None:
+                await self.user_db.update(user, {"hashed_password": updated_hash})
+            return user
+
+        async def on_after_login(self, user, request=None, response=None) -> None:
+            """Password or GitHub: this browser is now one its owner uses."""
+            if self.guard is not None and response is not None:
+                self.guard.remember_device(response, user.email)
 
         async def validate_password(self, password: str, user) -> None:
             if len(password) < MIN_PASSWORD:
@@ -254,8 +306,98 @@ class NarrowGitHub(GitHubOAuth2):
 
 
 # --------------------------------------------------------------------------- #
+# Limits on signing in
+# --------------------------------------------------------------------------- #
+
+
+def address_key(email: str) -> str:
+    """An address as the limits and the device cookie know it: case aside, and
+    hashed, so the cookie does not carry the address itself."""
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
+
+
+@dataclass
+class SignInGuard:
+    """The sign-in limits (``limits.py``), one set per app. Every refusal is the
+    same 429 ``TOO_MANY_ATTEMPTS`` with a ``Retry-After``."""
+
+    device_secret: str
+    cookie_secure: bool = True
+    per_ip: Window = field(default_factory=lambda: Window(*limits.AUTH_PER_IP))
+    per_address_and_ip: Window = field(
+        default_factory=lambda: Window(*limits.LOGIN_PER_ADDRESS_AND_IP)
+    )
+    per_address_new_device: Window = field(
+        default_factory=lambda: Window(*limits.LOGIN_PER_ADDRESS_NEW_DEVICE)
+    )
+    across_server: Window = field(default_factory=lambda: Window(*limits.LOGIN_ACROSS_SERVER))
+
+    def admit_login(self, request: Request, email: str) -> None:
+        """A password attempt. Counted whether or not it succeeds: a session lasts
+        weeks, so a real reader comes nowhere near, and the check needs no outcome."""
+        ip, address = client_ip(request), address_key(email)
+        checks = [
+            (self.across_server, None),
+            (self.per_ip, ip),
+            (self.per_address_and_ip, (address, ip)),
+        ]
+        if not self.known_device(request, address):
+            checks.append((self.per_address_new_device, address))
+        self._admit(checks)
+
+    def admit_visit(self, request: Request) -> None:
+        """Registration and GitHub: per IP only. A wrong invitation costs one
+        indexed UPDATE, and a code cannot be guessed (DESIGN §10)."""
+        self._admit([(self.per_ip, client_ip(request))])
+
+    def known_device(self, request: Request, address: str) -> bool:
+        token = request.cookies.get(DEVICE_COOKIE)
+        if not token:
+            return False
+        try:
+            claims = decode_jwt(token, self.device_secret, [DEVICE_AUDIENCE])
+        except jwt.PyJWTError:  # forged, expired, or signed with an old secret
+            return False
+        return secrets.compare_digest(str(claims.get("sub", "")), address)
+
+    def remember_device(self, response: Response, email: str) -> None:
+        lifetime = DEVICE_DAYS * 24 * 3600
+        token = generate_jwt(
+            {"sub": address_key(email), "aud": DEVICE_AUDIENCE}, self.device_secret, lifetime
+        )
+        response.set_cookie(
+            DEVICE_COOKIE,
+            token,
+            max_age=lifetime,
+            path="/api/auth",  # the only routes that read it
+            secure=self.cookie_secure,
+            httponly=True,
+            samesite="strict",  # read only by this site's own sign-in form
+        )
+
+    @staticmethod
+    def _admit(checks) -> None:
+        try:
+            admit(*checks)
+        except TooMany as exc:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=limits.TOO_MANY_ATTEMPTS,
+                headers=retry_after(exc.retry_after),
+            ) from exc
+
+
+# --------------------------------------------------------------------------- #
 # Wiring it together
 # --------------------------------------------------------------------------- #
+
+#: The signing secrets, each its own: one leaking signs nothing else.
+SECRETS = (
+    "auth_reset_secret",
+    "auth_verify_secret",
+    "auth_oauth_state_secret",
+    "auth_device_secret",
+)
 
 
 @dataclass
@@ -263,6 +405,7 @@ class AuthConfig:
     reset_secret: str
     verify_secret: str
     oauth_state_secret: str
+    device_secret: str
     session_days: int = 30
     cookie_secure: bool = True
     github_client_id: str | None = None
@@ -271,27 +414,20 @@ class AuthConfig:
 
     @classmethod
     def from_settings(cls, settings) -> "AuthConfig":
-        missing = [
-            name
-            for name in ("auth_reset_secret", "auth_verify_secret", "auth_oauth_state_secret")
-            if not getattr(settings, name)
-        ]
+        missing = [name for name in SECRETS if not getattr(settings, name)]
         if missing:
             raise RuntimeError(
-                f"{', '.join(n.upper() for n in missing)} not set: sign-in needs all three "
-                "(docs/STARTUP.md, .env.example)."
+                f"{', '.join(n.upper() for n in missing)} not set: sign-in needs all "
+                f"{len(SECRETS)} (docs/STARTUP.md, .env.example)."
             )
-        short = [
-            name.upper()
-            for name in ("auth_reset_secret", "auth_verify_secret", "auth_oauth_state_secret")
-            if len(getattr(settings, name)) < MIN_SECRET
-        ]
+        short = [name.upper() for name in SECRETS if len(getattr(settings, name)) < MIN_SECRET]
         if short:
             raise RuntimeError(f"{', '.join(short)} shorter than {MIN_SECRET} characters")
         return cls(
             reset_secret=settings.auth_reset_secret,
             verify_secret=settings.auth_verify_secret,
             oauth_state_secret=settings.auth_oauth_state_secret,
+            device_secret=settings.auth_device_secret,
             session_days=settings.auth_session_days,
             cookie_secure=settings.auth_cookie_secure,
             github_client_id=settings.github_oauth_client_id,
@@ -312,10 +448,17 @@ class Auth:
     backend: AuthenticationBackend
     github: NarrowGitHub | None
     current_user: object
+    guard: SignInGuard
+    #: A route dependency: the per-IP limit, for registration and GitHub.
+    guard_visit: object
 
 
 def build_auth(config: AuthConfig) -> Auth:
     manager_class = user_manager_class(config.reset_secret, config.verify_secret)
+    guard = SignInGuard(config.device_secret, cookie_secure=config.cookie_secure)
+
+    async def guard_visit(request: Request) -> None:
+        guard.admit_visit(request)
 
     async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
         async with request.app.state.web() as session:
@@ -326,8 +469,10 @@ def build_auth(config: AuthConfig) -> Auth:
     async def get_user_db(session: Session):
         yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
 
-    async def get_user_manager(user_db: Annotated[SQLAlchemyUserDatabase, Depends(get_user_db)]):
-        yield manager_class(user_db)
+    async def get_user_manager(
+        user_db: Annotated[SQLAlchemyUserDatabase, Depends(get_user_db)], request: Request
+    ):
+        yield manager_class(user_db, guard=guard, request=request)
 
     async def get_token_db(session: Session):
         yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
@@ -355,7 +500,12 @@ def build_auth(config: AuthConfig) -> Auth:
         else None
     )
     return Auth(
-        users=users, backend=backend, github=github, current_user=users.current_user(active=True)
+        users=users,
+        backend=backend,
+        github=github,
+        current_user=users.current_user(active=True),
+        guard=guard,
+        guard_visit=guard_visit,
     )
 
 

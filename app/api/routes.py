@@ -10,13 +10,14 @@ preflight this server never grants: that is the CSRF defence.
 # No `from __future__ import annotations`: FastAPI resolves a dependency's
 # annotations at runtime, and these dependencies are closures it could not see.
 
+import asyncio
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 
-from app.api import storage
+from app.api import limits, storage
 from app.api.auth import Auth
 from app.api.jobs import event_stream
 from app.api.schemas import (
@@ -48,15 +49,44 @@ def _refused(exc: Exception) -> HTTPException:
     return HTTPException(code, detail=detail)
 
 
+async def _admit(web, reader: User) -> None:
+    """Whether a new round may join the queue (limits.py). Every round is a GPU
+    job, whether it asks or answers a question back."""
+    seen = await storage.admission(web, reader.id)
+    if seen.unfinished_all >= limits.UNFINISHED_ACROSS_SERVER:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=limits.SERVER_BUSY,
+            headers=limits.retry_after(limits.BUSY_RETRY_AFTER),
+        )
+    if seen.unfinished_mine >= limits.UNFINISHED_PER_READER:
+        # No Retry-After: it frees when one of theirs finishes, not at a time.
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail=limits.TOO_MANY_QUESTIONS)
+    if not reader.is_superuser and seen.today_mine >= limits.DAILY_PER_READER:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=limits.DAILY_LIMIT,
+            headers=limits.retry_after(seen.first_frees_in or limits.DAY),
+        )
+
+
 def build_router(auth: Auth) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["questions"])
     Reader = Annotated[User, Depends(auth.current_user)]
+    # Counting and writing a round happen under one lock, so two requests at once
+    # cannot both pass a cap with one place left. One process (DESIGN §4), so one
+    # lock is all of them; it is held for two short statements.
+    admission = asyncio.Lock()
 
     @router.post("/conversations", status_code=status.HTTP_201_CREATED)
     async def ask(body: NewConversationIn, request: Request, reader: Reader) -> JobCreated:
         """A new question: its conversation and first round, queued."""
         web, runner = request.app.state.web, request.app.state.runner
-        conversation_id, job_id = await storage.create_conversation(web, reader.id, body.question)
+        async with admission:
+            await _admit(web, reader)
+            conversation_id, job_id = await storage.create_conversation(
+                web, reader.id, body.question
+            )
         await runner.submit(job_id)  # before the id is returned, so no stream can miss it
         return JobCreated(conversation_id=conversation_id, job_id=job_id)
 
@@ -67,10 +97,12 @@ def build_router(auth: Auth) -> APIRouter:
         """Answers to the last round's questions: the next round, queued."""
         web, runner = request.app.state.web, request.app.state.runner
         choices = [(a.ask_id, a.option_id) for a in body.answers]
-        try:
-            job_id = await storage.create_round(web, reader.id, conversation_id, choices)
-        except tuple(REFUSALS) as exc:
-            raise _refused(exc) from exc
+        async with admission:
+            await _admit(web, reader)
+            try:
+                job_id = await storage.create_round(web, reader.id, conversation_id, choices)
+            except tuple(REFUSALS) as exc:
+                raise _refused(exc) from exc
         await runner.submit(job_id)
         return JobCreated(conversation_id=conversation_id, job_id=job_id)
 

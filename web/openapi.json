@@ -1004,6 +1004,7 @@
               "$ref": "#/components/schemas/OptionAnswerIn"
             },
             "type": "array",
+            "maxItems": 32,
             "minItems": 1,
             "title": "Answers"
           }

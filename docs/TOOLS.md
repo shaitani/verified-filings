@@ -61,6 +61,7 @@ repeats them for the pull and must be kept in step.
 | **uvicorn** | `api.Dockerfile`, local runs | One worker, always: the job queue and its event streams live in the process |
 | **FastAPI Users** (with its SQLAlchemy adapter) | `app/api/auth.py` | Email/password and GitHub sign-in, sessions as database tokens. **In maintenance mode** (checked 2026-09-27: security fixes only, successor unnamed). Accepted because the rest of the app depends only on a `current_user` dependency, so replacing it touches the auth module and its tables alone. What it leaves undone, and the guard rails added: [app/api/DESIGN.md](../app/api/DESIGN.md) §10 |
 | **httpx-oauth** | GitHub sign-in | Asks for `user` scope by default; narrowed to `read:user user:email` |
+| *rate limiting: our own* | `app/api/limits.py` | A sliding window in memory, about forty lines. **Not slowapi**: it decorates routes we write, not the ones FastAPI Users mounts, and is barely maintained. **Not `limits`**: its storage backends are for many processes, and this server is one. What is limited: [app/api/DESIGN.md](../app/api/DESIGN.md) §4, §10 |
 | **Pydantic v2, pydantic-settings** | every contract (`app/schemas/`, `app/api/schemas.py`); `app/config.py` reads `.env` | |
 
 ## Web Client (`web/`)

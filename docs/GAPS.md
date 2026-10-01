@@ -126,8 +126,8 @@ the second).
 - **Not ready for a public server.** `docker-compose.yml` commits
   `postgres`/`postgres` and pgAdmin's password, publishes database and Ollama
   ports (loopback only), and the API container's secrets are readable with
-  `docker inspect`. There is no rate limiting and no protection against login
-  guessing. See the deployment entry in [FUTURE.md](FUTURE.md).
+  `docker inspect`. The rate limits key on the connecting address, which
+  behind a proxy is the proxy. See the deployment entry in [FUTURE.md](FUTURE.md).
 
 ### Deferred by the user — do not reopen unprompted
 

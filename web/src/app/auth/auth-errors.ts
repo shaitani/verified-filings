@@ -1,5 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
+import { limitProblem } from '../api/limits';
+
 /** Which sign-in step failed: the same code can mean different things to the reader. */
 export type SignInStep = 'login' | 'register' | 'github';
 
@@ -25,6 +27,8 @@ const INVITE: Readonly<Record<SignInStep, string>> = {
 /** What to tell the reader when a sign-in request fails. */
 export function signInProblem(error: unknown, step: SignInStep): string {
   if (!(error instanceof HttpErrorResponse)) return 'Something went wrong. Please try again.';
+  const limited = limitProblem(error);
+  if (limited) return limited;
   if (error.status === 0 || error.status >= 500) {
     return 'The server could not be reached. Please try again in a moment.';
   }

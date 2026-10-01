@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../api/api.service';
+import { limitProblem } from '../api/limits';
 
 /** `/` -- ask a new question. */
 @Component({
@@ -52,6 +53,8 @@ export class HomePage {
 
 /** Why a question could not be asked. The length limit is read off the server's refusal. */
 export function askProblem(error: unknown): string {
+  const limited = limitProblem(error);
+  if (limited) return limited;
   if (error instanceof HttpErrorResponse && error.status === 422) {
     const [first] = (error.error?.detail ?? []) as {
       type?: string;

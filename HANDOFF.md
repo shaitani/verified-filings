@@ -20,10 +20,6 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 The agreed order, one piece at a time, each planned with the user first:
 
-- **Rate limiting, the host-independent half** — a per-user cap on unfinished
-  jobs (the queue in `app/api/jobs.py` is unbounded), login and register
-  throttled per address, a maximum on `AnswersIn.answers`. In process: the
-  server is one worker by design.
 - **Admin CLI to take access back** — list users and invites, revoke an
   invite, deactivate a user and delete their sessions.
 - **Choose the host** — a walk-through with the user. The GPU decides it;
@@ -31,14 +27,17 @@ The agreed order, one piece at a time, each planned with the user first:
   droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.
 - **The production compose override** — the gate above.
 - **The web container** — the Angular bundle and `/api` behind one proxy,
-  security headers, the real client IP trusted from the proxy, per-IP limits.
+  security headers, the real client IP trusted from the proxy (every limit
+  keys on `limits.client_ip`; untrusted, all visitors share the proxy's
+  budget), per-IP limits at the proxy.
 - **Production settings, data and backups, an outside-in security check.**
 
 An anonymous probe of the live API (2026-09-30) found every question route,
 `/api/me` and a forged cookie refused with 401, the unmounted library routes
-404, and registration without an invite refused; open were login with no
-attempt limit, GitHub authorize, and health. The doc routes it also found open
-are now off unless `API_DOCS` is set (app/api/DESIGN.md §4).
+404, and registration without an invite refused; open were login, GitHub
+authorize, and health. The doc routes it also found open are now off unless
+`API_DOCS` is set, and sign-in and questions are rate limited
+(app/api/DESIGN.md §4, §10).
 
 ## The Web Client is complete
 

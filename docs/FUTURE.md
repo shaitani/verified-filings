@@ -23,8 +23,11 @@ not run on a rented Linux VM with Docker. None of this is done:
   and proxying `/api`, with response buffering off for the event stream. One
   origin keeps the cookie and the stream simple.
 - **A second GitHub OAuth app** for production, with the `https` callback.
-- **Rate limiting, including login brute-force protection** — required before
-  the site is reachable from outside. Every request costs GPU seconds.
+- **The real client IP, and per-IP limits at the front door.** The server's
+  own limits (app/api/DESIGN.md §4, §10) key on `limits.client_ip`, which
+  behind a proxy sees only the proxy — every visitor would share one budget.
+  Trust the proxy's header for it (uvicorn `--forwarded-allow-ips`, or
+  Cloudflare's), and add the proxy's own per-IP request limits.
 - **A shorter session** — `AUTH_SESSION_DAYS` is 30; the user expects to
   change it.
 - **A GPU** for Ollama on the server; on a CPU generation is an order of
@@ -151,6 +154,11 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   delete would need that grant decided first.
 - **More than 50 past questions** — the history returns the newest 50 and has
   no paging.
+- **Two-factor sign-in** (an authenticator app's codes): a guessed password
+  alone would then sign no one in, whatever the limits allow.
+- **A CAPTCHA after failed sign-ins** instead of a wait — Cloudflare Turnstile
+  is free and does not track visitors; worth it only if the site is behind
+  Cloudflare (decided with the host).
 
 ## Deferred by the user — do not reopen unprompted
 

@@ -76,10 +76,16 @@ def create_app(
     users, backend = auth.users, auth.backend
 
     # Sign-in and sign-out: POST /api/auth/login (form: username, password), /logout.
+    # Login's limits are in the user manager's authenticate(), which knows the address.
     app.include_router(users.get_auth_router(backend), prefix="/api/auth", tags=["auth"])
-    # Registration, by invitation (UserCreate carries the code).
+    # Registration, by invitation (UserCreate carries the code). It and GitHub are
+    # limited per IP before anything else runs.
+    visit = [Depends(auth.guard_visit)]
     app.include_router(
-        users.get_register_router(UserRead, UserCreate), prefix="/api/auth", tags=["auth"]
+        users.get_register_router(UserRead, UserCreate),
+        prefix="/api/auth",
+        tags=["auth"],
+        dependencies=visit,
     )
     if auth.github is not None:
         app.include_router(
@@ -92,6 +98,7 @@ def create_app(
             ),
             prefix="/api/auth/github",
             tags=["auth"],
+            dependencies=visit,
         )
     # Deliberately not mounted: verification and forgot-password wait for an email
     # sender (DESIGN §10), and the library's /users/{id} admin routes -- administration
