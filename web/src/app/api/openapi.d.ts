@@ -233,6 +233,248 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/admin/users": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Users
+         * @description Every account, oldest first.
+         */
+        readonly get: operations["users_api_admin_users_get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/users/{user_id}/deactivate": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Deactivate
+         * @description Out at once: inactive, every session ended. Not for an administrator.
+         */
+        readonly post: operations["deactivate_api_admin_users__user_id__deactivate_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/users/{user_id}/reactivate": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Reactivate */
+        readonly post: operations["reactivate_api_admin_users__user_id__reactivate_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/users/{user_id}/end-sessions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * End Sessions
+         * @description Signed out everywhere; they can sign in again.
+         */
+        readonly post: operations["end_sessions_api_admin_users__user_id__end_sessions_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/users/{user_id}/reset-password": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Reset Password
+         * @description A new random password, shown once; their sessions are ended.
+         */
+        readonly post: operations["reset_password_api_admin_users__user_id__reset_password_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/users/{user_id}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post?: never;
+        /**
+         * Delete User
+         * @description The account and everything of theirs, for good. Not for an administrator.
+         */
+        readonly delete: operations["delete_user_api_admin_users__user_id__delete"];
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/invites": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Invites
+         * @description The newest first.
+         */
+        readonly get: operations["invites_api_admin_invites_get"];
+        readonly put?: never;
+        /**
+         * Create Invite
+         * @description A single-use code; the only time it is shown.
+         */
+        readonly post: operations["create_invite_api_admin_invites_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/invites/{invite_id}/revoke": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Revoke Invite
+         * @description An unspent code can no longer be spent.
+         */
+        readonly post: operations["revoke_invite_api_admin_invites__invite_id__revoke_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/jobs": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Jobs
+         * @description Recent rounds, newest first; ``reported``, ``failed`` or one reader's.
+         */
+        readonly get: operations["jobs_api_admin_jobs_get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/jobs/{job_id}/trace": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Trace
+         * @description One round's whole record: prompts, raw replies, SQL, errors, reports.
+         *     Opening it is logged.
+         */
+        readonly get: operations["trace_api_admin_jobs__job_id__trace_get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/reports": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Reports
+         * @description Every "report a problem", newest first.
+         */
+        readonly get: operations["reports_api_admin_reports_get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/admin/actions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Actions
+         * @description What admins did, newest first.
+         */
+        readonly get: operations["actions_api_admin_actions_get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/health": {
         readonly parameters: {
             readonly query?: never;
@@ -275,6 +517,187 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AdminActionView
+         * @description One line of the audit log.
+         */
+        readonly AdminActionView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            readonly id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            readonly created_at: string;
+            /** Admin Email */
+            readonly admin_email: string;
+            /** Action */
+            readonly action: string;
+            /** Target Id */
+            readonly target_id: string | null;
+            /** Target Email */
+            readonly target_email: string | null;
+            /** Detail */
+            readonly detail: unknown;
+        };
+        /** AdminInvite */
+        readonly AdminInvite: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            readonly id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            readonly status: "open" | "used" | "revoked" | "expired";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            readonly created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            readonly expires_at: string;
+            /** Used At */
+            readonly used_at: string | null;
+            /** Used By Email */
+            readonly used_by_email: string | null;
+            /** Revoked At */
+            readonly revoked_at: string | null;
+            /** Created By Email */
+            readonly created_by_email: string | null;
+        };
+        /**
+         * AdminJob
+         * @description One round, in the list of recent ones.
+         */
+        readonly AdminJob: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            readonly job_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            readonly conversation_id: string;
+            /** User Email */
+            readonly user_email: string;
+            /** Question */
+            readonly question: string;
+            /** Round */
+            readonly round: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            readonly status: "queued" | "parsing" | "mapping" | "fetching" | "presenting" | "done" | "failed";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            readonly created_at: string;
+            /** Finished At */
+            readonly finished_at: string | null;
+            /** Reply Status */
+            readonly reply_status: ("answered" | "partial" | "asked" | "refused") | null;
+            /** Reports */
+            readonly reports: number;
+            /** Has Trace */
+            readonly has_trace: boolean;
+        };
+        /**
+         * AdminReport
+         * @description One "report a problem".
+         */
+        readonly AdminReport: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            readonly id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            readonly job_id: string;
+            /** User Email */
+            readonly user_email: string;
+            /** Question */
+            readonly question: string;
+            /** Note */
+            readonly note: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            readonly created_at: string;
+        };
+        /**
+         * AdminTrace
+         * @description Everything kept about one round (DESIGN §8), and what was reported about it.
+         *     The trace's fields are as stored: prompts, raw replies and SQL, for a person
+         *     debugging -- never shown to a reader.
+         */
+        readonly AdminTrace: {
+            readonly job: components["schemas"]["AdminJob"];
+            /** Code Version */
+            readonly code_version: string | null;
+            /** Models */
+            readonly models: unknown;
+            /** Query In */
+            readonly query_in: unknown;
+            /** Plan */
+            readonly plan: unknown;
+            /** Result */
+            readonly result: unknown;
+            /** Model Calls */
+            readonly model_calls: unknown;
+            /** Statements */
+            readonly statements: unknown;
+            /** Timings */
+            readonly timings: unknown;
+            /** Errors */
+            readonly errors: unknown;
+            /** Reports */
+            readonly reports: readonly components["schemas"]["AdminReport"][];
+        };
+        /**
+         * AdminUser
+         * @description One account in the users list.
+         */
+        readonly AdminUser: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            readonly id: string;
+            /** Email */
+            readonly email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            readonly created_at: string;
+            /** Is Active */
+            readonly is_active: boolean;
+            /** Is Superuser */
+            readonly is_superuser: boolean;
+            /** Sign In Providers */
+            readonly sign_in_providers: readonly string[];
+            /** Sessions */
+            readonly sessions: number;
+            /** Questions Today */
+            readonly questions_today: number;
+        };
         /**
          * AnswerRow
          * @description One figure: a row of the table, and a point or bar in any view.
@@ -552,6 +975,12 @@ export interface components {
             /** Detail */
             readonly detail?: readonly components["schemas"]["ValidationError"][];
         };
+        /** InviteCreated */
+        readonly InviteCreated: {
+            readonly invite: components["schemas"]["AdminInvite"];
+            /** Code */
+            readonly code: string;
+        };
         /** JobCreated */
         readonly JobCreated: {
             /**
@@ -614,6 +1043,14 @@ export interface components {
             /** Question */
             readonly question: string;
         };
+        /** NewInviteIn */
+        readonly NewInviteIn: {
+            /**
+             * Days
+             * @default 14
+             */
+            readonly days?: number;
+        };
         /**
          * Note
          * @description A caveat that must survive all the way to the reader.
@@ -675,6 +1112,14 @@ export interface components {
             /** Reason */
             readonly reason: string | null;
             readonly ask: components["schemas"]["Ask"] | null;
+        };
+        /**
+         * PasswordReset
+         * @description A new random password, shown once; the account's sessions are ended.
+         */
+        readonly PasswordReset: {
+            /** Password */
+            readonly password: string;
         };
         /**
          * Refusal
@@ -1305,6 +1750,393 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly users_api_admin_users_get: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["AdminUser"][];
+                };
+            };
+        };
+    };
+    readonly deactivate_api_admin_users__user_id__deactivate_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly user_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly reactivate_api_admin_users__user_id__reactivate_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly user_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly end_sessions_api_admin_users__user_id__end_sessions_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly user_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly reset_password_api_admin_users__user_id__reset_password_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly user_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["PasswordReset"];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly delete_user_api_admin_users__user_id__delete: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly user_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly invites_api_admin_invites_get: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["AdminInvite"][];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly create_invite_api_admin_invites_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["NewInviteIn"];
+            };
+        };
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InviteCreated"];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly revoke_invite_api_admin_invites__invite_id__revoke_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly invite_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly jobs_api_admin_jobs_get: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: number;
+                readonly reported?: boolean;
+                readonly failed?: boolean;
+                readonly user_id?: string | null;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["AdminJob"][];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly trace_api_admin_jobs__job_id__trace_get: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly job_id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AdminTrace"];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly reports_api_admin_reports_get: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["AdminReport"][];
+                };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly actions_api_admin_actions_get: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": readonly components["schemas"]["AdminActionView"][];
+                };
             };
             /** @description Validation Error */
             readonly 422: {

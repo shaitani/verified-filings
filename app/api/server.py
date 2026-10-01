@@ -19,6 +19,7 @@ from fastapi import Depends, FastAPI, Request, Response, status
 from pydantic import TypeAdapter
 from sqlalchemy import text
 
+from app.api.admin_routes import build_admin_router
 from app.api.auth import (
     GITHUB_PATH,
     AuthConfig,
@@ -117,9 +118,10 @@ def create_app(
         )
     # Deliberately not mounted: verification and forgot-password wait for an email
     # sender (DESIGN §10), and the library's /users/{id} admin routes -- administration
-    # is the CLI's (app/api/admin.py) and, soon, /api/admin's.
+    # is /api/admin's, below, and the owner's CLI (app/api/admin.py).
 
     app.include_router(build_router(auth))  # ask, answer, watch, read back, list, reopen, report
+    app.include_router(build_admin_router(auth))  # administrators only; 404 to anyone else
 
     @app.get("/api/health", tags=["ops"])
     async def health(request: Request, response: Response) -> dict[str, str]:

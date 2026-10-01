@@ -549,8 +549,8 @@ from the CLI (generated and printed once). The invitation code stands in for
 proof of the address.
 
 **Mounted:** login, logout, register, GitHub authorize, callback and invite,
-`GET /api/me`. **Administration is the owner's CLI** for now:
-`python -m app.api.admin invite | make-admin | reset-password`.
+`GET /api/me`. **Administration** is the admin routes and the owner's CLI
+(§13).
 
 ### The client's side
 
@@ -715,3 +715,51 @@ and the `api` service in `docker-compose.yml`.
 Why it is not yet fit for a public server, and what deployment needs:
 [docs/GAPS.md](../../docs/GAPS.md#g9-smaller-gaps),
 [docs/FUTURE.md](../../docs/FUTURE.md#deployment--host-not-decided).
+
+## 13. Administration
+
+Two places, split by what only the owner may do.
+
+| | the owner's CLI (`python -m app.api.admin`) | the admin routes (`/api/admin/*`) |
+|---|---|---|
+| credential | the database owner | `vf_admin_role` (§11) |
+| for | `make-admin`, `unmake-admin`, the very first `invite`; also `reset-password` | everything else, for any administrator |
+
+`unmake-admin` clears `is_superuser` and nothing else; the account, its
+sessions and its questions stay. The role is read from the database on every
+request, so it takes effect on the next click.
+
+**The routes are invisible to everyone else.** One dependency guards the whole
+router: no session is 401, as everywhere; a signed-in reader who is not an
+administrator gets **404 with FastAPI's own body for a missing route**, so the
+routes do not reveal themselves. A test sweeps every mounted admin route as an
+ordinary reader, so a route added later is covered.
+
+| route | does | refusals |
+|---|---|---|
+| `GET users` | every account: active, admin, how it signs in, sessions now, rounds in the last 24 hours | |
+| `POST users/{id}/deactivate` | inactive, every session ended: out at once | 404 `NOT_FOUND`, 409 `ADMIN_PROTECTED` |
+| `POST users/{id}/reactivate` | active again | as above |
+| `POST users/{id}/end-sessions` | signed out everywhere; may sign in again | as above |
+| `POST users/{id}/reset-password` | a new random password, shown once; sessions ended, so none outlives the old password | as above |
+| `DELETE users/{id}` | the account and its whole tree, for good | as above |
+| `GET invites` | newest first: `open`, `used` (and by whom), `revoked`, `expired`, and who made it | |
+| `POST invites` `{days}` | a code, 1–90 days (14 by default), shown once | |
+| `POST invites/{id}/revoke` | an unspent code can no longer be spent — atomic against a sign-up racing for it | 404, 409 `INVITE_NOT_OPEN` |
+| `GET jobs` | recent rounds, newest first: who, the question, status, reply status, reports, whether a trace exists; `?reported`, `?failed`, `?user_id` | |
+| `GET jobs/{id}/trace` | everything §8 keeps, and the reports on it | 404 |
+| `GET reports` | every "report a problem", newest first | |
+| `GET actions` | the audit log, newest first | |
+
+**An admin cannot act on an admin**, themselves included, and both layers say
+so: `admin_storage` looks the target up first (409 `ADMIN_PROTECTED`), and row
+security (§11) changes no rows if a target became an administrator in between —
+which is why every change checks the count it made.
+
+**Every change is logged** in `web.admin_action`, in the same transaction as
+the change, so neither lands without the other. **Opening a trace is logged
+too** (`read_trace`): it shows a reader's question and every prompt it made.
+
+**A trace is for a person debugging.** It carries prompts, raw model replies
+and SQL — what §7 never sends to a reader — so it reaches only administrators,
+through `vf_admin_role`; the web role still cannot read one.

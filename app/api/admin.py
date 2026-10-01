@@ -2,6 +2,7 @@
 
     uv run python -m app.api.admin invite [--days 14]
     uv run python -m app.api.admin make-admin someone@example.com
+    uv run python -m app.api.admin unmake-admin someone@example.com
     uv run python -m app.api.admin reset-password someone@example.com
 
 The owner, because the Web Server's role can do none of this: it cannot create
@@ -63,6 +64,19 @@ async def make_admin(session_factory: async_sessionmaker, email: str) -> bool:
     return changed.rowcount == 1
 
 
+async def unmake_admin(session_factory: async_sessionmaker, email: str) -> bool:
+    """Take the administrator role back -- and nothing else: the account, its
+    sessions and its questions stay. Takes effect on their next request."""
+    async with session_factory() as session:
+        changed = await session.execute(
+            update(User)
+            .where(func.lower(User.email) == email.strip().lower())
+            .values(is_superuser=False)
+        )
+        await session.commit()
+    return changed.rowcount == 1
+
+
 async def reset_password(session_factory: async_sessionmaker, email: str) -> str | None:
     """A new random password for this user, returned once. None: no such user."""
     password = secrets.token_urlsafe(18)  # 24 characters, well over the 12 minimum
@@ -84,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     invite.add_argument("--days", type=int, default=DEFAULT_DAYS, help="valid for (default 14)")
     admin = commands.add_parser("make-admin", help="make an existing user an administrator")
     admin.add_argument("email")
+    unmake = commands.add_parser(
+        "unmake-admin", help="take the administrator role back (the account stays)"
+    )
+    unmake.add_argument("email")
     reset = commands.add_parser("reset-password", help="give a user a new random password")
     reset.add_argument("email")
     args = parser.parse_args(argv)
@@ -99,6 +117,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"no user {args.email}", file=sys.stderr)
             return 1
         print(f"{args.email} is now an administrator.")
+        return 0
+    if args.command == "unmake-admin":
+        if not asyncio.run(unmake_admin(SessionLocal, args.email)):
+            print(f"no user {args.email}", file=sys.stderr)
+            return 1
+        print(f"{args.email} is no longer an administrator; the account is unchanged.")
         return 0
     password = asyncio.run(reset_password(SessionLocal, args.email))
     if password is None:

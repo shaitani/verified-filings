@@ -300,3 +300,109 @@ class JobView(_Base):
         if (self.reply is not None) != (self.status == "done"):
             raise ValueError("reply is set exactly when status is 'done'")
         return self
+
+
+# --------------------------------------------------------------------------- #
+# Administration (/api/admin, DESIGN §13)
+# --------------------------------------------------------------------------- #
+
+InviteStatus = Literal["open", "used", "revoked", "expired"]
+
+#: The longest an admin may make an invite last.
+MAX_INVITE_DAYS = 90
+
+
+class AdminUser(_Base):
+    """One account in the users list."""
+
+    id: UUID
+    email: str
+    created_at: datetime
+    is_active: bool
+    is_superuser: bool
+    sign_in_providers: list[str]  # ["github"] for one made through GitHub
+    sessions: int = Field(ge=0)  # signed-in sessions right now
+    questions_today: int = Field(ge=0)  # rounds in the last 24 hours, as the daily cap counts
+
+
+class PasswordReset(_Base):
+    """A new random password, shown once; the account's sessions are ended."""
+
+    password: str
+
+
+class AdminInvite(_Base):
+    id: UUID
+    status: InviteStatus
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None = None
+    used_by_email: str | None = None  # null once that account is deleted
+    revoked_at: datetime | None = None
+    created_by_email: str | None = None  # null: made from the CLI
+
+
+class NewInviteIn(_Base):
+    days: int = Field(default=14, ge=1, le=MAX_INVITE_DAYS)
+
+
+class InviteCreated(_Base):
+    invite: AdminInvite
+    code: str  # shown once; only its hash is stored
+
+
+class AdminJob(_Base):
+    """One round, in the list of recent ones."""
+
+    job_id: UUID
+    conversation_id: UUID
+    user_email: str
+    question: str
+    round: int = Field(ge=1)
+    status: JobStatus
+    created_at: datetime
+    finished_at: datetime | None = None
+    reply_status: ReplyStatus | None = None
+    reports: int = Field(ge=0)  # "report a problem" on this round
+    has_trace: bool  # false while it is still running
+
+
+class AdminReport(_Base):
+    """One "report a problem"."""
+
+    id: UUID
+    job_id: UUID
+    user_email: str
+    question: str
+    note: str | None = None
+    created_at: datetime
+
+
+class AdminTrace(_Base):
+    """Everything kept about one round (DESIGN §8), and what was reported about it.
+    The trace's fields are as stored: prompts, raw replies and SQL, for a person
+    debugging -- never shown to a reader."""
+
+    job: AdminJob
+    code_version: str | None = None
+    models: Any = None
+    query_in: Any = None
+    plan: Any = None
+    result: Any = None
+    model_calls: Any = None
+    statements: Any = None
+    timings: Any = None
+    errors: Any = None
+    reports: list[AdminReport]
+
+
+class AdminActionView(_Base):
+    """One line of the audit log."""
+
+    id: UUID
+    created_at: datetime
+    admin_email: str
+    action: str
+    target_id: UUID | None = None
+    target_email: str | None = None
+    detail: Any = None

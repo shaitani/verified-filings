@@ -711,6 +711,646 @@
         }
       }
     },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Users",
+        "description": "Every account, oldest first.",
+        "operationId": "users_api_admin_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminUser"
+                  },
+                  "type": "array",
+                  "title": "Response Users Api Admin Users Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/deactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deactivate",
+        "description": "Out at once: inactive, every session ended. Not for an administrator.",
+        "operationId": "deactivate_api_admin_users__user_id__deactivate_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/reactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reactivate",
+        "operationId": "reactivate_api_admin_users__user_id__reactivate_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/end-sessions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "End Sessions",
+        "description": "Signed out everywhere; they can sign in again.",
+        "operationId": "end_sessions_api_admin_users__user_id__end_sessions_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/reset-password": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reset Password",
+        "description": "A new random password, shown once; their sessions are ended.",
+        "operationId": "reset_password_api_admin_users__user_id__reset_password_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordReset"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete User",
+        "description": "The account and everything of theirs, for good. Not for an administrator.",
+        "operationId": "delete_user_api_admin_users__user_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/invites": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Invites",
+        "description": "The newest first.",
+        "operationId": "invites_api_admin_invites_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminInvite"
+                  },
+                  "title": "Response Invites Api Admin Invites Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Invite",
+        "description": "A single-use code; the only time it is shown.",
+        "operationId": "create_invite_api_admin_invites_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewInviteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/invites/{invite_id}/revoke": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke Invite",
+        "description": "An unspent code can no longer be spent.",
+        "operationId": "revoke_invite_api_admin_invites__invite_id__revoke_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "invite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invite Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/jobs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Jobs",
+        "description": "Recent rounds, newest first; ``reported``, ``failed`` or one reader's.",
+        "operationId": "jobs_api_admin_jobs_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "reported",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Reported"
+            }
+          },
+          {
+            "name": "failed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Failed"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminJob"
+                  },
+                  "title": "Response Jobs Api Admin Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/jobs/{job_id}/trace": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Trace",
+        "description": "One round's whole record: prompts, raw replies, SQL, errors, reports.\nOpening it is logged.",
+        "operationId": "trace_api_admin_jobs__job_id__trace_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTrace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/reports": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reports",
+        "description": "Every \"report a problem\", newest first.",
+        "operationId": "reports_api_admin_reports_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminReport"
+                  },
+                  "title": "Response Reports Api Admin Reports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/actions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Actions",
+        "description": "What admins did, newest first.",
+        "operationId": "actions_api_admin_actions_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminActionView"
+                  },
+                  "title": "Response Actions Api Admin Actions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -766,6 +1406,428 @@
   },
   "components": {
     "schemas": {
+      "AdminActionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "admin_email": {
+            "type": "string",
+            "title": "Admin Email"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Email"
+          },
+          "detail": {
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "admin_email",
+          "action",
+          "target_id",
+          "target_email",
+          "detail"
+        ],
+        "title": "AdminActionView",
+        "description": "One line of the audit log."
+      },
+      "AdminInvite": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "used",
+              "revoked",
+              "expired"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used At"
+          },
+          "used_by_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used By Email"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "created_by_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "expires_at",
+          "used_at",
+          "used_by_email",
+          "revoked_at",
+          "created_by_email"
+        ],
+        "title": "AdminInvite"
+      },
+      "AdminJob": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "round": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Round"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "mapping",
+              "fetching",
+              "presenting",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "reply_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "answered",
+                  "partial",
+                  "asked",
+                  "refused"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Status"
+          },
+          "reports": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reports"
+          },
+          "has_trace": {
+            "type": "boolean",
+            "title": "Has Trace"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "conversation_id",
+          "user_email",
+          "question",
+          "round",
+          "status",
+          "created_at",
+          "finished_at",
+          "reply_status",
+          "reports",
+          "has_trace"
+        ],
+        "title": "AdminJob",
+        "description": "One round, in the list of recent ones."
+      },
+      "AdminReport": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "job_id",
+          "user_email",
+          "question",
+          "note",
+          "created_at"
+        ],
+        "title": "AdminReport",
+        "description": "One \"report a problem\"."
+      },
+      "AdminTrace": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/AdminJob"
+          },
+          "code_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
+          "models": {
+            "title": "Models"
+          },
+          "query_in": {
+            "title": "Query In"
+          },
+          "plan": {
+            "title": "Plan"
+          },
+          "result": {
+            "title": "Result"
+          },
+          "model_calls": {
+            "title": "Model Calls"
+          },
+          "statements": {
+            "title": "Statements"
+          },
+          "timings": {
+            "title": "Timings"
+          },
+          "errors": {
+            "title": "Errors"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/AdminReport"
+            },
+            "type": "array",
+            "title": "Reports"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job",
+          "code_version",
+          "models",
+          "query_in",
+          "plan",
+          "result",
+          "model_calls",
+          "statements",
+          "timings",
+          "errors",
+          "reports"
+        ],
+        "title": "AdminTrace",
+        "description": "Everything kept about one round (DESIGN §8), and what was reported about it.\nThe trace's fields are as stored: prompts, raw replies and SQL, for a person\ndebugging -- never shown to a reader."
+      },
+      "AdminUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "is_superuser": {
+            "type": "boolean",
+            "title": "Is Superuser"
+          },
+          "sign_in_providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sign In Providers"
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sessions"
+          },
+          "questions_today": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Questions Today"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "created_at",
+          "is_active",
+          "is_superuser",
+          "sign_in_providers",
+          "sessions",
+          "questions_today"
+        ],
+        "title": "AdminUser",
+        "description": "One account in the users list."
+      },
       "AnswerRow": {
         "properties": {
           "element_id": {
@@ -1522,6 +2584,24 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InviteCreated": {
+        "properties": {
+          "invite": {
+            "$ref": "#/components/schemas/AdminInvite"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "invite",
+          "code"
+        ],
+        "title": "InviteCreated"
+      },
       "JobCreated": {
         "properties": {
           "conversation_id": {
@@ -1658,6 +2738,20 @@
           "question"
         ],
         "title": "NewConversationIn"
+      },
+      "NewInviteIn": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "default": 14
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NewInviteIn"
       },
       "Note": {
         "properties": {
@@ -1820,6 +2914,21 @@
         ],
         "title": "Part",
         "description": "One thing the question asked for, and what became of it (§1)."
+      },
+      "PasswordReset": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "PasswordReset",
+        "description": "A new random password, shown once; the account's sessions are ended."
       },
       "Refusal": {
         "properties": {

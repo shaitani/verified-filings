@@ -250,8 +250,9 @@ travels on the `ResultSet`. Detail:
 | `app/chain.py` | one round: parse → map → answer → present, every outcome a reply part; the four fixed sentences a reader gets when a stage fails; `Pending`, what the next round needs |
 | `app/api/jobs.py` | `JobRunner`: one job at a time (one GPU), stages saved and streamed as server-sent events; the trace is always written |
 | `app/api/storage.py` | conversations and jobs, as `vf_web_role`; each round chains through the picks stored with it |
-| `app/trace.py`, `app/api/trace.py` | the per-job trace — full prompts, raw replies, every statement, timings, errors — written write-only, read with the owner's CLI |
+| `app/trace.py`, `app/api/trace.py` | the per-job trace — full prompts, raw replies, every statement, timings, errors — written write-only, read by administrators (`/api/admin`) or the owner's CLI |
 | `app/api/auth.py`, `admin.py` | sign-in by invitation (FastAPI Users, email/password or GitHub); the owner's CLI |
+| `app/api/admin_routes.py`, `admin_storage.py` | `/api/admin/*`: users, invites, traces, reports, the audit log — administrators only, as `vf_admin_role` |
 | `app/api/schemas.py`, `app/schemas/answer_view.py` | the wire contract; the client's TypeScript types are generated from it |
 | `app/db/web.py` | the `web` schema |
 | `api.Dockerfile`, `docker-compose.yml` `api` | the server's container, behind the `web` profile |
