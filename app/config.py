@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     #: after the `web` migration: its grants name those tables.
     database_url_web: str | None = None
 
+    #: The admin routes' login (``vf_admin_role``): invites, traces, deleting a
+    #: reader -- what the Web Server's own login must not do.
+    database_url_admin: str | None = None
+
     #: Sign-in (app/api/DESIGN.md §10). The four secrets sign tokens -- reset,
     #: verification, the GitHub sign-in's state, the known-browser cookie -- and the
     #: server will not start without them. GitHub is optional: without both values
@@ -60,6 +64,7 @@ class Settings(BaseSettings):
                 "database_url_query_mapper",
                 "database_url_retrieval",
                 "database_url_web",
+                "database_url_admin",
             ):
                 url = getattr(self, name)
                 if url:

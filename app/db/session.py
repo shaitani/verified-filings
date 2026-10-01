@@ -29,7 +29,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.db.roles import WEB
+from app.db.roles import ADMIN, WEB
 
 #: One per process: a managed pool of connections to PostgreSQL.
 engine = create_async_engine(settings.database_url)
@@ -110,4 +110,24 @@ def web_sessionmaker(url: str | None = None) -> async_sessionmaker:
     if user != WEB.name:
         # Pointing it at the owner by mistake would quietly undo every grant.
         raise WebRoleMissing(f"DATABASE_URL_WEB logs in as {user!r}, not {WEB.name!r}")
+    return async_sessionmaker(create_async_engine(url), expire_on_commit=False)
+
+
+class AdminRoleMissing(RuntimeError):
+    """The admin routes have no credential of their own, and will not borrow one."""
+
+
+def admin_sessionmaker(url: str | None = None) -> async_sessionmaker:
+    """The admin routes' factory: ``vf_admin_role`` and nothing else. No fallback,
+    for the reason ``web_sessionmaker`` has none -- and not the web role either,
+    which was built unable to do what these routes do."""
+    url = url if url is not None else settings.database_url_admin
+    if not url:
+        raise AdminRoleMissing(
+            "DATABASE_URL_ADMIN is not set. The admin routes run only as vf_admin_role -- "
+            "see docs/STARTUP.md for the .env line and `uv run python -m app.db.roles`."
+        )
+    user = make_url(url).username
+    if user != ADMIN.name:
+        raise AdminRoleMissing(f"DATABASE_URL_ADMIN logs in as {user!r}, not {ADMIN.name!r}")
     return async_sessionmaker(create_async_engine(url), expire_on_commit=False)

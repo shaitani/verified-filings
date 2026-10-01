@@ -66,9 +66,9 @@ cd ..
 
 ### 2. `.env`
 
-Copy `.env.example` to `.env`. Choose three role passwords and put them in
-`DATABASE_URL_QUERY_MAPPER`, `DATABASE_URL_RETRIEVAL` and `DATABASE_URL_WEB`
-(uncomment the last). Generate the four signing secrets and paste them in:
+Copy `.env.example` to `.env`. Choose four role passwords and put them in
+`DATABASE_URL_QUERY_MAPPER`, `DATABASE_URL_RETRIEVAL`, `DATABASE_URL_WEB` and
+`DATABASE_URL_ADMIN` (uncomment the last two). Generate the four signing secrets and paste them in:
 
 ```
 uv run python -c "import secrets; [print(f'{n}={secrets.token_urlsafe(32)}') for n in ('AUTH_RESET_SECRET', 'AUTH_VERIFY_SECRET', 'AUTH_OAUTH_STATE_SECRET', 'AUTH_DEVICE_SECRET')]"

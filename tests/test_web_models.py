@@ -13,16 +13,21 @@ from typing import get_args
 import pytest
 
 from app.db import roles
-from app.db.web import Invite, Job, User, WebBase
+from app.db.web import AdminAction, AdminActionKind, Invite, Job, User, WebBase
 from app.schemas.job import JOB_STATUSES, JobStage
 
-MIGRATION = next(Path("app/db/migrations/versions").glob("*_add_web_schema.py"))
+VERSIONS = Path("app/db/migrations/versions")
+MIGRATION = next(VERSIONS.glob("*_add_web_schema.py"))
+ADMIN_MIGRATION = next(VERSIONS.glob("*_add_admin_action_and_invite_revocation.py"))
+
+#: The roles that hold grants in web.
+WEB_ROLES = (roles.WEB, roles.ADMIN)
 
 
-def _check_values(name: str) -> set[str]:
-    """The values a CHECK in the migration allows, e.g. status IN ('queued', ...)."""
-    match = re.search(rf"{name} IN \(([^)]*)\)", MIGRATION.read_text(encoding="utf-8"))
-    assert match, f"no CHECK on {name} in {MIGRATION.name}"
+def _check_values(name: str, migration: Path = MIGRATION) -> set[str]:
+    """The values a CHECK in a migration allows, e.g. status IN ('queued', ...)."""
+    match = re.search(rf"{name} IN \(([^)]*)\)", migration.read_text(encoding="utf-8"))
+    assert match, f"no CHECK on {name} in {migration.name}"
     return set(re.findall(r"'([^']*)'", match.group(1)))
 
 
@@ -55,6 +60,12 @@ def test_an_invite_kind_is_one_of_two() -> None:
         Invite(kind="gitlab")
 
 
+def test_an_admin_action_is_one_the_migration_allows() -> None:
+    assert _check_values("action", ADMIN_MIGRATION) == set(get_args(AdminActionKind))
+    with pytest.raises(ValueError, match="unknown admin action"):
+        AdminAction(action="promote")
+
+
 # --------------------------------------------------------------------------- #
 # What the web role's grants depend on (roles.WEB, api DESIGN §11)
 # --------------------------------------------------------------------------- #
@@ -62,15 +73,43 @@ def test_an_invite_kind_is_one_of_two() -> None:
 
 def test_every_granted_table_exists_in_web() -> None:
     tables = {table.name for table in WebBase.metadata.tables.values()}
-    granted = set(roles.WEB.tables) | {grant.table for grant in roles.WEB.writes}
+    granted = {
+        table
+        for spec in WEB_ROLES
+        for table in (*spec.tables, *(grant.table for grant in spec.writes))
+    }
     assert granted == tables  # nothing granted that does not exist, nothing left ungranted
 
 
-def test_every_narrowed_grant_names_real_columns() -> None:
+@pytest.mark.parametrize("spec", WEB_ROLES, ids=lambda spec: spec.name)
+def test_every_narrowed_grant_names_real_columns(spec) -> None:
     by_name = {table.name: table for table in WebBase.metadata.tables.values()}
-    for grant in roles.WEB.writes:
+    for grant in spec.writes:
         missing = set(grant.columns) - set(by_name[grant.table].columns.keys())
         assert not missing, f"{grant.privilege} on {grant.table}: no column {sorted(missing)}"
+
+
+def test_every_policed_table_exists_and_every_policy_names_a_web_role() -> None:
+    tables = {table.name for table in WebBase.metadata.tables.values()}
+    assert set(roles.ROW_SECURED) <= tables
+    assert {policy.role for policy in roles.ROW_POLICIES} <= {spec.name for spec in WEB_ROLES}
+
+
+def test_every_role_that_uses_a_policed_table_has_a_policy_on_it() -> None:
+    """Row security on, a role with no policy sees no rows: the web role would
+    find no users and sign no one in."""
+    for spec in WEB_ROLES:
+        for table in roles.ROW_SECURED:
+            if table in spec.tables:
+                assert any(p.role == spec.name and p.table == table for p in roles.ROW_POLICIES), (
+                    f"{spec.name} reads {table} but has no policy on it"
+                )
+
+
+def test_the_admin_role_can_never_make_an_administrator() -> None:
+    written = {c for g in roles.ADMIN.writes if g.table == "user" for c in g.columns}
+    assert "is_superuser" not in written
+    assert not any(g.table == "user" and g.privilege == "INSERT" for g in roles.ADMIN.writes)
 
 
 def test_every_user_column_the_orm_inserts_is_granted() -> None:

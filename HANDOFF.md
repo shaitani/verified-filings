@@ -20,8 +20,31 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 The agreed order, one piece at a time, each planned with the user first:
 
-- **Admin CLI to take access back** — list users and invites, revoke an
-  invite, deactivate a user and delete their sessions.
+- **Administration: an admin tab** (in progress — piece 2 next; the admin
+  login, row security and audit table are in, app/api/DESIGN.md §11, and the
+  user's account is an administrator). Decided with the user 2026-09-30:
+  - `is_superuser` is set and cleared only from the CLI (`make-admin`,
+    `unmake-admin`, which clears the role and nothing else). The CLI alone
+    also makes the very first invite. Everything else is in the tab, shown
+    only to admins, served from `/api/admin/*` (404 to ordinary readers).
+  - The tab: users (list, deactivate/reactivate — which also ends sessions —,
+    end sessions, reset password, **delete**), invites (create, list,
+    revoke), **traces and problem reports**, and an audit log.
+  - A separate database login, `vf_admin_role`, for admin routes only;
+    `vf_web_role` stays unable to invite or read traces. **Admins cannot act
+    on admins**, enforced by row-level security on `web.user`, not only in
+    code. The audit log keeps the target's email as text, so it survives a
+    deletion. No re-authentication for admin actions for now.
+  - **Invites become unbound codes**: no email is sent or bound; the code
+    alone registers once, with whatever email is typed; 14-day expiry by
+    default; revocable. **GitHub sign-up takes a code too** — typed on the
+    sign-up page, held in a short-lived signed cookie, claimed when GitHub
+    returns the newcomer. GitHub-username invites go away.
+  - Pieces left: (2) unbound codes, GitHub handoff, CLI `invite` — and
+    narrow `roles.ADMIN`'s invite INSERT to the columns that remain; (3)
+    admin API and `unmake-admin` (an UPDATE/DELETE row security blocks
+    changes 0 rows, not an error: check the count); (4) tab: users and
+    invites; (5) tab: traces and reports.
 - **Choose the host** — a walk-through with the user. The GPU decides it;
   options on the table: all at home behind Cloudflare Tunnel (+ Access), a
   droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.

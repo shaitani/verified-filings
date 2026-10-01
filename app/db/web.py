@@ -2,7 +2,8 @@
 
 Beside ``models.py``'s ``xbrl`` tables, under a declarative base of its own so
 the two schemas never share a ``MetaData``. Design: ``app/api/DESIGN.md`` §11.
-Grants: ``app/db/roles.py`` ``WEB``.
+Grants: ``app/db/roles.py`` ``WEB`` (the Web Server) and ``ADMIN`` (its admin
+routes), and the row-level policies there that keep an admin off an admin's row.
 """
 
 from __future__ import annotations
@@ -39,6 +40,18 @@ from app.schemas.job import JOB_STATUSES
 SCHEMA = "web"
 
 InviteKind = Literal["email", "github"]
+
+#: What an admin did, as the audit log records it (``AdminAction``).
+AdminActionKind = Literal[
+    "deactivate",
+    "reactivate",
+    "end_sessions",
+    "reset_password",
+    "delete_user",
+    "create_invite",
+    "revoke_invite",
+    "read_trace",
+]
 
 
 def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
@@ -102,6 +115,8 @@ class Invite(WebBase):
         ),
         # used_by is cleared if that user is deleted; used_at stays as the record.
         CheckConstraint("used_by IS NULL OR used_at IS NOT NULL", name="used_by_needs_used_at"),
+        # A revoked invite can no longer be spent, and a spent one cannot be revoked.
+        CheckConstraint("revoked_at IS NULL OR used_at IS NULL", name="revoked_or_used"),
         _one_of("kind", get_args(InviteKind), name="invite_kind"),
     )
 
@@ -114,6 +129,11 @@ class Invite(WebBase):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # set by the CLI
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     used_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID, ForeignKey("user.id", ondelete="SET NULL")
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: The admin who made it; null when made from the CLI, or once that admin is deleted.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID, ForeignKey("user.id", ondelete="SET NULL")
     )
 
@@ -216,3 +236,37 @@ class JobFeedback(WebBase):
     )
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
+
+
+# --------------------------------------------------------------------------- #
+# Administration
+# --------------------------------------------------------------------------- #
+
+
+class AdminAction(WebBase):
+    """The audit log: one row per thing an admin did. ``vf_admin_role`` may add a
+    row and read them, never change or delete one. The target is kept as plain
+    values, not a foreign key, so the record outlives a deleted user."""
+
+    __tablename__ = "admin_action"
+    __table_args__ = (_one_of("action", get_args(AdminActionKind), name="admin_action_kind"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    #: Null only if the owner later deletes that admin; their email stays.
+    admin_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID, ForeignKey("user.id", ondelete="SET NULL")
+    )
+    admin_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # checked on assignment too
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID)  # a user, invite or job
+    target_email: Mapped[str | None] = mapped_column(String(320))
+    detail: Mapped[Any | None] = mapped_column(JSONB)
+
+    @validates("action")
+    def _known_action(self, _key: str, value: str) -> str:
+        if value not in get_args(AdminActionKind):
+            raise ValueError(f"unknown admin action {value!r}")
+        return value

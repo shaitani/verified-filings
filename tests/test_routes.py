@@ -19,11 +19,9 @@ import app.chain as chain
 from app.api import admin, limits, storage
 from app.api.auth import SESSION_COOKIE
 from app.api.server import create_app
-from app.db import roles
 from app.schemas.query import QueryIn, QueryPlan
 from app.schemas.result import ResultSet
-from tests.conftest import TEST_WEB_PASSWORD
-from tests.test_auth import CONFIG, PASSWORD
+from tests.test_auth import CONFIG, PASSWORD, _admin_url, _web_url
 
 CHAIN = Path(__file__).parent / "fixtures" / "chain"
 
@@ -74,9 +72,9 @@ def captured_chain(monkeypatch):
 async def server(web_factory, test_db_url):
     """The app started as uvicorn would; yields a factory of signed-in clients."""
     _, owner = web_factory
-    scheme, rest = test_db_url.split("://", 1)
-    web_url = f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
-    app = create_app(CONFIG, web_url, showDocs=False)  # as deployed, whatever .env says
+    app = create_app(  # as deployed, whatever .env says
+        CONFIG, _web_url(test_db_url), _admin_url(test_db_url), showDocs=False
+    )
     clients: list[httpx.AsyncClient] = []
 
     async def signed_in(name: str) -> httpx.AsyncClient:

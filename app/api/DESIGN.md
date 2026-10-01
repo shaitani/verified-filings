@@ -558,7 +558,7 @@ names, which passes GitHub's `code` and `state` to the API's callback.
 - The browser must use the host the redirect URL names (`localhost`, not
   `127.0.0.1`): the OAuth CSRF cookie belongs to the host sign-in began on.
 
-## 11. The `web` schema and `vf_web_role`
+## 11. The `web` schema, `vf_web_role` and `vf_admin_role`
 
 A second PostgreSQL schema, **`web`**, beside `xbrl` in the same database.
 Every primary key is a UUID made in Python, so there are no sequences to
@@ -569,16 +569,18 @@ grant.
 | `web.user` | `id`, `email`, `hashed_password`, `is_active`, `is_superuser`, `is_verified`, `created_at` | the library's columns plus `created_at`; a unique index on `lower(email)`. `user` is reserved, so hand-written SQL says `web."user"` |
 | `web.oauth_account` | `id`, `user_id`, `oauth_name`, `account_id`, `account_email`, `access_token`, `refresh_token`, `expires_at` | the library's |
 | `web.access_token` | `token`, `user_id`, `created_at` | one row per signed-in session |
-| `web.invite` | `id`, `kind` (`email` / `github`), `email`, `code_hash`, `github_account_id`, `created_at`, `used_at`, `used_by` | made only from the CLI; spent once |
+| `web.invite` | `id`, `kind` (`email` / `github`), `email`, `code_hash`, `github_account_id`, `created_at`, `expires_at`, `used_at`, `used_by`, `revoked_at`, `created_by` | made from the CLI or by an admin (`created_by`, null from the CLI); spent once; a revoked one cannot be spent, a spent one cannot be revoked |
 | `web.conversation` | `id`, `user_id`, `question`, `created_at` | the original question, verbatim |
 | `web.job` | `id`, `conversation_id`, `round`, `status`, `asks`, `answers`, `reply`, `created_at`, `finished_at` | one per round. `asks` keeps the options offered, so an answer is checked against them and a pin read from them; `answers` keeps each answer's words |
 | `web.job_trace` | `job_id`, `created_at`, `code_version`, `models`, `query_in`, `plan`, `result`, `model_calls`, `statements`, `timings`, `errors` | §8 |
 | `web.job_feedback` | `id`, `job_id`, `user_id`, `note`, `created_at` | "report a problem" |
+| `web.admin_action` | `id`, `created_at`, `admin_id`, `admin_email`, `action`, `target_id`, `target_email`, `detail` | the audit log: one row per thing an admin did, opening a trace included. The target is plain values, no foreign key, so the record outlives a deleted user |
 
 Deleting a user deletes their conversations and everything under them
-(`ON DELETE CASCADE`). Only the owner's credential can delete a user.
-Statuses and invite kinds are explicit, named CHECKs that the code's lists are
-tested against, so a status is spelt one way everywhere.
+(`ON DELETE CASCADE`), and empties `used_by` on the invite they spent. The
+owner's credential can delete anyone; `vf_admin_role` only a non-administrator.
+Statuses, invite kinds and admin actions are explicit, named CHECKs that the
+code's lists are tested against, so each is spelt one way everywhere.
 
 ### What `vf_web_role` may do
 
@@ -592,6 +594,7 @@ tested against, so a status is spelt one way everywhere.
 | `job` | yes | yes | yes | no |
 | `job_trace` | **no** | yes | no | no |
 | `job_feedback` | no | yes | no | no |
+| `admin_action` | **no** | **no** | no | no |
 | anything in `xbrl` | **no** | no | no | no |
 
 Three are guard rails in their own right. **The Web Server cannot make anyone
@@ -607,9 +610,45 @@ factories fall back to `DATABASE_URL` with a warning when their URL is unset;
 the Web Server refuses to start without `DATABASE_URL_WEB`, because the owner
 can do everything the grid was designed to prevent.
 
+### What `vf_admin_role` may do
+
+The admin routes' own login (`/api/admin/*`, through `admin_sessionmaker()`),
+so what administration needs never reaches `vf_web_role`: a bug in an
+ordinary route still holds only the grid above. Both logins live in one
+process, so this guards against a route's mistake, not against the process
+being taken.
+
+| table | `SELECT` | `INSERT` | `UPDATE` | `DELETE` |
+|---|---|---|---|---|
+| `user` | yes | **no** | `is_active`, `hashed_password` only — a non-administrator's row | a non-administrator's row |
+| `access_token` | yes | **no** | no | a non-administrator's sessions |
+| `invite` | yes | yes, except `used_*` and `revoked_at` | `revoked_at` only | no |
+| `admin_action` | yes | yes | **no** | **no** |
+| `oauth_account`, `conversation`, `job`, `job_trace`, `job_feedback` | yes | no | no | no |
+| anything in `xbrl` | **no** | no | no | no |
+
+It cannot make an administrator, make an account, start a session as anyone,
+spend an invite, or change the audit log. **Deleting a reader takes their
+whole tree** although it holds no `DELETE` below `user`: PostgreSQL runs a
+foreign key's cascade with the table owner's rights.
+
+**An admin cannot act on an admin**, and the database says so, not only the
+code: row-level security on `web.user` and `web.access_token`
+(`roles.ROW_POLICIES`) lets `vf_admin_role` change or delete only rows where
+`is_superuser` is false. Such a statement is not an error — it changes no
+rows — so the admin routes check the count. `vf_web_role` has an
+allow-everything policy, so sign-in is untouched; the owner bypasses row
+security, which is how the CLI makes and unmakes administrators. The policies
+are provisioned with the roles, not by a migration, since they name roles, and
+each table's are replaced in one statement, so the running Web Server never
+sees security on with its policy missing.
+
+The Web Server refuses to start without `DATABASE_URL_ADMIN`, as it does
+without its own login, rather than fail on an admin's first click.
+
 ### The rules every role keeps (`app/db/roles.py`)
 
-- `NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`, all three roles.
+- `NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`, all four roles.
 - Every table privilege is revoked before the spec is granted, in **every**
   managed schema — `web` from the two readers, `xbrl` from the web role — so
   the spec is authoritative and narrowing it narrows the role.
@@ -646,7 +685,7 @@ and the `api` service in `docker-compose.yml`.
   check calls `GET /api/health`, which runs `SELECT 1` as the web role.
 - **Behind the `web` profile**, so a plain `docker compose up -d` does not
   start it before the migration and roles it needs exist.
-- **Only the credentials it needs, by name** — the three role URLs, the
+- **Only the credentials it needs, by name** — the four role URLs, the
   secrets, GitHub — never `.env` whole. The owner's login and the test
   database's never enter the container. `DATABASE_URL`, which the code
   requires, is the **web role's** there, so even an accidental owner session

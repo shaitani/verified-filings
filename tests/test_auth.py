@@ -35,7 +35,7 @@ from app.api.limits import TOO_MANY_ATTEMPTS, Window
 from app.api.server import create_app
 from app.db import roles
 from app.db.web import Invite, OAuthAccount, User
-from tests.conftest import TEST_WEB_PASSWORD
+from tests.conftest import TEST_ADMIN_PASSWORD, TEST_WEB_PASSWORD, role_url_on_test_db
 
 CONFIG = AuthConfig(
     reset_secret="test-reset-" + "r" * 32,
@@ -52,14 +52,17 @@ PASSWORD = "correct horse battery"
 
 
 def _web_url(test_db_url: str) -> str:
-    scheme, rest = test_db_url.split("://", 1)
-    return f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
+    return role_url_on_test_db(test_db_url, roles.WEB.name, TEST_WEB_PASSWORD)
+
+
+def _admin_url(test_db_url: str) -> str:
+    return role_url_on_test_db(test_db_url, roles.ADMIN.name, TEST_ADMIN_PASSWORD)
 
 
 @pytest.fixture
 async def client(web_factory, test_db_url):
     """The app, started and stopped as uvicorn would, and an http client for it."""
-    app = create_app(CONFIG, _web_url(test_db_url))
+    app = create_app(CONFIG, _web_url(test_db_url), _admin_url(test_db_url))
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
@@ -70,7 +73,7 @@ async def client(web_factory, test_db_url):
 async def browsers(web_factory, test_db_url):
     """The app, and ``browser(ip)``: a client with its own cookies, connecting from
     ``ip`` -- what the sign-in limits key on."""
-    app = create_app(CONFIG, _web_url(test_db_url))
+    app = create_app(CONFIG, _web_url(test_db_url), _admin_url(test_db_url))
     opened: list[httpx.AsyncClient] = []
 
     def browser(ip: str) -> httpx.AsyncClient:

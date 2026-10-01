@@ -42,7 +42,7 @@ and reports the tally.
 `db-test` up and **migrated to head** — it is a separate server that nothing
 migrates automatically ([STARTUP.md](STARTUP.md) step 4). A missing migration
 reads as a broken test suite, not as a missing step. The suite provisions all
-three database roles on the test database itself; it never touches `db`.
+four database roles on the test database itself; it never touches `db`.
 
 ### How it isolates itself
 

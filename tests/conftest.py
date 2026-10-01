@@ -98,9 +98,17 @@ async def clean_fake_company(test_session_factory):
     await _delete()
 
 
-#: The web role's password on the test database only. Provisioned here, never
-#: read from .env, so the suite needs no DATABASE_URL_WEB of its own.
+#: The web and admin roles' passwords on the test database only. Provisioned
+#: here, never read from .env, so the suite needs no DATABASE_URL_WEB or
+#: DATABASE_URL_ADMIN of its own.
 TEST_WEB_PASSWORD = "web-pw"
+TEST_ADMIN_PASSWORD = "admin-pw"
+
+
+def role_url_on_test_db(test_db_url: str, role: str, password: str) -> str:
+    """The test database's URL, logging in as ``role``."""
+    scheme, rest = test_db_url.split("://", 1)
+    return f"{scheme}://{role}:{password}@{rest.split('@', 1)[1]}"
 
 
 @pytest_asyncio.fixture
@@ -115,7 +123,10 @@ async def web_factory(test_db_url):
     from app.db import roles
     from app.db.session import web_sessionmaker
 
-    await roles.provision(test_db_url, {roles.WEB.name: TEST_WEB_PASSWORD})
+    await roles.provision(
+        test_db_url,
+        {roles.WEB.name: TEST_WEB_PASSWORD, roles.ADMIN.name: TEST_ADMIN_PASSWORD},
+    )
     scheme, rest = test_db_url.split("://", 1)
     web_url = f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
     owner_engine = create_async_engine(test_db_url)

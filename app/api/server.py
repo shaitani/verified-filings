@@ -30,7 +30,7 @@ from app.api.jobs import JobRunner
 from app.api.routes import build_router
 from app.api.schemas import JOB_EVENT_REF, JobEvent
 from app.config import settings
-from app.db.session import web_sessionmaker
+from app.db.session import admin_sessionmaker, web_sessionmaker
 from app.db.web import User
 
 log = logging.getLogger(__name__)
@@ -39,11 +39,16 @@ PURGE_EVERY = 6 * 3600  # seconds between sweeps of expired sessions
 
 
 def create_app(
-    config: AuthConfig | None = None, web_url: str | None = None, *, showDocs: bool | None = None
+    config: AuthConfig | None = None,
+    web_url: str | None = None,
+    admin_url: str | None = None,
+    *,
+    showDocs: bool | None = None,
 ) -> FastAPI:
-    """The app. ``config``, ``web_url`` and ``showDocs`` default to ``.env``; tests pass
-    their own. ``showDocs`` mounts /docs, /redoc and /openapi.json -- off by default,
-    since everything else an anonymous visitor can reach is sign-in."""
+    """The app. ``config``, ``web_url``, ``admin_url`` and ``showDocs`` default to
+    ``.env``; tests pass their own. ``showDocs`` mounts /docs, /redoc and
+    /openapi.json -- off by default, since everything else an anonymous visitor
+    can reach is sign-in."""
     config = config or AuthConfig.from_settings(settings)
     showDocs = settings.api_docs if showDocs is None else showDocs
     auth = build_auth(config)
@@ -51,6 +56,9 @@ def create_app(
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.web = web_sessionmaker(web_url)  # vf_web_role, or refuse to start
+        # vf_admin_role, for the admin routes alone -- or refuse to start, rather
+        # than find out on an admin's first click.
+        app.state.admin = admin_sessionmaker(admin_url)
         app.state.runner = JobRunner(app.state.web)
         swept = await app.state.runner.start()
         if swept:
@@ -62,6 +70,7 @@ def create_app(
             purger.cancel()
             await app.state.runner.stop()
             await app.state.web.kw["bind"].dispose()
+            await app.state.admin.kw["bind"].dispose()
 
     app = FastAPI(
         title="Verified Filings",

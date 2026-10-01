@@ -30,6 +30,7 @@ PASSWORDS = {
     roles.QUERY_MAPPER.name: "mapper-pw",
     roles.RETRIEVAL.name: "retrieval-pw",
     roles.WEB.name: "web-pw",  # needs the web migration on the test database (docs/STARTUP.md)
+    roles.ADMIN.name: "admin-pw",
 }
 
 #: 768 floats, matching the embedding column. A shorter literal fails on
@@ -93,6 +94,15 @@ async def test_the_spec_is_authoritative(provisioned) -> None:
     expected = {*roles.RETRIEVAL.tables, *roles.RETRIEVAL.columns}
     assert set(grants) == {f"{roles.RETRIEVAL.schema}.{table}" for table in expected}
     assert all(privileges == ["SELECT"] for privileges in grants.values())  # nothing else, anywhere
+
+
+async def test_row_security_is_on_with_every_policy(provisioned) -> None:
+    report = (await roles.describe(provisioned))[roles.ROW_SECURITY]
+    for table in roles.ROW_SECURED:
+        state = report[f"web.{table}"]
+        assert state["enabled"] is True, table
+        named = {line.split(":", 1)[0] for line in state["policies"]}
+        assert named == {p.name for p in roles.ROW_POLICIES if p.table == table}
 
 
 async def test_the_superseded_single_role_is_gone(provisioned) -> None:
@@ -369,6 +379,13 @@ async def test_the_web_role_can_do_its_job(provisioned, label: str, statement: s
         ("delete a job", "DELETE FROM job"),
         ("rewrite a trace", "UPDATE job_trace SET code_version = 'x'"),
         ("read feedback", "SELECT count(*) FROM job_feedback"),
+        ("read the audit log", "SELECT count(*) FROM admin_action"),
+        (
+            "write the audit log",
+            "INSERT INTO admin_action (id, admin_email, action) "
+            "VALUES (gen_random_uuid(), 'x', 'deactivate')",
+        ),
+        ("revoke an invite", "UPDATE invite SET revoked_at = now()"),
         ("create in web", "CREATE TABLE web.should_not_exist (i int)"),
         ("create in public", "CREATE TABLE public.should_not_exist (i int)"),
     ],
@@ -504,3 +521,203 @@ def test_password_literal_escapes_a_quote() -> None:
     assert roles._quote_literal("a'b") == "'a''b'"
     with pytest.raises(ValueError, match="NUL"):
         roles._quote_literal("a\x00b")
+
+
+# --------------------------------------------------------------------------- #
+# The admin role: its grid, and the row security that keeps it off admins
+# --------------------------------------------------------------------------- #
+
+ADMIN = roles.ADMIN.name
+READER_ID = "00000000-0000-0000-0000-0000000000a1"
+ADMIN_ID = "00000000-0000-0000-0000-0000000000a2"
+READER_JOB = "00000000-0000-0000-0000-0000000000a3"
+INVITE_ID = "00000000-0000-0000-0000-0000000000a4"
+READER = f"id = '{READER_ID}'"
+AN_ADMIN = f"id = '{ADMIN_ID}'"
+
+
+@pytest_asyncio.fixture
+async def admin_rows(provisioned):
+    """A reader with a question, a trace, a report and a session; an
+    administrator with a session; an invite -- committed as the owner, since the
+    admin role may create none of them, and deleted afterwards."""
+    owner = create_async_engine(provisioned)
+
+    async def clean() -> None:
+        async with owner.begin() as connection:
+            await connection.execute(text(f"DELETE FROM web.invite WHERE id = '{INVITE_ID}'"))
+            await connection.execute(
+                text(f"DELETE FROM web.\"user\" WHERE id IN ('{READER_ID}', '{ADMIN_ID}')")
+            )
+
+    await clean()
+    async with owner.begin() as connection:
+        for statement in (
+            'INSERT INTO web."user" (id, email, hashed_password, is_active, is_verified, '
+            f"is_superuser) VALUES ('{READER_ID}', 'zz-roles-reader@example.test', 'x', true, "
+            f"false, false), ('{ADMIN_ID}', 'zz-roles-admin@example.test', 'x', true, false, "
+            "true)",
+            "INSERT INTO web.conversation (id, user_id, question) "
+            f"VALUES ('{READER_ID}', '{READER_ID}', 'q')",
+            "INSERT INTO web.job (id, conversation_id, round, status) "
+            f"VALUES ('{READER_JOB}', '{READER_ID}', 1, 'queued')",
+            TRACE.replace("INTO job_trace", "INTO web.job_trace").replace(JOB_ID, READER_JOB),
+            "INSERT INTO web.job_feedback (id, job_id, user_id) "
+            f"VALUES ('{READER_ID}', '{READER_JOB}', '{READER_ID}')",
+            "INSERT INTO web.access_token (token, user_id, created_at) "
+            f"VALUES ('zz-reader-token', '{READER_ID}', now()), "
+            f"('zz-admin-token', '{ADMIN_ID}', now())",
+            "INSERT INTO web.invite (id, kind, email, code_hash, expires_at) "
+            f"VALUES ('{INVITE_ID}', 'email', 'zz-roles-invite@example.test', 'h', "
+            "now() + interval '1 day')",
+        ):
+            await connection.execute(text(statement))
+    try:
+        yield provisioned
+    finally:
+        await clean()
+        await owner.dispose()
+
+
+async def _as_admin(url: str, *statements: str) -> list:
+    """Run statements as the admin role in one transaction, rolled back whatever
+    happens. Each result: the rows a SELECT returned, else the rows changed."""
+    engine = _engine(url, ADMIN)
+    results = []
+    try:
+        async with engine.connect() as connection:
+            try:
+                for statement in statements:
+                    result = await connection.execute(text(statement))
+                    results.append(result.all() if result.returns_rows else result.rowcount)
+            finally:
+                await connection.rollback()
+    finally:
+        await engine.dispose()
+    return results
+
+
+@pytest.mark.parametrize("table", roles.ADMIN.tables)
+async def test_the_admin_role_reads_all_of_web(admin_rows, table: str) -> None:
+    (rows,) = await _as_admin(admin_rows, f'SELECT count(*) FROM "{table}"')
+    assert rows[0][0] >= 0
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        ("deactivate a reader", f'UPDATE "user" SET is_active = false WHERE {READER}'),
+        ("reset a reader's password", f"UPDATE \"user\" SET hashed_password = 'y' WHERE {READER}"),
+        ("end a reader's sessions", f"DELETE FROM access_token WHERE user_{READER}"),
+        ("revoke an invite", f"UPDATE invite SET revoked_at = now() WHERE id = '{INVITE_ID}'"),
+        (
+            "create an invite",
+            "INSERT INTO invite (id, kind, email, code_hash, expires_at, created_by) VALUES "
+            f"(gen_random_uuid(), 'email', 'zz-x@example.test', 'h2', now(), '{ADMIN_ID}')",
+        ),
+        (
+            "write the audit log",
+            "INSERT INTO admin_action (id, admin_id, admin_email, action, target_email) VALUES "
+            f"(gen_random_uuid(), '{ADMIN_ID}', 'zz-roles-admin@example.test', 'deactivate', 'x')",
+        ),
+    ],
+)
+async def test_the_admin_role_can_do_its_job(admin_rows, label: str, statement: str) -> None:
+    (changed,) = await _as_admin(admin_rows, statement)
+    assert changed == 1, label
+
+
+async def test_deleting_a_reader_takes_everything_of_theirs(admin_rows) -> None:
+    """The admin role has no DELETE on conversations, jobs, traces or reports;
+    the foreign keys' cascades remove them anyway, as the table owner would."""
+    deleted, *left = await _as_admin(
+        admin_rows,
+        f'DELETE FROM "user" WHERE {READER}',
+        f"SELECT count(*) FROM conversation WHERE user_{READER}",
+        f"SELECT count(*) FROM job WHERE id = '{READER_JOB}'",
+        f"SELECT count(*) FROM job_trace WHERE job_id = '{READER_JOB}'",
+        f"SELECT count(*) FROM job_feedback WHERE user_{READER}",
+        f"SELECT count(*) FROM access_token WHERE user_{READER}",
+    )
+    assert deleted == 1
+    assert [rows[0][0] for rows in left] == [0, 0, 0, 0, 0]
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        ("deactivate an admin", f'UPDATE "user" SET is_active = false WHERE {AN_ADMIN}'),
+        (
+            "reset an admin's password",
+            f"UPDATE \"user\" SET hashed_password = 'y' WHERE {AN_ADMIN}",
+        ),
+        ("delete an admin", f'DELETE FROM "user" WHERE {AN_ADMIN}'),
+        ("end an admin's sessions", f"DELETE FROM access_token WHERE user_{AN_ADMIN}"),
+    ],
+)
+async def test_the_admin_role_cannot_touch_an_admin(admin_rows, label: str, statement: str) -> None:
+    """Row security, not a grant: the statement runs and changes nothing -- which
+    is why the admin routes must check how many rows changed."""
+    (changed,) = await _as_admin(admin_rows, statement)
+    assert changed == 0, label
+
+
+async def test_the_admin_role_still_sees_an_admin(admin_rows) -> None:
+    (rows,) = await _as_admin(admin_rows, f'SELECT is_superuser FROM "user" WHERE {AN_ADMIN}')
+    assert rows == [(True,)]
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        # Its guard rails: no administrators, no accounts, no sessions of its own making.
+        ("make an administrator", f'UPDATE "user" SET is_superuser = true WHERE {READER}'),
+        (
+            "create a user",
+            'INSERT INTO "user" (id, email, hashed_password, is_active, is_verified) '
+            "VALUES (gen_random_uuid(), 'zz-new@example.test', 'x', true, false)",
+        ),
+        ("change an email", "UPDATE \"user\" SET email = 'zz-other@example.test'"),
+        ("verify a user", 'UPDATE "user" SET is_verified = true'),
+        (
+            "start a session as someone",
+            "INSERT INTO access_token (token, user_id, created_at) "
+            f"VALUES ('zz-forged', '{READER_ID}', now())",
+        ),
+        ("relink a GitHub account", "UPDATE oauth_account SET account_id = 'x'"),
+        # An invite: made and revoked, never spent or rewritten.
+        ("spend an invite", "UPDATE invite SET used_at = now()"),
+        ("rewrite an invite", "UPDATE invite SET code_hash = 'x'"),
+        ("delete an invite", "DELETE FROM invite"),
+        # The audit log: added to, never changed.
+        ("rewrite the audit log", "UPDATE admin_action SET action = 'reactivate'"),
+        ("delete from the audit log", "DELETE FROM admin_action"),
+        # Questions and their records: read, never written.
+        ("rewrite a question", "UPDATE conversation SET question = 'other'"),
+        ("delete a conversation", "DELETE FROM conversation"),
+        ("move a job", "UPDATE job SET status = 'done'"),
+        ("delete a job", "DELETE FROM job"),
+        ("write a trace", TRACE),
+        ("rewrite a trace", "UPDATE job_trace SET code_version = 'x'"),
+        ("delete a report", "DELETE FROM job_feedback"),
+        # Nothing outside web, nothing structural.
+        ("read xbrl facts", "SELECT count(*) FROM xbrl.fact"),
+        ("create in web", "CREATE TABLE web.should_not_exist (i int)"),
+        ("create in public", "CREATE TABLE public.should_not_exist (i int)"),
+    ],
+)
+async def test_the_admin_role_cannot_leave_its_grid(admin_rows, label: str, statement: str) -> None:
+    with pytest.raises(DBAPIError) as caught:
+        await _as_admin(admin_rows, statement)
+    assert "InsufficientPrivilege" in str(caught.value), label
+
+
+async def test_the_admin_role_writes_and_lives_in_web(provisioned) -> None:
+    engine = _engine(provisioned, ADMIN)
+    try:
+        async with engine.connect() as connection:
+            read_only = await connection.execute(text("SHOW default_transaction_read_only"))
+            path = await connection.execute(text("SHOW search_path"))
+            assert (read_only.scalar_one(), path.scalar_one()) == ("off", "web")
+    finally:
+        await engine.dispose()

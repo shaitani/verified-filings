@@ -1,5 +1,5 @@
 """Provision the database roles: two read-only readers of ``xbrl``, and the Web
-Server's writer of ``web``.
+Server's two writers of ``web`` -- its own, and its admin routes'.
 
     uv run python -m app.db.roles          # create/refresh against DATABASE_URL
     uv run python -m app.db.roles --check  # report, change nothing
@@ -30,9 +30,20 @@ Neither gets ``load_run``, an append-only log of every load that ever ran.
 Nothing that answers a question has any business reading it.
 
 ``vf_web_role``
-    ``app/api/``. The one role that writes, and only in ``web``: users,
-    sessions, conversations, jobs. Nothing in ``xbrl``, table by table grants
-    in ``web`` -- see ``app/api/DESIGN.md`` §11 for the grid.
+    ``app/api/``. Writes only in ``web``: users, sessions, conversations,
+    jobs. Nothing in ``xbrl``, table by table grants in ``web`` -- see
+    ``app/api/DESIGN.md`` §11 for the grid.
+
+``vf_admin_role``
+    ``app/api/``'s admin routes only (``/api/admin/*``). What administration
+    needs and the Web Server must not have: making and revoking invites,
+    reading traces, deleting a reader. Kept apart so a bug in an ordinary route
+    still holds only ``vf_web_role``'s grants. Neither can set ``is_superuser``.
+
+Row-level security on ``web.user`` and ``web.access_token`` keeps an admin off
+an admin's row whatever the admin routes do: ``vf_admin_role`` may change or
+delete only a non-administrator's (``ROW_POLICIES``). Provisioned here, not in a
+migration, because a policy names a role.
 
 Which half of this is a real boundary
 -------------------------------------
@@ -222,7 +233,89 @@ WEB = RoleSpec(
     connection_limit=10,
 )
 
-ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL, WEB)
+ADMIN = RoleSpec(
+    name="vf_admin_role",
+    used_by="app/api/ admin routes (/api/admin/*)",
+    schema="web",
+    # SELECT: everything in web -- traces and problem reports included, which
+    # the Web Server itself can only write.
+    tables=(
+        "user",
+        "oauth_account",
+        "access_token",
+        "invite",
+        "conversation",
+        "job",
+        "job_trace",
+        "job_feedback",
+        "admin_action",
+    ),
+    writes=(
+        # Deactivate, reactivate, reset a password. Never is_superuser, never an
+        # email; and only a non-administrator's row (ROW_POLICIES).
+        WriteGrant("user", "UPDATE", ("is_active", "hashed_password")),
+        WriteGrant("user", "DELETE"),  # cascades to their conversations, jobs, traces
+        WriteGrant("access_token", "DELETE"),  # end someone's sessions
+        WriteGrant(
+            "invite",
+            "INSERT",
+            ("id", "kind", "email", "code_hash", "github_account_id", "expires_at", "created_by"),
+        ),
+        WriteGrant("invite", "UPDATE", ("revoked_at",)),  # revoke; spending is the web role's
+        WriteGrant("admin_action", "INSERT"),  # the audit log: added to, never changed
+    ),
+    read_only=False,
+    inherit_future_tables=False,
+    needs_vector_operators=False,
+    connection_limit=4,
+)
+
+ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL, WEB, ADMIN)
+
+
+@dataclass(frozen=True)
+class RowPolicy:
+    """One row-level security policy on a ``web`` table, for one role."""
+
+    name: str
+    table: str
+    role: str
+    command: Literal["ALL", "SELECT", "UPDATE", "DELETE"]
+    using: str
+    check: str | None = None  # WITH CHECK, for ALL and UPDATE
+
+
+#: An administrator's session, as a policy on access_token sees it.
+_ADMINS_SESSION = 'EXISTS (SELECT 1 FROM web."user" u WHERE u.id = user_id AND u.is_superuser)'
+
+#: With row security on a table, a role with no policy for it sees no rows at all,
+#: so every role that uses one is named here. The owner bypasses all of it, which
+#: is what lets the CLI make and unmake administrators.
+ROW_POLICIES: tuple[RowPolicy, ...] = (
+    RowPolicy("vf_web_role_all", "user", WEB.name, "ALL", "true", "true"),
+    RowPolicy("vf_admin_role_reads", "user", ADMIN.name, "SELECT", "true"),
+    RowPolicy(
+        "vf_admin_role_changes_readers",
+        "user",
+        ADMIN.name,
+        "UPDATE",
+        "NOT is_superuser",
+        "NOT is_superuser",
+    ),
+    RowPolicy("vf_admin_role_deletes_readers", "user", ADMIN.name, "DELETE", "NOT is_superuser"),
+    RowPolicy("vf_web_role_all", "access_token", WEB.name, "ALL", "true", "true"),
+    RowPolicy("vf_admin_role_reads", "access_token", ADMIN.name, "SELECT", "true"),
+    RowPolicy(
+        "vf_admin_role_ends_readers_sessions",
+        "access_token",
+        ADMIN.name,
+        "DELETE",
+        f"NOT {_ADMINS_SESSION}",
+    ),
+)
+
+#: The tables under row security, in the order their policies are applied.
+ROW_SECURED = tuple(dict.fromkeys(policy.table for policy in ROW_POLICIES))
 
 
 def _database_name(url: str) -> str:
@@ -338,6 +431,58 @@ def _revoke_schema(schema: str, role: str) -> str:
         """
 
 
+def _row_security_statements() -> list[str]:
+    """Row security on, and each policed table's policies exactly as
+    ``ROW_POLICIES`` says -- one statement per table.
+
+    One statement, so there is no moment with security on and a policy missing:
+    the Web Server, running meanwhile, would see no users at all. Every existing
+    policy is dropped first, so the spec is authoritative. A policy whose role
+    does not exist yet is skipped, and made by the run that provisions it.
+    Guarded, so a database without the ``web`` schema is left alone.
+    """
+    statements = []
+    for table in ROW_SECURED:
+        relation = f"web.{_quote(table)}"
+        creates = []
+        for policy in (p for p in ROW_POLICIES if p.table == table):
+            create = (
+                f"CREATE POLICY {policy.name} ON {relation} FOR {policy.command} "
+                f"TO {policy.role} USING ({policy.using})"
+            )
+            if policy.check:
+                create += f" WITH CHECK ({policy.check})"
+            creates.append(
+                f"            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{policy.role}')"
+                f" THEN\n"
+                f"                EXECUTE {_quote_literal(create)};\n"
+                f"            END IF;"
+            )
+        body = "\n".join(creates)
+        statements.append(
+            f"""
+        DO $$
+        DECLARE
+            existing record;
+        BEGIN
+            IF to_regclass('{relation}') IS NULL THEN
+                RETURN;
+            END IF;
+            EXECUTE 'ALTER TABLE {relation} ENABLE ROW LEVEL SECURITY';
+            FOR existing IN
+                SELECT policyname FROM pg_policies
+                WHERE schemaname = 'web' AND tablename = '{table}'
+            LOOP
+                EXECUTE format('DROP POLICY %I ON {relation}', existing.policyname);
+            END LOOP;
+{body}
+        END
+        $$
+        """
+        )
+    return statements
+
+
 def _drop_legacy_statements(database: str) -> list[str]:
     """Remove the single ``verified_filings_ro`` role the two above replaced.
 
@@ -378,6 +523,8 @@ async def provision(url: str, passwords: dict[str, str]) -> list[str]:
                 for statement in _statements(spec, database, password):
                     await connection.execute(text(statement))
                 provisioned.append(spec.name)
+            for statement in _row_security_statements():
+                await connection.execute(text(statement))
             for statement in _drop_legacy_statements(database):
                 await connection.execute(text(statement))
             await connection.execute(
@@ -430,8 +577,43 @@ async def describe(url: str) -> dict[str, dict[str, object]]:
                 )
             ).first()
             report[LEGACY_ROLE] = {"exists": legacy is not None}
+            report[ROW_SECURITY] = await _row_security(connection)
     finally:
         await engine.dispose()
+    return report
+
+
+#: The ``describe`` entry for row security, beside the roles'.
+ROW_SECURITY = "row security"
+
+
+async def _row_security(connection) -> dict[str, dict[str, object]]:
+    """Per policed table: whether security is on (None: no such table yet), and
+    each policy as ``"name: COMMAND to role"``."""
+    report: dict[str, dict[str, object]] = {}
+    for table in ROW_SECURED:
+        enabled = (
+            await connection.execute(
+                text(
+                    "SELECT c.relrowsecurity FROM pg_class c JOIN pg_namespace n "
+                    "ON n.oid = c.relnamespace WHERE n.nspname = 'web' AND c.relname = :t"
+                ),
+                {"t": table},
+            )
+        ).scalar_one_or_none()
+        policies = (
+            await connection.execute(
+                text(
+                    "SELECT policyname, cmd, array_to_string(roles, ', ') FROM pg_policies "
+                    "WHERE schemaname = 'web' AND tablename = :t ORDER BY policyname"
+                ),
+                {"t": table},
+            )
+        ).all()
+        report[f"web.{table}"] = {
+            "enabled": enabled,
+            "policies": [f"{name}: {cmd} to {who}" for name, cmd, who in policies],
+        }
     return report
 
 
@@ -498,6 +680,7 @@ _URL_SETTINGS = {
     QUERY_MAPPER.name: "database_url_query_mapper",
     RETRIEVAL.name: "database_url_retrieval",
     WEB.name: "database_url_web",
+    ADMIN.name: "database_url_admin",
 }
 
 
@@ -551,6 +734,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {table}: {', '.join(privileges)}")
             for setting in state["settings"]:
                 print(f"  {setting}")
+        for table, state in report[ROW_SECURITY].items():
+            if state["enabled"] is None:
+                continue  # web not migrated in yet
+            print(f"{table}: row security {'on' if state['enabled'] else 'OFF'}")
+            for policy in state["policies"]:
+                print(f"  {policy}")
+            if not state["enabled"]:
+                missing = True
         if report[LEGACY_ROLE]["exists"]:
             print(f"{LEGACY_ROLE}: still present -- re-run to drop it")
             missing = True
