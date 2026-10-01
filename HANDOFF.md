@@ -8,7 +8,42 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 ---
 
-## Now: nothing in progress
+## Now: preparing to deploy
+
+> **Gate — do not deploy until the production compose override exists and is
+> in use.** That means a new Postgres password (not the committed
+> `postgres`/`postgres`), no `db-test` or `pgadmin`, nothing published but the
+> entry point, and secrets not readable with `docker inspect`
+> ([docs/FUTURE.md](docs/FUTURE.md#deployment--host-not-decided)). The user
+> asked for this to be enforced: refuse to help put the site on a reachable
+> host before it is done.
+
+The agreed order, one piece at a time, each planned with the user first:
+
+- **Lock down the anonymous surface** (in progress) — `/docs`, `/redoc`,
+  `/openapi.json` off in production; a test that every mounted route answers
+  401 to an anonymous visitor except a named allowlist (login, register, the
+  two GitHub routes, health).
+- **Rate limiting, the host-independent half** — a per-user cap on unfinished
+  jobs (the queue in `app/api/jobs.py` is unbounded), login and register
+  throttled per address, a maximum on `AnswersIn.answers`. In process: the
+  server is one worker by design.
+- **Admin CLI to take access back** — list users and invites, revoke an
+  invite, deactivate a user and delete their sessions.
+- **Choose the host** — a walk-through with the user. The GPU decides it;
+  options on the table: all at home behind Cloudflare Tunnel (+ Access), a
+  droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.
+- **The production compose override** — the gate above.
+- **The web container** — the Angular bundle and `/api` behind one proxy,
+  security headers, the real client IP trusted from the proxy, per-IP limits.
+- **Production settings, data and backups, an outside-in security check.**
+
+An anonymous probe of the live API (2026-09-30) found every question route,
+`/api/me` and a forged cookie refused with 401, the unmounted library routes
+404, and registration without an invite refused; open were the three doc
+routes (above), login with no attempt limit, GitHub authorize, and health.
+
+## The Web Client is complete
 
 The Web Client ([A], `web/`) is complete: it signs in, asks, follows a
 question's stages live, answers questions put back, draws the answer, keeps
@@ -30,7 +65,3 @@ before building each piece, then build one piece at a time.
   contract than the client expects.
 - **The real `web` tables** hold the user's own GitHub account; every live test
   used a `zz-…@example.com` account deleted afterwards.
-
-## Next
-
-Deployment — host not decided. See [docs/FUTURE.md](docs/FUTURE.md#deployment--host-not-decided).

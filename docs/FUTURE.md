@@ -14,7 +14,8 @@ DigitalOcean is likely, not decided, and the user is not ready to be walked
 through it. Until then it is a constraint: flag anything built now that would
 not run on a rented Linux VM with Docker. None of this is done:
 
-- **A production compose override** — publish only the reverse proxy's 443
+- **A production compose override — a gate: nothing is deployed before it
+  exists and is in use.** Publish only the reverse proxy's 443
   (and 80, to redirect); drop `db-test` and `pgadmin`; replace the committed
   `postgres`/`postgres` and pgAdmin password; secrets from a secret store, not
   readable with `docker inspect`.
