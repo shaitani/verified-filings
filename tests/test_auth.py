@@ -21,6 +21,8 @@ from sqlalchemy import select, text
 from app.api import admin
 from app.api.auth import (
     DEVICE_COOKIE,
+    INVITE_COOKIE,
+    INVITE_MINUTES,
     INVITE_REQUIRED,
     SESSION_COOKIE,
     AuthConfig,
@@ -89,8 +91,8 @@ async def browsers(web_factory, test_db_url):
                 await http.aclose()
 
 
-async def _invite(owner, email: str, *, days: int = 14) -> str:
-    return await admin.create_email_invite(owner, email, days)
+async def _invite(owner, *, days: int = 14) -> str:
+    return await admin.create_invite(owner, days)
 
 
 def _register(http, email: str, code: str, password: str = PASSWORD, **extra):
@@ -100,9 +102,11 @@ def _register(http, email: str, code: str, password: str = PASSWORD, **extra):
     )
 
 
-async def _invite_row(owner, email: str) -> Invite:
+async def _invite_row(owner, code: str) -> Invite:
     async with owner() as session:
-        return await session.scalar(select(Invite).where(Invite.email == email))
+        return await session.scalar(
+            select(Invite).where(Invite.code_hash == hash_invite_code(code))
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -110,32 +114,40 @@ async def _invite_row(owner, email: str) -> Invite:
 # --------------------------------------------------------------------------- #
 
 
-async def test_an_invited_address_registers_and_spends_the_invite(client, web_factory) -> None:
+async def test_a_code_registers_one_account_and_is_spent(client, web_factory) -> None:
+    """Bound to no address: the code is the secret, and the address is whatever
+    the holder types -- unverified either way."""
     _, owner = web_factory
-    code = await _invite(owner, "zz-auth-a@example.com")
+    code = await _invite(owner)
     response = await _register(client, "zz-auth-a@example.com", code)
     assert response.status_code == 201, response.text
     body = response.json()
     assert (
         body["is_superuser"] is False and body["is_verified"] is False
     )  # unverified: no email yet
-    invite = await _invite_row(owner, "zz-auth-a@example.com")
+    invite = await _invite_row(owner, code)
     assert invite.used_at is not None and str(invite.used_by) == body["id"]
 
 
-@pytest.mark.parametrize("case", ["no such code", "another address", "expired", "spent"])
+@pytest.mark.parametrize("case", ["no such code", "revoked", "expired", "spent"])
 async def test_every_other_way_in_is_refused_alike(client, web_factory, case) -> None:
     """One error for all: it tells a guesser nothing about why."""
     _, owner = web_factory
     email, code = "zz-auth-b@example.com", None
     if case == "no such code":
         code = "AAAA-BBBB-CCCC"
-    elif case == "another address":
-        code = await _invite(owner, "zz-auth-someone-else@example.com")
+    elif case == "revoked":
+        code = await _invite(owner)
+        async with owner() as session:
+            row = await session.scalar(
+                select(Invite).where(Invite.code_hash == hash_invite_code(code))
+            )
+            row.revoked_at = datetime.now(UTC)
+            await session.commit()
     elif case == "expired":
-        code = await _invite(owner, email, days=-1)
+        code = await _invite(owner, days=-1)
     else:
-        code = await _invite(owner, email)
+        code = await _invite(owner)
         assert (await _register(client, email, code)).status_code == 201
         email = "zz-auth-c@example.com"  # the same code, again
     response = await _register(client, email, code)
@@ -144,14 +156,14 @@ async def test_every_other_way_in_is_refused_alike(client, web_factory, case) ->
 
 async def test_a_code_is_forgiving_about_case_and_dashes(client, web_factory) -> None:
     _, owner = web_factory
-    code = await _invite(owner, "zz-auth-d@example.com")
+    code = await _invite(owner)
     typed = code.replace("-", " ").lower()
     assert (await _register(client, "zz-auth-d@example.com", typed)).status_code == 201
 
 
 async def test_registration_cannot_make_an_administrator(client, web_factory) -> None:
     _, owner = web_factory
-    code = await _invite(owner, "zz-auth-e@example.com")
+    code = await _invite(owner)
     response = await _register(
         client, "zz-auth-e@example.com", code, is_superuser=True, is_verified=True
     )
@@ -161,18 +173,18 @@ async def test_registration_cannot_make_an_administrator(client, web_factory) ->
 
 async def test_a_refused_account_does_not_spend_the_invite(client, web_factory) -> None:
     _, owner = web_factory
-    code = await _invite(owner, "zz-auth-f@example.com")
+    code = await _invite(owner)
     short = await _register(client, "zz-auth-f@example.com", code, password="short")
     assert (
         short.status_code == 400 and short.json()["detail"]["code"] == "REGISTER_INVALID_PASSWORD"
     )
-    assert (await _invite_row(owner, "zz-auth-f@example.com")).used_at is None  # released
+    assert (await _invite_row(owner, code)).used_at is None  # released
     assert (await _register(client, "zz-auth-f@example.com", code)).status_code == 201
 
 
 async def test_two_sign_ups_racing_for_one_code_make_one_account(client, web_factory) -> None:
     _, owner = web_factory
-    code = await _invite(owner, "zz-auth-g@example.com")
+    code = await _invite(owner)
     first, second = await asyncio.gather(
         _register(client, "zz-auth-g@example.com", code),
         _register(client, "zz-auth-g@example.com", code),
@@ -186,7 +198,7 @@ async def test_two_sign_ups_racing_for_one_code_make_one_account(client, web_fac
 
 
 async def _registered(client, owner, email: str) -> None:
-    code = await _invite(owner, email)
+    code = await _invite(owner)
     assert (await _register(client, email, code)).status_code == 201
 
 
@@ -293,10 +305,17 @@ async def test_github_is_asked_for_our_scopes_whatever_the_caller_asks(client) -
     assert query["redirect_uri"] == [CONFIG.github_redirect_url]
 
 
-async def _github(web, account_id: str, email: str):
+def _holding(code: str | None) -> Request:
+    """The callback's request, carrying the invite code held for it, if any."""
+    headers = [(b"cookie", f"{INVITE_COOKIE}={code}".encode())] if code else []
+    return Request({"type": "http", "headers": headers})
+
+
+async def _github(web, account_id: str, email: str, code: str | None = None):
     manager = user_manager_class(CONFIG.reset_secret, CONFIG.verify_secret)
     async with web() as session:
-        return await manager(SQLAlchemyUserDatabase(session, User, OAuthAccount)).oauth_callback(
+        user_db = SQLAlchemyUserDatabase(session, User, OAuthAccount)
+        return await manager(user_db, request=_holding(code)).oauth_callback(
             "github",
             "gho_token",
             account_id,
@@ -307,32 +326,60 @@ async def _github(web, account_id: str, email: str):
         )
 
 
-async def test_a_new_github_account_needs_a_github_invite(web_factory) -> None:
+async def test_a_new_github_account_spends_the_code_held_for_it(web_factory) -> None:
     web, owner = web_factory
     with pytest.raises(HTTPException) as refused:
-        await _github(web, "zz-gh-1", "zz-auth-gh1@example.com")
+        await _github(web, "zz-gh-1", "zz-auth-gh1@example.com")  # no code held
+    assert refused.value.detail == INVITE_REQUIRED
+    with pytest.raises(HTTPException) as refused:
+        await _github(web, "zz-gh-1", "zz-auth-gh1@example.com", "AAAA-BBBB-CCCC")
     assert refused.value.detail == INVITE_REQUIRED
 
-    await admin.create_github_invite(owner, "zz-gh-1")
-    user = await _github(web, "zz-gh-1", "zz-auth-gh1@example.com")
+    code = await _invite(owner)
+    user = await _github(web, "zz-gh-1", "zz-auth-gh1@example.com", code)
     assert user.is_verified is False  # GitHub's email is not proof of the address
-    async with owner() as session:
-        invite = await session.scalar(select(Invite).where(Invite.github_account_id == "zz-gh-1"))
-    assert invite.used_by == user.id
+    assert (await _invite_row(owner, code)).used_by == user.id
 
-    again = await _github(web, "zz-gh-1", "zz-auth-gh1@example.com")  # a returning account
+    again = await _github(web, "zz-gh-1", "zz-auth-gh1@example.com")  # returning: no code
     assert again.id == user.id
 
 
 async def test_a_github_email_never_takes_over_an_existing_account(client, web_factory) -> None:
     web, owner = web_factory
     await _registered(client, owner, "zz-auth-victim@example.com")
-    await admin.create_github_invite(owner, "zz-gh-2")
+    code = await _invite(owner)
     with pytest.raises(user_errors.UserAlreadyExists):
-        await _github(web, "zz-gh-2", "zz-auth-victim@example.com")
-    async with owner() as session:
-        invite = await session.scalar(select(Invite).where(Invite.github_account_id == "zz-gh-2"))
-    assert invite.used_at is None  # not spent on an account that was not made
+        await _github(web, "zz-gh-2", "zz-auth-victim@example.com", code)
+    assert (await _invite_row(owner, code)).used_at is None  # not spent on an account not made
+
+
+async def test_a_newcomer_s_code_is_checked_and_held_for_github(client, web_factory) -> None:
+    """Checked now, so a wrong code is said before the trip to GitHub; held in a
+    cookie for the callback; spent only when the account is made."""
+    _, owner = web_factory
+    code = await _invite(owner)
+    held = await client.post("/api/auth/github/invite", json={"invite_code": code.lower()})
+    assert held.status_code == 204
+    cookie = held.headers["set-cookie"]
+    assert cookie.startswith(f"{INVITE_COOKIE}={code.replace('-', '')};")  # normalized
+    assert "HttpOnly" in cookie and "Path=/api/auth/github" in cookie and "SameSite=lax" in cookie
+    assert f"Max-Age={INVITE_MINUTES * 60}" in cookie
+    assert (await _invite_row(owner, code)).used_at is None  # not spent
+
+    refused = await client.post("/api/auth/github/invite", json={"invite_code": "AAAA-BBBB-CCCC"})
+    assert (refused.status_code, refused.json()["detail"]) == (400, INVITE_REQUIRED)
+    assert "set-cookie" not in refused.headers
+
+
+async def test_a_held_code_is_forgotten_once_signed_in() -> None:
+    manager = user_manager_class(CONFIG.reset_secret, CONFIG.verify_secret)(
+        None, guard=SignInGuard(CONFIG.device_secret)
+    )
+    response = Response()
+    user = User(email="zz-auth-held@example.com")
+    await manager.on_after_login(user, _holding("AAAABBBBCCCC"), response)
+    cleared = [c for c in response.headers.getlist("set-cookie") if c.startswith(INVITE_COOKIE)]
+    assert cleared and "Max-Age=0" in cleared[0] and "Path=/api/auth/github" in cleared[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -342,11 +389,12 @@ async def test_a_github_email_never_takes_over_an_existing_account(client, web_f
 
 async def test_an_invite_code_is_shown_once_and_stored_hashed(web_factory) -> None:
     _, owner = web_factory
-    code = await _invite(owner, "ZZ-auth-L@Example.com")
+    code = await _invite(owner)
     assert re.fullmatch(r"[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}", code)
-    row = await _invite_row(owner, "zz-auth-l@example.com")  # stored lower-cased
+    row = await _invite_row(owner, code)
     assert row.code_hash == hash_invite_code(code) and code not in row.code_hash
     assert row.expires_at > datetime.now(UTC) + timedelta(days=13)
+    assert row.created_by is None  # the CLI, not an admin
 
 
 async def test_the_owner_makes_an_administrator_and_resets_a_password(client, web_factory) -> None:
@@ -358,23 +406,6 @@ async def test_the_owner_makes_an_administrator_and_resets_a_password(client, we
     assert (await _login(client, "zz-auth-m@example.com", new_password)).status_code == 204
     assert (await client.get("/api/me")).json()["is_superuser"] is True
     assert await admin.reset_password(owner, "zz-nobody@example.com") is None
-
-
-async def test_a_github_username_is_looked_up_to_its_numeric_id(monkeypatch) -> None:
-    def fake_github(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/users/octocat":
-            return httpx.Response(200, json={"login": "octocat", "id": 583231})
-        return httpx.Response(404)
-
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(
-        admin.httpx,
-        "AsyncClient",
-        lambda **kw: real_client(transport=httpx.MockTransport(fake_github), **kw),
-    )
-    assert await admin.github_account_id("octocat") == "583231"
-    with pytest.raises(LookupError):
-        await admin.github_account_id("nobody-at-all")
 
 
 def test_the_server_will_not_start_without_its_secrets() -> None:
@@ -401,8 +432,7 @@ async def test_me_names_the_providers_an_account_signs_in_with(client, web_facto
     await _login(client, "zz-auth-pw@example.com")
     assert (await client.get("/api/me")).json()["sign_in_providers"] == []
 
-    await admin.create_github_invite(owner, "zz-gh-9")
-    await _github(web, "zz-gh-9", "zz-auth-gh9@example.com")
+    await _github(web, "zz-gh-9", "zz-auth-gh9@example.com", await _invite(owner))
     async with web() as session:
         row = await SQLAlchemyUserDatabase(session, User, OAuthAccount).get_by_email(
             "zz-auth-gh9@example.com"

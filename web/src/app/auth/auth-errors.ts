@@ -20,8 +20,9 @@ const SENTENCES: Readonly<Record<string, string>> = {
 
 const INVITE: Readonly<Record<SignInStep, string>> = {
   login: 'An invitation is needed to create an account.',
-  register: 'That invite code does not match this email, has been used, or has expired.',
-  github: 'This GitHub account has no invitation. Ask for one, then try again.',
+  register: 'That invite code is not valid: it may be mistyped, used, revoked or expired.',
+  github:
+    'This GitHub account has no account here yet. To sign up, use "Create an account" with your invite code.',
 };
 
 /** What to tell the reader when a sign-in request fails. */

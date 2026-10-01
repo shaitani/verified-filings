@@ -39,8 +39,6 @@ from app.schemas.job import JOB_STATUSES
 
 SCHEMA = "web"
 
-InviteKind = Literal["email", "github"]
-
 #: What an admin did, as the audit log records it (``AdminAction``).
 AdminActionKind = Literal[
     "deactivate",
@@ -102,31 +100,23 @@ class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, WebBase):
 
 
 class Invite(WebBase):
-    """One way in: an email with a single-use code, or a GitHub account id (§10)."""
+    """One way in: a single-use code, bound to no address, that registers one
+    account -- by password, or through GitHub (§10)."""
 
     __tablename__ = "invite"
     __table_args__ = (
-        CheckConstraint(
-            "(kind = 'email' AND email IS NOT NULL AND code_hash IS NOT NULL"
-            " AND github_account_id IS NULL)"
-            " OR (kind = 'github' AND github_account_id IS NOT NULL"
-            " AND email IS NULL AND code_hash IS NULL)",
-            name="one_way_in",
-        ),
         # used_by is cleared if that user is deleted; used_at stays as the record.
         CheckConstraint("used_by IS NULL OR used_at IS NOT NULL", name="used_by_needs_used_at"),
         # A revoked invite can no longer be spent, and a spent one cannot be revoked.
         CheckConstraint("revoked_at IS NULL OR used_at IS NULL", name="revoked_or_used"),
-        _one_of("kind", get_args(InviteKind), name="invite_kind"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    kind: Mapped[str] = mapped_column(String(6), nullable=False)  # checked on assignment too
-    email: Mapped[str | None] = mapped_column(String(320))
-    code_hash: Mapped[str | None] = mapped_column(String(1024))  # the code itself is never stored
-    github_account_id: Mapped[str | None] = mapped_column(String(320))  # as GitHub reports it
+    #: SHA-256 of the code; the code itself is never stored. Unique: it is how an
+    #: invite is found.
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     created_at: Mapped[datetime] = _now()
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # set by the CLI
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     used_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID, ForeignKey("user.id", ondelete="SET NULL")
@@ -136,12 +126,6 @@ class Invite(WebBase):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID, ForeignKey("user.id", ondelete="SET NULL")
     )
-
-    @validates("kind")
-    def _known_kind(self, _key: str, value: str) -> str:
-        if value not in get_args(InviteKind):
-            raise ValueError(f"unknown invite kind {value!r}")
-        return value
 
 
 # --------------------------------------------------------------------------- #

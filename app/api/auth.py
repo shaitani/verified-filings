@@ -3,8 +3,10 @@
 What the library does is used as it is; what it leaves to us is here:
 
 * **invitations** on both ways an account is made -- registration and a first
-  GitHub sign-in -- claimed with one atomic UPDATE, so two sign-ups cannot
-  spend one invite, and released if the account then fails to be made;
+  GitHub sign-in -- a single-use code bound to no address, claimed with one
+  atomic UPDATE, so two sign-ups cannot spend one invite, and released if the
+  account then fails to be made. A GitHub newcomer's code is held across
+  GitHub's round trip in a short-lived cookie (``github_invite_router``);
 * **GitHub's scopes narrowed** to ``read:user`` and ``user:email`` whatever the
   caller asks for, and its two convenience flags forced off;
 * **sessions** as ``web.access_token`` rows behind an httpOnly cookie, and a
@@ -27,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi_users import (
     BaseUserManager,
     FastAPIUsers,
@@ -42,7 +44,7 @@ from fastapi_users.jwt import decode_jwt, generate_jwt
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.clients.github import GitHubOAuth2
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import delete, inspect as sa_inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -71,9 +73,16 @@ MIN_PASSWORD = 12
 #: key of at least 32 bytes (RFC 7518 §3.2); `secrets.token_urlsafe(32)` gives 43.
 MIN_SECRET = 32
 
-#: The error a reader gets for a missing, wrong, spent or expired invitation --
-#: one code for all, so it tells a guesser nothing about which.
+#: The error a reader gets for a missing, wrong, spent, revoked or expired
+#: invitation -- one code for all, so it tells a guesser nothing about which.
 INVITE_REQUIRED = "INVITE_REQUIRED"
+
+#: A GitHub newcomer's invite code, held while GitHub has the browser. Not
+#: signed: claiming checks the code against the database, so the cookie proves
+#: nothing on its own. Sent only to the GitHub routes, and cleared once used.
+INVITE_COOKIE = "vf_invite"
+INVITE_MINUTES = 10
+GITHUB_PATH = "/api/auth/github"
 
 
 # --------------------------------------------------------------------------- #
@@ -131,24 +140,36 @@ def new_invite_code() -> str:
     return f"{raw[:4]}-{raw[4:8]}-{raw[8:]}"
 
 
+def normalize_invite_code(code: str) -> str:
+    """A code as typed, forgivingly: case, dashes and spaces aside."""
+    return "".join(ch for ch in code.upper() if ch.isalnum())
+
+
 def hash_invite_code(code: str) -> str:
-    """SHA-256 of the code as typed, forgivingly: case, dashes and spaces aside.
-    A plain hash suffices -- the code is random, not a password a person chose --
-    and makes the lookup one indexed comparison."""
-    normalized = "".join(ch for ch in code.upper() if ch.isalnum())
-    return hashlib.sha256(normalized.encode()).hexdigest()
+    """SHA-256 of the normalized code. A plain hash suffices -- the code is
+    random, not a password a person chose -- and makes the lookup one indexed
+    comparison."""
+    return hashlib.sha256(normalize_invite_code(code).encode()).hexdigest()
 
 
-async def _claim(session: AsyncSession, where: str, params: dict) -> uuid.UUID:
-    """Mark one unused, unexpired invite used, atomically: of two claims racing
-    for it, exactly one gets a row back."""
+#: An invite that can still be spent: unused, unrevoked, unexpired.
+_OPEN = "used_at IS NULL AND revoked_at IS NULL AND expires_at > now() AND code_hash = :code"
+
+
+async def invite_is_open(session: AsyncSession, code: str) -> bool:
+    """Whether ``code`` could be spent now -- checked, not spent."""
+    found = await session.execute(
+        text(f"SELECT 1 FROM invite WHERE {_OPEN}"), {"code": hash_invite_code(code)}
+    )
+    return found.first() is not None
+
+
+async def _claim(session: AsyncSession, code: str) -> uuid.UUID:
+    """Mark the invite for ``code`` used, atomically: of two claims racing for
+    it, exactly one gets a row back."""
     claimed = await session.execute(
-        text(
-            "UPDATE invite SET used_at = now() "
-            f"WHERE used_at IS NULL AND (expires_at IS NULL OR expires_at > now()) AND {where} "
-            "RETURNING id"
-        ),
-        params,
+        text(f"UPDATE invite SET used_at = now() WHERE {_OPEN} RETURNING id"),
+        {"code": hash_invite_code(code)},
     )
     invite_id = claimed.scalar_one_or_none()
     await session.commit()  # visible to the next claimer at once
@@ -223,9 +244,19 @@ def user_manager_class(reset_secret: str, verify_secret: str) -> type[BaseUserMa
             return user
 
         async def on_after_login(self, user, request=None, response=None) -> None:
-            """Password or GitHub: this browser is now one its owner uses."""
-            if self.guard is not None and response is not None:
-                self.guard.remember_device(response, user.email)
+            """Password or GitHub: this browser is now one its owner uses, and an
+            invite code held for GitHub has done its job."""
+            if self.guard is None or response is None:
+                return
+            self.guard.remember_device(response, user.email)
+            if request is not None and INVITE_COOKIE in request.cookies:
+                response.delete_cookie(
+                    INVITE_COOKIE,
+                    path=GITHUB_PATH,
+                    secure=self.guard.cookie_secure,
+                    httponly=True,
+                    samesite="lax",
+                )
 
         async def validate_password(self, password: str, user) -> None:
             if len(password) < MIN_PASSWORD:
@@ -234,13 +265,10 @@ def user_manager_class(reset_secret: str, verify_secret: str) -> type[BaseUserMa
                 )
 
         async def create(self, user_create, safe: bool = False, request: Request | None = None):
-            """Registration: the invitation first. Bound to one address, so a
-            code handed to one person does not open an account for another."""
-            invite = await _claim(
-                self._session,
-                "kind = 'email' AND lower(email) = lower(:email) AND code_hash = :code",
-                {"email": user_create.email, "code": hash_invite_code(user_create.invite_code)},
-            )
+            """Registration: the invitation first. Bound to no address -- the
+            code is the secret, and an address is unverified either way, so
+            whoever holds it registers once, with the address they type."""
+            invite = await _claim(self._session, user_create.invite_code)
             try:
                 user = await super().create(user_create, safe=True, request=request)
             except Exception:
@@ -263,17 +291,21 @@ def user_manager_class(reset_secret: str, verify_secret: str) -> type[BaseUserMa
             is_verified_by_default: bool = False,
         ):
             """A GitHub sign-in. A returning account needs nothing; a new one
-            needs a GitHub invite for its numeric id -- never its email, which
-            GitHub does not guarantee is verified (DESIGN §10)."""
+            spends the invite code held for it in ``INVITE_COOKIE`` -- set by
+            ``github_invite_router`` before the browser left for GitHub. Its
+            email is never what admits it: GitHub does not guarantee it is
+            verified (DESIGN §10)."""
             try:
                 await self.get_by_oauth_account(oauth_name, account_id)
                 invite = None
             except user_errors.UserNotExists:
-                invite = await _claim(
-                    self._session,
-                    "kind = 'github' AND github_account_id = :account",
-                    {"account": str(account_id)},
-                )
+                asking = request or self.request
+                code = asking.cookies.get(INVITE_COOKIE) if asking is not None else None
+                if not code:
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST, detail=INVITE_REQUIRED
+                    ) from None
+                invite = await _claim(self._session, code)
             try:
                 user = await super().oauth_callback(
                     oauth_name, access_token, account_id, account_email, expires_at,
@@ -507,6 +539,40 @@ def build_auth(config: AuthConfig) -> Auth:
         guard=guard,
         guard_visit=guard_visit,
     )
+
+
+class GitHubInviteIn(BaseModel):
+    invite_code: str = Field(min_length=12, max_length=32)  # as UserCreate's
+
+
+def github_invite_router(guard: SignInGuard) -> APIRouter:
+    """``POST /invite`` (under ``GITHUB_PATH``): a newcomer about to sign up through
+    GitHub hands over their invite code first. It is checked -- so a wrong one is
+    said now, not after the trip to GitHub -- but not spent, and held in
+    ``INVITE_COOKIE`` for the callback to claim. Limited per IP like the other
+    sign-in routes (the router is mounted with ``guard_visit``)."""
+    router = APIRouter()
+
+    @router.post("/invite", status_code=status.HTTP_204_NO_CONTENT)
+    async def hold_invite(body: GitHubInviteIn, request: Request) -> Response:
+        async with request.app.state.web() as session:
+            if not await invite_is_open(session, body.invite_code):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=INVITE_REQUIRED)
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
+        response.set_cookie(
+            INVITE_COOKIE,
+            normalize_invite_code(body.invite_code),
+            max_age=INVITE_MINUTES * 60,
+            path=GITHUB_PATH,
+            secure=guard.cookie_secure,
+            httponly=True,
+            # Lax, as the library's own OAuth cookie: it must reach the callback,
+            # which the Web Client calls once GitHub has sent the browser back.
+            samesite="lax",
+        )
+        return response
+
+    return router
 
 
 async def purge_expired_sessions(session_factory: async_sessionmaker, lifetime_seconds: int) -> int:

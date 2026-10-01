@@ -13,7 +13,7 @@ from typing import get_args
 import pytest
 
 from app.db import roles
-from app.db.web import AdminAction, AdminActionKind, Invite, Job, User, WebBase
+from app.db.web import AdminAction, AdminActionKind, Job, User, WebBase
 from app.schemas.job import JOB_STATUSES, JobStage
 
 VERSIONS = Path("app/db/migrations/versions")
@@ -52,12 +52,6 @@ def test_a_misspelt_status_fails_where_it_is_written(wrong: str) -> None:
 
 def test_a_known_status_is_accepted() -> None:
     assert Job(status="queued").status == "queued"
-
-
-def test_an_invite_kind_is_one_of_two() -> None:
-    assert _check_values("kind") == {"email", "github"}
-    with pytest.raises(ValueError, match="unknown invite kind"):
-        Invite(kind="gitlab")
 
 
 def test_an_admin_action_is_one_the_migration_allows() -> None:

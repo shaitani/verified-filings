@@ -10,6 +10,7 @@ import type {
   ConversationView,
   FeedbackIn,
   GitHubAuthorize,
+  GitHubInviteIn,
   JobCreated,
   JobView,
   NewConversationIn,
@@ -103,6 +104,15 @@ export class ApiService {
   register(email: string, password: string, inviteCode: string): Observable<UserRead> {
     const body: UserCreate = { email, password, invite_code: inviteCode };
     return this.http.post<UserRead>(apiPath('/api/auth/register'), body);
+  }
+
+  /**
+   * Before a newcomer signs up through GitHub: the server checks their invite code and
+   * holds it (in a cookie) for when GitHub sends them back. Nothing is spent yet.
+   */
+  holdGitHubInvite(inviteCode: string): Observable<void> {
+    const body: GitHubInviteIn = { invite_code: inviteCode };
+    return this.http.post<void>(apiPath('/api/auth/github/invite'), body);
   }
 
   /** Where to send the browser to sign in with GitHub. */

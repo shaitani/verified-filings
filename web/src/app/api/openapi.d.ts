@@ -92,6 +92,23 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/auth/github/invite": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Hold Invite */
+        readonly post: operations["hold_invite_api_auth_github_invite_post"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/conversations": {
         readonly parameters: {
             readonly query?: never;
@@ -505,6 +522,11 @@ export interface components {
         readonly FeedbackIn: {
             /** Note */
             readonly note?: string | null;
+        };
+        /** GitHubInviteIn */
+        readonly GitHubInviteIn: {
+            /** Invite Code */
+            readonly invite_code: string;
         };
         /**
          * GivenAnswer
@@ -1038,6 +1060,37 @@ export interface operations {
                 content: {
                     readonly "application/json": components["schemas"]["ErrorModel"];
                 };
+            };
+            /** @description Validation Error */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readonly hold_invite_api_auth_github_invite_post: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["GitHubInviteIn"];
+            };
+        };
+        readonly responses: {
+            /** @description Successful Response */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             readonly 422: {

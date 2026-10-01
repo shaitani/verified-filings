@@ -135,12 +135,9 @@ async def web_factory(test_db_url):
     async def clean() -> None:
         async with owner_engine.begin() as connection:
             await connection.execute(text("DELETE FROM web.\"user\" WHERE email LIKE 'zz-%'"))
-            await connection.execute(
-                text(
-                    "DELETE FROM web.invite "
-                    "WHERE email LIKE 'zz-%' OR github_account_id LIKE 'zz-%'"
-                )
-            )
+            # An invite names no one, so there is nothing to tell a test's apart by:
+            # every invite goes. This is the test database, which holds nothing else.
+            await connection.execute(text("DELETE FROM web.invite"))
 
     await clean()
     try:

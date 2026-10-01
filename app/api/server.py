@@ -20,10 +20,12 @@ from pydantic import TypeAdapter
 from sqlalchemy import text
 
 from app.api.auth import (
+    GITHUB_PATH,
     AuthConfig,
     UserCreate,
     UserRead,
     build_auth,
+    github_invite_router,
     purge_expired_sessions,
 )
 from app.api.jobs import JobRunner
@@ -105,13 +107,17 @@ def create_app(
                 redirect_url=config.github_redirect_url,
                 csrf_token_cookie_secure=config.cookie_secure,
             ),
-            prefix="/api/auth/github",
+            prefix=GITHUB_PATH,
             tags=["auth"],
             dependencies=visit,
         )
+        # A newcomer's invite code, held for the trip to GitHub and back.
+        app.include_router(
+            github_invite_router(auth.guard), prefix=GITHUB_PATH, tags=["auth"], dependencies=visit
+        )
     # Deliberately not mounted: verification and forgot-password wait for an email
     # sender (DESIGN §10), and the library's /users/{id} admin routes -- administration
-    # is the CLI's (app/api/admin.py), with the owner's credential.
+    # is the CLI's (app/api/admin.py) and, soon, /api/admin's.
 
     app.include_router(build_router(auth))  # ask, answer, watch, read back, list, reopen, report
 

@@ -343,6 +343,40 @@
         }
       }
     },
+    "/api/auth/github/invite": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Hold Invite",
+        "operationId": "hold_invite_api_auth_github_invite_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubInviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations": {
       "get": {
         "tags": [
@@ -1416,6 +1450,21 @@
         "type": "object",
         "title": "FeedbackIn",
         "description": "Report a problem on one job (§8)."
+      },
+      "GitHubInviteIn": {
+        "properties": {
+          "invite_code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 12,
+            "title": "Invite Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_code"
+        ],
+        "title": "GitHubInviteIn"
       },
       "GivenAnswer": {
         "properties": {

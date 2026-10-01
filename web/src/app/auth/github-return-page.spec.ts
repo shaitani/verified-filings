@@ -42,7 +42,7 @@ describe('GitHubReturnPage', () => {
     expect(navigate).toHaveBeenCalledWith('/', { replaceUrl: true });
   });
 
-  it('says so when this GitHub account has no invitation', async () => {
+  it('says how to sign up when this GitHub account has no account yet', async () => {
     const fixture = arrive({ code: 'c0de', state: 'st4te' });
     http
       .expectOne((r) => r.url === '/api/auth/github/callback')
@@ -50,7 +50,7 @@ describe('GitHubReturnPage', () => {
     await settle();
     await fixture.whenStable();
     const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('[role=alert]')?.textContent).toContain('no invitation');
+    expect(page.querySelector('[role=alert]')?.textContent).toContain('has no account here yet');
   });
 
   it('asks the server nothing when the reader cancelled on GitHub', async () => {

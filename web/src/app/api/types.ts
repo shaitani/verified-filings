@@ -43,6 +43,7 @@ export type AnswerIn = Schemas['OptionAnswerIn']; // a union once free text join
 export type FeedbackIn = Schemas['FeedbackIn'];
 export type UserCreate = Schemas['UserCreate'];
 export type GitHubAuthorize = Schemas['OAuth2AuthorizeResponse'];
+export type GitHubInviteIn = Schemas['GitHubInviteIn'];
 
 // Who is signed in.
 export type UserRead = Schemas['UserRead'];

@@ -81,7 +81,7 @@ async def server(web_factory, test_db_url):
         http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
         clients.append(http)
         email = f"zz-routes-{name}@example.com"
-        code = await admin.create_email_invite(owner, email)
+        code = await admin.create_invite(owner)
         registered = await http.post(
             "/api/auth/register", json={"email": email, "password": PASSWORD, "invite_code": code}
         )
@@ -408,7 +408,8 @@ OPEN_TO_ANONYMOUS = {
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/register"),  # needs an invitation (test_auth.py)
     ("GET", "/api/auth/github/authorize"),  # only builds GitHub's URL
-    ("GET", "/api/auth/github/callback"),  # a new account needs a GitHub invitation
+    ("GET", "/api/auth/github/callback"),  # a new account needs an invite code
+    ("POST", "/api/auth/github/invite"),  # checks a code, spends nothing
     ("GET", "/api/health"),  # "ok", for Docker's health check
 }
 

@@ -15,8 +15,8 @@ describe('signInProblem', () => {
 
   it('says what a missing invitation means for each way in', () => {
     const noInvite = failed(400, 'INVITE_REQUIRED');
-    expect(signInProblem(noInvite, 'register')).toContain('does not match this email');
-    expect(signInProblem(noInvite, 'github')).toContain('This GitHub account has no invitation');
+    expect(signInProblem(noInvite, 'register')).toContain('That invite code is not valid');
+    expect(signInProblem(noInvite, 'github')).toContain('has no account here yet');
   });
 
   it("passes on the server's own password sentence", () => {

@@ -59,7 +59,7 @@ GRANT DELETE ON web."user" TO vf_admin_role
 -- ---------------------------------------------------------------
 GRANT DELETE ON web.access_token TO vf_admin_role
 -- ---------------------------------------------------------------
-GRANT INSERT (id, kind, email, code_hash, github_account_id, expires_at, created_by) ON web.invite TO vf_admin_role
+GRANT INSERT (id, code_hash, expires_at, created_by) ON web.invite TO vf_admin_role
 -- ---------------------------------------------------------------
 GRANT UPDATE (revoked_at) ON web.invite TO vf_admin_role
 -- ---------------------------------------------------------------

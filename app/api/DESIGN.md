@@ -511,41 +511,53 @@ redirect URL, the session length, the cookie's `Secure` flag. Passwords need
 
 Every question costs GPU time on one machine, so no one registers uninvited.
 An allowlist of addresses is not enough while email is unverified: whoever
-registers an allowed address first would own it. So an invitation is created
-only from the owner's CLI, as one of:
+registers an allowed address first would own it. So an invitation is a
+**single-use code** — 12 characters in three groups, `K7QM-3XRD-9TPW`, no
+look-alike letters, 14 days by default — shown once and stored hashed, that
+you hand to the person yourself. Nothing is emailed. It is made from the
+owner's CLI (`invite`), which alone makes the very first, or by an admin.
 
-- **an email invite** — the address plus a **single-use code** (12 characters
-  in three groups, `K7QM-3XRD-9TPW`, no look-alike letters, 14 days by
-  default), shown once and stored hashed, that you hand to the person
-  yourself. Registering needs both.
-- **a GitHub invite** — the account's numeric id, looked up from the username
-  when the invite is made. Permanent, and cannot be claimed by someone else.
+**A code is bound to no address.** The code is the secret; the address is
+unverified either way, so binding one would prove nothing. Whoever holds it
+registers once, with the address they type. The costs, accepted: a leaked code
+works for whoever has it until it is spent, revoked or expired; and someone
+could register an address that is not theirs, which an admin sees in the
+users list and can delete. A code can be **revoked** while unspent.
+
+**Signing up through GitHub takes a code too.** The register page sends it to
+`POST /api/auth/github/invite` first, which checks it — so a wrong one is said
+before the trip to GitHub — without spending it, and holds it in `vf_invite`:
+httpOnly, `SameSite=Lax`, ten minutes, sent only to `/api/auth/github`. The
+callback claims it for a new account and the cookie is cleared. It is not
+signed: the claim checks the code against the database, so the cookie proves
+nothing on its own. A returning GitHub account needs no code.
 
 The check sits on **both** ways an account is created — registration and the
 first GitHub sign-in — because the library creates OAuth users by a different
 path. An invitation is claimed with one atomic `UPDATE ... RETURNING`, so two
 sign-ups racing for one code make one account, and a claim is released if the
 account then fails (a short password, an address already registered). A
-missing, wrong, spent, expired or other-address code all read the same,
+missing, wrong, spent, revoked or expired code all read the same,
 `INVITE_REQUIRED`. Codes are hashed with SHA-256, not a password hash: they are
-random, not chosen. Case, dashes and spaces are forgiven. Registration ignores
-`is_superuser` and `is_verified` in the request.
+random, not chosen, and the hash is unique, the one way an invite is found.
+Case, dashes and spaces are forgiven. Registration ignores `is_superuser` and
+`is_verified` in the request.
 
 **Email is deferred.** Until a sender is chosen, accounts work unverified, the
 verify and forgot-password routes are **not mounted**, and a password is reset
 from the CLI (generated and printed once). The invitation code stands in for
 proof of the address.
 
-**Mounted:** login, logout, register, GitHub authorize and callback,
-`GET /api/me`. **Administration is the owner's CLI**:
+**Mounted:** login, logout, register, GitHub authorize, callback and invite,
+`GET /api/me`. **Administration is the owner's CLI** for now:
 `python -m app.api.admin invite | make-admin | reset-password`.
 
 ### The client's side
 
 `web/src/app/auth/`. The client holds no credential: the session is the
 httpOnly cookie, and `AuthStore` knows only what `/api/me` last said. Pages:
-login (email and password, or GitHub), register (email, password, invite
-code), and `/auth/github/callback` — the page `GITHUB_OAUTH_REDIRECT_URL`
+login (email and password, or GitHub), register (the invite code, then email
+and password or GitHub), and `/auth/github/callback` — the page `GITHUB_OAUTH_REDIRECT_URL`
 names, which passes GitHub's `code` and `state` to the API's callback.
 
 - **`returnTo` is only ever a path on this site** (`safeReturnTo`), so a
@@ -569,7 +581,7 @@ grant.
 | `web.user` | `id`, `email`, `hashed_password`, `is_active`, `is_superuser`, `is_verified`, `created_at` | the library's columns plus `created_at`; a unique index on `lower(email)`. `user` is reserved, so hand-written SQL says `web."user"` |
 | `web.oauth_account` | `id`, `user_id`, `oauth_name`, `account_id`, `account_email`, `access_token`, `refresh_token`, `expires_at` | the library's |
 | `web.access_token` | `token`, `user_id`, `created_at` | one row per signed-in session |
-| `web.invite` | `id`, `kind` (`email` / `github`), `email`, `code_hash`, `github_account_id`, `created_at`, `expires_at`, `used_at`, `used_by`, `revoked_at`, `created_by` | made from the CLI or by an admin (`created_by`, null from the CLI); spent once; a revoked one cannot be spent, a spent one cannot be revoked |
+| `web.invite` | `id`, `code_hash`, `created_at`, `expires_at`, `used_at`, `used_by`, `revoked_at`, `created_by` | a code bound to no address (§10); `code_hash` unique; made from the CLI or by an admin (`created_by`, null from the CLI); spent once; a revoked one cannot be spent, a spent one cannot be revoked |
 | `web.conversation` | `id`, `user_id`, `question`, `created_at` | the original question, verbatim |
 | `web.job` | `id`, `conversation_id`, `round`, `status`, `asks`, `answers`, `reply`, `created_at`, `finished_at` | one per round. `asks` keeps the options offered, so an answer is checked against them and a pin read from them; `answers` keeps each answer's words |
 | `web.job_trace` | `job_id`, `created_at`, `code_version`, `models`, `query_in`, `plan`, `result`, `model_calls`, `statements`, `timings`, `errors` | §8 |
@@ -579,7 +591,7 @@ grant.
 Deleting a user deletes their conversations and everything under them
 (`ON DELETE CASCADE`), and empties `used_by` on the invite they spent. The
 owner's credential can delete anyone; `vf_admin_role` only a non-administrator.
-Statuses, invite kinds and admin actions are explicit, named CHECKs that the
+Statuses and admin actions are explicit, named CHECKs that the
 code's lists are tested against, so each is spelt one way everywhere.
 
 ### What `vf_web_role` may do

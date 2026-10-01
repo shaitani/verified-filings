@@ -144,10 +144,10 @@ Steps 4–6 of [After a restart](#after-a-restart).
 ### 9. Your account
 
 ```
-uv run python -m app.api.admin invite --email you@example.com
+uv run python -m app.api.admin invite
 ```
 
-Register at http://localhost:4200 with that email and the printed code. Then:
+Register at http://localhost:4200 with the printed code. Then:
 
 ```
 uv run python -m app.api.admin make-admin you@example.com

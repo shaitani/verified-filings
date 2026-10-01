@@ -367,12 +367,12 @@ async def test_the_web_role_can_do_its_job(provisioned, label: str, statement: s
         ),
         (
             "create an invite",
-            "INSERT INTO invite (id, kind, github_account_id) "
-            "VALUES (gen_random_uuid(), 'github', '1')",
+            "INSERT INTO invite (id, code_hash, expires_at) "
+            "VALUES (gen_random_uuid(), 'h', now())",
         ),
         ("read a trace", "SELECT count(*) FROM job_trace"),
         # Everything else outside the grid.
-        ("rewrite an invite's address", "UPDATE invite SET email = 'x@example.test'"),
+        ("rewrite an invite's code", "UPDATE invite SET code_hash = 'x'"),
         ("delete a user", 'DELETE FROM "user"'),
         ("delete a conversation", "DELETE FROM conversation"),
         ("rewrite a question", "UPDATE conversation SET question = 'other'"),
@@ -567,9 +567,8 @@ async def admin_rows(provisioned):
             "INSERT INTO web.access_token (token, user_id, created_at) "
             f"VALUES ('zz-reader-token', '{READER_ID}', now()), "
             f"('zz-admin-token', '{ADMIN_ID}', now())",
-            "INSERT INTO web.invite (id, kind, email, code_hash, expires_at) "
-            f"VALUES ('{INVITE_ID}', 'email', 'zz-roles-invite@example.test', 'h', "
-            "now() + interval '1 day')",
+            "INSERT INTO web.invite (id, code_hash, expires_at) "
+            f"VALUES ('{INVITE_ID}', 'zz-roles-invite', now() + interval '1 day')",
         ):
             await connection.execute(text(statement))
     try:
@@ -612,8 +611,8 @@ async def test_the_admin_role_reads_all_of_web(admin_rows, table: str) -> None:
         ("revoke an invite", f"UPDATE invite SET revoked_at = now() WHERE id = '{INVITE_ID}'"),
         (
             "create an invite",
-            "INSERT INTO invite (id, kind, email, code_hash, expires_at, created_by) VALUES "
-            f"(gen_random_uuid(), 'email', 'zz-x@example.test', 'h2', now(), '{ADMIN_ID}')",
+            "INSERT INTO invite (id, code_hash, expires_at, created_by) VALUES "
+            f"(gen_random_uuid(), 'zz-roles-invite-2', now(), '{ADMIN_ID}')",
         ),
         (
             "write the audit log",

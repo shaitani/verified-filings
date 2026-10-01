@@ -256,11 +256,7 @@ ADMIN = RoleSpec(
         WriteGrant("user", "UPDATE", ("is_active", "hashed_password")),
         WriteGrant("user", "DELETE"),  # cascades to their conversations, jobs, traces
         WriteGrant("access_token", "DELETE"),  # end someone's sessions
-        WriteGrant(
-            "invite",
-            "INSERT",
-            ("id", "kind", "email", "code_hash", "github_account_id", "expires_at", "created_by"),
-        ),
+        WriteGrant("invite", "INSERT", ("id", "code_hash", "expires_at", "created_by")),
         WriteGrant("invite", "UPDATE", ("revoked_at",)),  # revoke; spending is the web role's
         WriteGrant("admin_action", "INSERT"),  # the audit log: added to, never changed
     ),

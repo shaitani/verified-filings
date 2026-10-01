@@ -20,9 +20,10 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 The agreed order, one piece at a time, each planned with the user first:
 
-- **Administration: an admin tab** (in progress — piece 2 next; the admin
-  login, row security and audit table are in, app/api/DESIGN.md §11, and the
-  user's account is an administrator). Decided with the user 2026-09-30:
+- **Administration: an admin tab** (in progress — piece 3 next; the admin
+  login, row security, audit table and unbound invite codes are in,
+  app/api/DESIGN.md §10–§11, and the user's account is an administrator).
+  Decided with the user 2026-09-30:
   - `is_superuser` is set and cleared only from the CLI (`make-admin`,
     `unmake-admin`, which clears the role and nothing else). The CLI alone
     also makes the very first invite. Everything else is in the tab, shown
@@ -40,9 +41,8 @@ The agreed order, one piece at a time, each planned with the user first:
     default; revocable. **GitHub sign-up takes a code too** — typed on the
     sign-up page, held in a short-lived signed cookie, claimed when GitHub
     returns the newcomer. GitHub-username invites go away.
-  - Pieces left: (2) unbound codes, GitHub handoff, CLI `invite` — and
-    narrow `roles.ADMIN`'s invite INSERT to the columns that remain; (3)
-    admin API and `unmake-admin` (an UPDATE/DELETE row security blocks
+  - Pieces left: (3) admin API (invite creation through
+    `admin.create_invite(..., created_by=)`) and `unmake-admin` (an UPDATE/DELETE row security blocks
     changes 0 rows, not an error: check the count); (4) tab: users and
     invites; (5) tab: traces and reports.
 - **Choose the host** — a walk-through with the user. The GPU decides it;
