@@ -5,15 +5,18 @@ model and XBRL stages are stood in for, by the captures in tests/fixtures/chain/
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from pathlib import Path
 
 import httpx
 import pytest
+from fastapi import routing
 from sqlalchemy import text
 
 import app.chain as chain
 from app.api import admin, storage
+from app.api.auth import SESSION_COOKIE
 from app.api.server import create_app
 from app.db import roles
 from app.schemas.query import QueryIn, QueryPlan
@@ -72,7 +75,7 @@ async def server(web_factory, test_db_url):
     _, owner = web_factory
     scheme, rest = test_db_url.split("://", 1)
     web_url = f"{scheme}://{roles.WEB.name}:{TEST_WEB_PASSWORD}@{rest.split('@', 1)[1]}"
-    app = create_app(CONFIG, web_url)
+    app = create_app(CONFIG, web_url, showDocs=False)  # as deployed, whatever .env says
     clients: list[httpx.AsyncClient] = []
 
     async def signed_in(name: str) -> httpx.AsyncClient:
@@ -309,22 +312,50 @@ async def test_another_reader_s_rounds_do_not_exist(server) -> None:
     assert refused.status_code == 404
 
 
-@pytest.mark.parametrize(
-    ("method", "path"),
-    [
-        ("POST", "/api/conversations"),
-        ("GET", "/api/conversations"),
-        ("GET", "/api/conversations/00000000-0000-0000-0000-000000000000"),
-        ("POST", "/api/conversations/00000000-0000-0000-0000-000000000000/answers"),
-        ("GET", "/api/jobs/00000000-0000-0000-0000-000000000000"),
-        ("GET", "/api/jobs/00000000-0000-0000-0000-000000000000/events"),
-        ("POST", "/api/jobs/00000000-0000-0000-0000-000000000000/feedback"),
-    ],
-)
-async def test_every_route_needs_a_signed_in_reader(server, method, path) -> None:
+# --------------------------------------------------------------------------- #
+# Anonymous visitors
+# --------------------------------------------------------------------------- #
+
+#: Everything a visitor who is not signed in may reach: signing in, and health.
+#: A route added without a sign-in check fails the test below until it is either
+#: protected or added here on purpose.
+OPEN_TO_ANONYMOUS = {
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/register"),  # needs an invitation (test_auth.py)
+    ("GET", "/api/auth/github/authorize"),  # only builds GitHub's URL
+    ("GET", "/api/auth/github/callback"),  # a new account needs a GitHub invitation
+    ("GET", "/api/health"),  # "ok", for Docker's health check
+}
+
+
+def _mounted(app) -> set[tuple[str, str]]:
+    """Every (method, path) the app answers, read from the app itself -- included
+    routers flattened, routes hidden from the schema too."""
+    return {
+        (method, context.path)
+        for context in routing.iter_route_contexts(app.routes)
+        for method in getattr(context, "methods", None) or ()
+    }
+
+
+async def test_an_anonymous_visitor_reaches_nothing_but_sign_in(server) -> None:
+    """Built from the mounted routes, not a list kept by hand, so it covers routes
+    nobody remembered to add to it. No cookie and a forged one alike get 401."""
     _, app, _ = server
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as anon:
-        response = await anon.request(method, path, json={})
-    assert response.status_code == 401
+    mounted = _mounted(app)
+    assert OPEN_TO_ANONYMOUS <= mounted, "an open route no longer exists: drop it from the list"
+    protected = sorted(mounted - OPEN_TO_ANONYMOUS)
+    assert ("POST", "/api/conversations") in protected  # the sweep found the routers
+
+    zero = "00000000-0000-0000-0000-000000000000"
+    refused = []
+    for cookies in ({}, {SESSION_COOKIE: "forged"}):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test", cookies=cookies
+        ) as anon:
+            for method, path in protected:
+                url = re.sub(r"\{[^}]+\}", zero, path)
+                response = await anon.request(method, url, json={})
+                if response.status_code != 401:
+                    refused.append((method, path, bool(cookies), response.status_code))
+    assert not refused, f"reachable without signing in: {refused}"

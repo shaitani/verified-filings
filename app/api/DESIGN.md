@@ -209,7 +209,12 @@ the original question; each round is a job, storing the picks that started it
 and what it asked. Every conversation and job belongs to a user, and a user
 reads only their own.
 
-**Routes** (`app/api/routes.py`). Every route needs a signed-in reader.
+**Routes** (`app/api/routes.py`). Every route needs a signed-in reader. Open to
+anyone are only signing in (§10) and `GET /api/health`; a test builds the list
+of mounted routes from the app and requires 401 from every other one, without
+a cookie and with a forged one, so a route added without the check fails it.
+FastAPI's own `/docs`, `/redoc` and `/openapi.json` are unmounted unless
+`API_DOCS` is on, which only a development `.env` sets.
 Another reader's conversation reads as **404, never 403**, so an id tells a
 guesser nothing. Refusals on the wire: an option never offered is 400
 `UNKNOWN_CHOICE`; answering a round still running, one that asked nothing, or

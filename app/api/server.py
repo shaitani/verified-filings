@@ -38,9 +38,14 @@ log = logging.getLogger(__name__)
 PURGE_EVERY = 6 * 3600  # seconds between sweeps of expired sessions
 
 
-def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> FastAPI:
-    """The app. ``config`` and ``web_url`` default to ``.env``; tests pass their own."""
+def create_app(
+    config: AuthConfig | None = None, web_url: str | None = None, *, showDocs: bool | None = None
+) -> FastAPI:
+    """The app. ``config``, ``web_url`` and ``showDocs`` default to ``.env``; tests pass
+    their own. ``showDocs`` mounts /docs, /redoc and /openapi.json -- off by default,
+    since everything else an anonymous visitor can reach is sign-in."""
     config = config or AuthConfig.from_settings(settings)
+    showDocs = settings.api_docs if showDocs is None else showDocs
     auth = build_auth(config)
 
     @contextlib.asynccontextmanager
@@ -58,7 +63,15 @@ def create_app(config: AuthConfig | None = None, web_url: str | None = None) -> 
             await app.state.runner.stop()
             await app.state.web.kw["bind"].dispose()
 
-    app = FastAPI(title="Verified Filings", lifespan=lifespan)
+    app = FastAPI(
+        title="Verified Filings",
+        lifespan=lifespan,
+        # Unmounted, not hidden: with openapi_url None FastAPI serves no docs at
+        # all, and app.openapi() still builds the contract for app/api/openapi.py.
+        openapi_url="/openapi.json" if showDocs else None,
+        docs_url="/docs" if showDocs else None,
+        redoc_url="/redoc" if showDocs else None,
+    )
     app.state.auth = auth
     users, backend = auth.users, auth.backend
 

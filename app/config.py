@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     #: Secure cookies: sent over https only -- browsers treat localhost as secure.
     auth_cookie_secure: bool = True
 
+    #: Mount /docs, /redoc and /openapi.json. Off unless asked for: a public server
+    #: has no reason to hand an anonymous visitor its map. The client's contract is
+    #: written from the app object either way (app/api/openapi.py).
+    api_docs: bool = False
+
     #: In a container: the database's ``host:port`` there ("db:5432"). Every
     #: database URL is pointed at it, keeping its login -- so the URLs, and the
     #: passwords in them, are written once in .env, not again in docker-compose.

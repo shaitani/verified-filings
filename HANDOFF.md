@@ -20,10 +20,6 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 
 The agreed order, one piece at a time, each planned with the user first:
 
-- **Lock down the anonymous surface** (in progress) — `/docs`, `/redoc`,
-  `/openapi.json` off in production; a test that every mounted route answers
-  401 to an anonymous visitor except a named allowlist (login, register, the
-  two GitHub routes, health).
 - **Rate limiting, the host-independent half** — a per-user cap on unfinished
   jobs (the queue in `app/api/jobs.py` is unbounded), login and register
   throttled per address, a maximum on `AnswersIn.answers`. In process: the
@@ -40,8 +36,9 @@ The agreed order, one piece at a time, each planned with the user first:
 
 An anonymous probe of the live API (2026-09-30) found every question route,
 `/api/me` and a forged cookie refused with 401, the unmounted library routes
-404, and registration without an invite refused; open were the three doc
-routes (above), login with no attempt limit, GitHub authorize, and health.
+404, and registration without an invite refused; open were login with no
+attempt limit, GitHub authorize, and health. The doc routes it also found open
+are now off unless `API_DOCS` is set (app/api/DESIGN.md §4).
 
 ## The Web Client is complete
 

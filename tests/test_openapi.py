@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from app.api.server import create_app
+from app.config import Settings
 from tests.test_auth import CONFIG
 
 
@@ -55,6 +57,36 @@ def test_a_sent_optional_field_is_required_but_nullable(spec: dict) -> None:
 def test_a_request_keeps_its_defaults_optional(spec: dict) -> None:
     # The browser may leave "kind" out of an answer; only responses are always complete.
     assert "kind" not in spec["components"]["schemas"]["OptionAnswerIn"]["required"]
+
+
+DOC_ROUTES = ["/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"]
+
+
+@pytest.mark.parametrize("path", DOC_ROUTES)
+async def test_the_docs_are_not_served_unless_asked_for(path: str) -> None:
+    """Off is the default (API_DOCS): a deployed server hands nobody its map."""
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app(CONFIG, showDocs=False)),
+        base_url="http://test",
+    ) as anon:
+        assert (await anon.get(path)).status_code == 404
+
+
+async def test_the_docs_are_served_when_asked_for() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app(CONFIG, showDocs=True)), base_url="http://test"
+    ) as anon:
+        for path in DOC_ROUTES:
+            assert (await anon.get(path)).status_code == 200, path
+
+
+def test_the_docs_are_off_by_default() -> None:
+    assert Settings(_env_file=None, database_url="x", embedding_url="x").api_docs is False
+
+
+def test_the_contract_is_written_with_the_docs_off() -> None:
+    """The client's contract comes from the app object, not the route."""
+    assert "/api/conversations" in create_app(CONFIG, showDocs=False).openapi()["paths"]
 
 
 def test_the_clients_copy_of_the_contract_is_current() -> None:

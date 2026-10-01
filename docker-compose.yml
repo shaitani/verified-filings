@@ -142,6 +142,8 @@ services:
       # fallback repeats app/config.py's default -- an empty value would override it.
       GITHUB_OAUTH_REDIRECT_URL: ${GITHUB_OAUTH_REDIRECT_URL:-http://localhost:8000/api/auth/github/callback}
       AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-30}
+      # /docs, /redoc, /openapi.json: off unless .env turns them on (app/config.py).
+      API_DOCS: ${API_DOCS:-false}
     volumes: ["./data:/srv/data"]  # retrieval_log.jsonl survives the container
     ports: ["127.0.0.1:8000:8000", "[::1]:8000:8000"]  # this machine only, as db above
     healthcheck:
