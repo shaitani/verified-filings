@@ -72,6 +72,9 @@ services:
     environment:
       EMBEDDING_URL: http://ollama:11434
       API_DOCS: "false"
+      # Where GitHub returns the browser: the Web Client's page at the public address.
+      # Also listed as the callback on the production GitHub OAuth App.
+      GITHUB_OAUTH_REDIRECT_URL: https://vf.zubron-ratio.ts.net/auth/github/callback
     secrets:
       - {source: database_url_web, target: database_url}
       - database_url_web
