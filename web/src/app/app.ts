@@ -18,6 +18,9 @@ import { HistoryStore } from './history/history-store';
 /** Wide enough for the past questions to sit beside the thread rather than over it. */
 const WIDE = '(min-width: 960px)';
 
+/** Too narrow for the banner's words: its buttons become icons, the account a menu. */
+const PHONE = '(max-width: 599.98px)';
+
 const THEME_KEY = 'vf-theme';
 
 function readTheme(): string | null {
@@ -39,6 +42,11 @@ function readTheme(): string | null {
     RouterOutlet,
   ],
   selector: 'vf-root',
+  // The phone banner's account panel closes on a click anywhere else, or Escape.
+  host: {
+    '(document:click)': 'closeAccount($event)',
+    '(document:keydown.escape)': 'accountOpen.set(false)',
+  },
   styleUrl: './app.scss',
   templateUrl: './app.html',
 })
@@ -56,7 +64,15 @@ export class App {
       .pipe(map((state) => state.matches)),
     { initialValue: true },
   );
-  protected readonly drawerOpen = signal(false); // narrow screens only: wide ones always show it
+  protected readonly phone = toSignal(
+    inject(BreakpointObserver)
+      .observe(PHONE)
+      .pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+  protected readonly drawerOpen = signal(false);
+  // Not Material's menu: its overlay would add ~70 kB to every reader's first download.
+  protected readonly accountOpen = signal(false); // narrow screens only: wide ones always show it
 
   // Light or dark; remembered in this browser, light until the reader picks otherwise.
   protected readonly dark = signal(readTheme() === 'dark');
@@ -94,7 +110,13 @@ export class App {
     else document.startViewTransition(apply);
   }
 
+  protected closeAccount(event: Event): void {
+    const inside = (event.target as Element | null)?.closest?.('.account-menu');
+    if (!inside) this.accountOpen.set(false);
+  }
+
   protected async signOut(): Promise<void> {
+    this.accountOpen.set(false);
     await this.auth.signOut();
     await this.router.navigateByUrl('/login');
   }
