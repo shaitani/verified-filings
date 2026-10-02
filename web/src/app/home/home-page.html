@@ -7,6 +7,7 @@
       matInput
       cdkTextareaAutosize
       cdkAutosizeMinRows="2"
+      cdkAutosizeMaxRows="10"
       formControlName="question"
       aria-label="Ask about the filings"
       placeholder="Ask about the filings, e.g. What was Apple's revenue in fiscal 2024?"
@@ -19,7 +20,7 @@
       aria-label="Ask"
       [disabled]="busy() || form.invalid"
     >
-      <mat-icon>arrow_upward</mat-icon>
+      <mat-icon svgIcon="arrow_upward" />
     </button>
   </div>
 

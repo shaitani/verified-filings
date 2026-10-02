@@ -1,5 +1,5 @@
 <main class="trace-page">
-  <a mat-button routerLink="/admin" class="back"><mat-icon>arrow_back</mat-icon> Admin</a>
+  <a mat-button routerLink="/admin" class="back"><mat-icon svgIcon="arrow_back" /> Admin</a>
 
   @if (problem(); as sentence) {
     <p class="problem" role="alert">{{ sentence }}</p>
@@ -30,7 +30,7 @@
       </p>
       <div class="header-actions">
         <button mat-stroked-button type="button" (click)="copyAll()">
-          <mat-icon>{{ copied() === 'all' ? 'check' : 'content_copy' }}</mat-icon>
+          <mat-icon [svgIcon]="copied() === 'all' ? 'check' : 'content_copy'" />
           Copy the whole trace as JSON
         </button>
         <span class="logged">Opening this is recorded in the audit log.</span>
@@ -100,7 +100,7 @@
             <div class="block-head">
               <h3>Prompt</h3>
               <button mat-button type="button" (click)="copy('prompt' + $index, call.prompt)">
-                <mat-icon>{{ copied() === 'prompt' + $index ? 'check' : 'content_copy' }}</mat-icon>
+                <mat-icon [svgIcon]="copied() === 'prompt' + $index ? 'check' : 'content_copy'" />
                 Copy
               </button>
             </div>
@@ -108,7 +108,7 @@
             <div class="block-head">
               <h3>Reply</h3>
               <button mat-button type="button" (click)="copy('reply' + $index, call.reply ?? '')">
-                <mat-icon>{{ copied() === 'reply' + $index ? 'check' : 'content_copy' }}</mat-icon>
+                <mat-icon [svgIcon]="copied() === 'reply' + $index ? 'check' : 'content_copy'" />
                 Copy
               </button>
             </div>
@@ -168,7 +168,7 @@
             <div class="block-head">
               <span></span>
               <button mat-button type="button" (click)="copy(part.name, json(part.value))">
-                <mat-icon>{{ copied() === part.name ? 'check' : 'content_copy' }}</mat-icon>
+                <mat-icon [svgIcon]="copied() === part.name ? 'check' : 'content_copy'" />
                 Copy
               </button>
             </div>

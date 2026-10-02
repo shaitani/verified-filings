@@ -1,7 +1,7 @@
 @if (reply().blocking; as blocking) {
   <!-- A refusal that sank the whole question: shown first, and alone in what it says. -->
   <p class="blocking" role="alert">
-    <mat-icon aria-hidden="true">block</mat-icon>
+    <mat-icon aria-hidden="true" svgIcon="block" />
     {{ blocking.reason }}
   </p>
 }
@@ -13,16 +13,18 @@
 
       @switch (part.outcome) {
         @case ('answered') {
-          <mat-icon class="answered-mark" aria-label="answered">check</mat-icon>
+          <mat-icon class="answered-mark" aria-label="answered" svgIcon="check" />
         }
         @case ('refused') {
           <span class="reason">{{ part.reason }}</span>
         }
         @case ('none') {
           <!-- An answer, not a failure: the question ran and nothing met its condition. -->
-          <mat-icon class="answered-mark" aria-label="answered, with no matching figures"
-            >check</mat-icon
-          >
+          <mat-icon
+            class="answered-mark"
+            aria-label="answered, with no matching figures"
+            svgIcon="check"
+          />
           <span class="reason">{{ part.reason }}</span>
         }
         @case ('asked') {

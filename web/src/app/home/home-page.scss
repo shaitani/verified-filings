@@ -27,6 +27,10 @@
 // free of any field chrome, and a round send button at the bottom right.
 .composer {
   position: relative;
+  // The padding is the box's, not the textarea's: autosize sets the textarea's height
+  // to its rows of text, and padding inside that height (border-box) left the text
+  // 36px short of room -- the last lines hidden below the edge.
+  padding: 18px 64px 18px 20px;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 20px;
   background: var(--mat-sys-surface-container-high);
@@ -42,12 +46,16 @@
 
   textarea {
     box-sizing: border-box;
+    display: block;
     width: 100%;
-    padding: 18px 64px 18px 20px;
+    padding: 0;
     border: 0;
     outline: 0;
     resize: none;
-    overflow: hidden; // the box grows with the text (autosize), so it never needs a scrollbar
+    // The box grows with the text (autosize) up to ten lines, then scrolls -- and
+    // scrolls too if a phone's browser does not grow it, so what is typed never
+    // vanishes below the edge (it did, with overflow hidden).
+    overflow-y: auto;
     background: transparent;
     color: var(--mat-sys-on-surface);
     font: var(--mat-sys-body-large);

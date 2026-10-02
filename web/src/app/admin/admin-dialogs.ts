@@ -85,7 +85,7 @@ export interface ShownOnceData {
       <p class="value">
         <code>{{ data.value }}</code>
         <button mat-icon-button type="button" aria-label="Copy" title="Copy" (click)="copy()">
-          <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
+          <mat-icon [svgIcon]="copied() ? 'check' : 'content_copy'" />
         </button>
       </p>
       <p class="note">{{ data.note }} It will not be shown again.</p>

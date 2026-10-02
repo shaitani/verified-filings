@@ -56,7 +56,7 @@ export function marker(conversation: ConversationSummary): Marker {
           }}</span>
           <span matListItemLine class="line" [class.waiting]="mark.waiting">
             <span class="status" [attr.data-tone]="mark.tone">
-              <mat-icon inline aria-hidden="true">{{ mark.icon }}</mat-icon>
+              <mat-icon inline aria-hidden="true" [svgIcon]="mark.icon" />
               {{ mark.text }}
             </span>
             {{ conversation.created_at | date: 'MMM d, y' }}

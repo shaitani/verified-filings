@@ -13,7 +13,24 @@ html {
         primary: mat.$azure-palette,
         tertiary: mat.$blue-palette,
       ),
-      typography: Roboto,
+      // Roboto, then the device's own sans-serif: a browser that blocks web fonts
+      // (some privacy browsers, iPhone's Lockdown Mode) gets system text, not Times.
+      typography: (
+          plain-family: (
+            Roboto,
+            system-ui,
+            -apple-system,
+            'Segoe UI',
+            sans-serif,
+          ),
+          brand-family: (
+            Roboto,
+            system-ui,
+            -apple-system,
+            'Segoe UI',
+            sans-serif,
+          ),
+        ),
       density: 0,
     )
   );

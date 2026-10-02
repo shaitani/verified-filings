@@ -6,11 +6,11 @@
       aria-label="Past questions"
       (click)="drawerOpen.set(!drawerOpen())"
     >
-      <mat-icon>menu</mat-icon>
+      <mat-icon svgIcon="menu" />
     </button>
   }
   <a class="title" routerLink="/" aria-label="Verified Filings, home">
-    <mat-icon class="mark" aria-hidden="true">verified</mat-icon>
+    <mat-icon class="mark" aria-hidden="true" svgIcon="verified" />
     <span class="word" aria-hidden="true">Verified Filings</span>
   </a>
   <span class="spacer"></span>
@@ -18,11 +18,11 @@
     @if (phone()) {
       <!-- A phone: icons, and the account in a menu, so the banner fits its width. -->
       <a mat-icon-button routerLink="/" aria-label="New question" title="New question">
-        <mat-icon>edit_square</mat-icon>
+        <mat-icon svgIcon="edit_square" />
       </a>
       @if (user.is_superuser) {
         <a mat-icon-button routerLink="/admin" aria-label="Admin" title="Admin">
-          <mat-icon>admin_panel_settings</mat-icon>
+          <mat-icon svgIcon="admin_panel_settings" />
         </a>
       }
       <span class="account-menu">
@@ -35,7 +35,7 @@
           [attr.aria-expanded]="accountOpen()"
           (click)="accountOpen.set(!accountOpen())"
         >
-          <mat-icon>account_circle</mat-icon>
+          <mat-icon svgIcon="account_circle" />
         </button>
         @if (accountOpen()) {
           <div class="account-panel" role="group" aria-label="Account">
@@ -46,7 +46,7 @@
               {{ user.email }}
             </p>
             <button mat-button type="button" (click)="signOut()">
-              <mat-icon>logout</mat-icon>
+              <mat-icon svgIcon="logout" />
               Sign out
             </button>
           </div>
@@ -82,7 +82,7 @@
     [attr.title]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
     (click)="toggleTheme()"
   >
-    <mat-icon>{{ dark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+    <mat-icon [svgIcon]="dark() ? 'light_mode' : 'dark_mode'" />
   </button>
 </mat-toolbar>
 

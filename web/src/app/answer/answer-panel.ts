@@ -19,7 +19,7 @@ import { StatCard } from './stat-card';
   template: `
     @for (note of answer().notes; track $index) {
       <p class="note" [attr.data-kind]="note.kind">
-        <mat-icon aria-hidden="true">info</mat-icon>
+        <mat-icon aria-hidden="true" svgIcon="info" />
         <span class="message">{{ note.message }}</span>
       </p>
     }
@@ -37,7 +37,7 @@ import { StatCard } from './stat-card';
       }
     </div>
 
-    <!-- The table always ships (DESIGN ง5); it starts open, and the reader can fold it away. -->
+    <!-- The table always ships (DESIGN ยง5); it starts open, and the reader can fold it away. -->
     <mat-expansion-panel expanded>
       <mat-expansion-panel-header>
         <mat-panel-title>Source figures</mat-panel-title>
