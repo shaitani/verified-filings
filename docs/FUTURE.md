@@ -26,13 +26,15 @@ door and the GitHub callback.
 **Funnel makes the site reachable, so the gate below holds before it is
 switched on.** None of this is done:
 
-`docker-compose.prod.yml` — the gate — and its web container are in
-(app/api/DESIGN.md §12). Left:
+`docker-compose.prod.yml` — the gate — its web container and the Tailscale
+front door are in (app/api/DESIGN.md §12); the door opens and closes with
+`/open-the-door` and `/close-the-door`. Left:
 
-- **The Tailscale container**, at `10.42.42.20` (the address Caddy trusts for
-  `X-Forwarded-For`), with Funnel pointing `https://…ts.net` at the web
-  container. Confirm what Funnel sends as the visitor's address before relying
-  on it.
+- **Confirm the visitor's address through Funnel.** Caddy trusts
+  `X-Forwarded-For` from the Tailscale container (`10.42.42.20`); check, with
+  the door open and a request from another network, that the api logs that
+  address and not the container's — otherwise every visitor shares one
+  rate-limit budget.
 - **Per-IP request limits at the proxy** — Caddy's core has none; a plugin
   build would add them. The api's own limits (sign-in, questions) stand.
 - **A second GitHub OAuth app** for production, with the

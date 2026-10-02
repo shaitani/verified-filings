@@ -735,6 +735,17 @@ GPU. The Ollama model volume is the one thing shared, to save 5 GB.
   refused (413). The event stream passes each event on as it comes
   (`flush_interval -1`; measured: stages arrive live). Any path outside
   `/api` is the app, so `/docs` there is the app's page, not the API's.
+- **The front door is the Tailscale container** (`tailscale.serve.json`): the
+  PC joins the owner's tailnet as `vf`, and Tailscale Serve answers
+  `https://vf.zubron-ratio.ts.net`, passing every request to the web container.
+  It connects out, so no router port opens; TLS ends on the PC, so Tailscale
+  relays without reading; userspace networking, so it needs no privileges. The
+  auth key is a secret file, read once to join. **Funnel** — the internet, not
+  just the tailnet — is the file's `AllowFunnel`, committed **off**. The door is
+  opened and closed only by `/open-the-door` and `/close-the-door`
+  (`.claude/skills/`). Closed means Funnel off *and* the container stopped,
+  and the skill proves it: nothing of either project listens beyond loopback,
+  and the public address does not answer.
 - **Who the visitor is.** The rate limits key on `limits.client_ip`. Caddy
   believes `X-Forwarded-For` only from the Tailscale container and otherwise
   takes the connecting address; it hands the api one address, the visitor's,

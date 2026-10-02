@@ -232,6 +232,10 @@ docker compose -f docker-compose.prod.yml stop
 
 Production in a browser on this PC: http://localhost:8080
 
+On the internet, at https://vf.zubron-ratio.ts.net: `/open-the-door`. Off it
+again — Funnel off, Tailscale stopped, checked — `/close-the-door`. Starting
+production starts Tailscale with Funnel off (on the tailnet only).
+
 After a change to the production file's network, recreate the containers (the
 data stays; never add `-v`):
 

@@ -123,10 +123,10 @@ the second).
   only, not the XBRL data store.
 - **The loader does not cross-check** a file's internal `cik` against the
   ticker used to find it.
-- **Not ready for a public server yet.** `docker-compose.prod.yml` closes
-  what the dev file left open (committed passwords, published ports, secrets
-  in `docker inspect`) and has its web container, but no front door yet: no
-  Funnel. See the deployment entry in [FUTURE.md](FUTURE.md).
+- **Production gaps before it is used in earnest.** GitHub sign-in is off
+  (no production OAuth app); sessions last 30 days; Caddy has no per-IP request
+  limits; nothing is backed up; whether Funnel hands Caddy the visitor's real
+  address is unconfirmed. See the deployment entry in [FUTURE.md](FUTURE.md).
 
 ### Deferred by the user — do not reopen unprompted
 

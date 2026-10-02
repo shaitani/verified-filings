@@ -13,7 +13,8 @@ data. A new password goes in by deleting its file and running this again, then
 re-provisioning (docs/STARTUP.md). Values are printed nowhere.
 
 The GitHub pair is written empty: GitHub sign-in stays off until the
-production OAuth app exists and its id and secret are pasted in.
+production OAuth app exists and its id and secret are pasted in. So is the
+Tailscale auth key, pasted in from the Tailscale admin console (Settings, Keys).
 """
 
 from __future__ import annotations
@@ -44,8 +45,9 @@ SIGNING = (
     "auth_device_secret",
 )
 
-#: Filled in by hand once the production GitHub OAuth app exists.
-BY_HAND = ("github_oauth_client_id", "github_oauth_client_secret")
+#: Filled in by hand: the production GitHub OAuth app's pair, and the key the
+#: Tailscale container joins the tailnet with.
+BY_HAND = ("github_oauth_client_id", "github_oauth_client_secret", "tailscale_authkey")
 
 
 def _url(user: str, password: str) -> str:

@@ -11,8 +11,9 @@
 #   - no db-test, no pgadmin;
 #   - **nothing published but the web container, on this PC's loopback** (8080, for
 #     checking production in a browser here): nothing listens for the network or the
-#     internet. The front door (Tailscale, still to come) reaches the web container
-#     over this project's own network;
+#     internet. The front door, the Tailscale container, reaches the web container
+#     over this project's own network, and connects *out* to Tailscale -- no port is
+#     opened on the router;
 #   - **secrets are files** in ./secrets (app/prod_secrets.py makes them; git and the
 #     image never see them), each mounted into only the containers that need it at
 #     /run/secrets/<name>. Not environment variables, so `docker inspect` shows none;
@@ -135,6 +136,33 @@ services:
       retries: 6
       start_period: 5s
 
+  # The front door: this PC joins the user's tailnet as "vf", and Tailscale Serve
+  # answers https://vf.zubron-ratio.ts.net, passing each request to the web
+  # container. tailscale.serve.json says whether Funnel opens it to the internet
+  # ("AllowFunnel"); Tailscale watches that file, so flipping it needs no restart.
+  # TLS ends here, on this PC: Tailscale relays the traffic without reading it.
+  # Userspace networking (the image's default): no privileges, no tun device. The
+  # auth key is read from its secret file once, to join; the node's identity is
+  # kept in the state volume after that.
+  tailscale:
+    image: tailscale/tailscale:v1.102.5
+    hostname: vf
+    environment:
+      TS_HOSTNAME: vf
+      TS_AUTHKEY: file:/run/secrets/tailscale_authkey
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/tailscale.serve.json
+    secrets: [tailscale_authkey]
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale.serve.json:/config/tailscale.serve.json:ro
+    depends_on:
+      web: {condition: service_healthy}
+    networks:
+      default:
+        ipv4_address: 10.42.42.20  # the one address Caddy believes (web.Caddyfile)
+    restart: unless-stopped
+
   # The owner's tools, run by hand and gone when they finish -- never left running,
   # so the owner's login is in no long-lived container. The api image, Python as the
   # entry point:
@@ -170,6 +198,7 @@ secrets:
   auth_device_secret: {file: ./secrets/auth_device_secret}
   github_oauth_client_id: {file: ./secrets/github_oauth_client_id}
   github_oauth_client_secret: {file: ./secrets/github_oauth_client_secret}
+  tailscale_authkey: {file: ./secrets/tailscale_authkey}
 
 # A fixed range, so the web container's address -- which the api trusts -- and the
 # Tailscale container's -- which the web container trusts -- never change.
@@ -182,6 +211,7 @@ networks:
 volumes:
   pgdata:
   api-data:
+  tailscale-state:
   ollama-models:
     external: true
     name: verified-filings_ollama-models  # the dev project's: see the top

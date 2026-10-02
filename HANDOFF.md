@@ -23,11 +23,12 @@ user names these steps, not numbers:
 
 - **Production Docker setup** — in progress; the gate above. The host is
   decided: the user's PC, reached through Tailscale Funnel run as a container
-  (docs/FUTURE.md). `docker-compose.prod.yml`, its secrets, the ops
-  container and the web container are in and tried (app/api/DESIGN.md §12;
-  production at http://localhost:8080 on this PC). The user stops production
-  while developing, never runs both. Next: the Tailscale container and
-  Funnel.
+  (docs/FUTURE.md). Done and tried: `docker-compose.prod.yml`, its secrets,
+  the ops and web containers, and the Tailscale front door
+  (`https://vf.zubron-ratio.ts.net`, machine `vf`; app/api/DESIGN.md §12). The
+  gate is met. The door — Funnel — opens and closes only with `/open-the-door`
+  and `/close-the-door`; it is closed. The user stops production while
+  developing, never runs both.
 - **Production settings** — a shorter session, a second GitHub OAuth app
   with the `https` callback, a way to run the owner's CLI on the server.
 - **Data and backups** — the database onto the server; the `web` schema
