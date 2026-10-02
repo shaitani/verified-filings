@@ -3,12 +3,26 @@ import { computed, inject } from '@angular/core';
 import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
 import { Observable, firstValueFrom } from 'rxjs';
 
-import { ApiService } from '../api/api.service';
-import type { AdminInvite, AdminUser, InviteStatus } from '../api/types';
+import { AdminApi } from './admin-api';
+import type {
+  AdminActionView,
+  AdminInvite,
+  AdminJob,
+  AdminReport,
+  AdminUser,
+  InviteStatus,
+} from '../api/types';
+
+/** Which rounds the Rounds tab lists. */
+export type RoundsFilter = 'all' | 'reported' | 'failed';
 
 interface AdminState {
   users: readonly AdminUser[];
   invites: readonly AdminInvite[]; // newest first, as the server sends them
+  rounds: readonly AdminJob[]; // newest first, as `roundsFilter` asks
+  roundsFilter: RoundsFilter;
+  reports: readonly AdminReport[]; // their notes are shown on the reported rounds
+  actions: readonly AdminActionView[]; // the audit log, newest first
   loaded: boolean;
   problem: string | null;
 }
@@ -43,8 +57,26 @@ export const INVITE_TABS: readonly InviteStatus[] = ['open', 'used', 'revoked', 
  * re-read rather than patched by hand.
  */
 export const AdminStore = signalStore(
-  withState<AdminState>({ users: [], invites: [], loaded: false, problem: null }),
-  withComputed(({ invites }) => ({
+  withState<AdminState>({
+    users: [],
+    invites: [],
+    rounds: [],
+    roundsFilter: 'all',
+    reports: [],
+    actions: [],
+    loaded: false,
+    problem: null,
+  }),
+  withComputed(({ invites, reports }) => ({
+    /** Each reported round's notes, oldest first, by job id. */
+    notesByJob: computed(() => {
+      const by = new Map<string, string[]>();
+      for (const report of [...reports()].reverse()) {
+        if (!report.note) continue;
+        by.set(report.job_id, [...(by.get(report.job_id) ?? []), report.note]);
+      }
+      return by;
+    }),
     invitesByStatus: computed(() => {
       const by: Record<InviteStatus, AdminInvite[]> = {
         open: [],
@@ -56,14 +88,20 @@ export const AdminStore = signalStore(
       return by;
     }),
   })),
-  withMethods((store, api = inject(ApiService)) => {
+  withMethods((store, api = inject(AdminApi)) => {
     async function load(): Promise<void> {
       try {
-        const [users, invites] = await Promise.all([
-          firstValueFrom(api.adminUsers()),
-          firstValueFrom(api.adminInvites()),
+        const filter = store.roundsFilter();
+        const [users, invites, rounds, reports, actions] = await Promise.all([
+          firstValueFrom(api.users()),
+          firstValueFrom(api.invites()),
+          firstValueFrom(
+            api.jobs({ reported: filter === 'reported', failed: filter === 'failed' }),
+          ),
+          firstValueFrom(api.reports()),
+          firstValueFrom(api.actions()),
         ]);
-        patchState(store, { users, invites, loaded: true });
+        patchState(store, { users, invites, rounds, reports, actions, loaded: true });
       } catch (error) {
         patchState(store, { problem: adminProblem(error), loaded: true });
       }
@@ -84,28 +122,43 @@ export const AdminStore = signalStore(
 
     return {
       load,
+      /** List other rounds: all, the reported, or the failed. */
+      async filterRounds(roundsFilter: RoundsFilter): Promise<void> {
+        patchState(store, { roundsFilter, problem: null });
+        try {
+          const rounds = await firstValueFrom(
+            api.jobs({
+              reported: roundsFilter === 'reported',
+              failed: roundsFilter === 'failed',
+            }),
+          );
+          patchState(store, { rounds });
+        } catch (error) {
+          patchState(store, { problem: adminProblem(error) });
+        }
+      },
       /** The new password, to be shown once; null if refused. */
       async resetPassword(user: AdminUser): Promise<string | null> {
-        return (await act(api.adminResetPassword(user.id)))?.password ?? null;
+        return (await act(api.resetPassword(user.id)))?.password ?? null;
       },
       async deleteUser(user: AdminUser): Promise<void> {
-        await act(api.adminDeleteUser(user.id));
+        await act(api.deleteUser(user.id));
       },
       async deactivate(user: AdminUser): Promise<void> {
-        await act(api.adminDeactivate(user.id));
+        await act(api.deactivate(user.id));
       },
       async reactivate(user: AdminUser): Promise<void> {
-        await act(api.adminReactivate(user.id));
+        await act(api.reactivate(user.id));
       },
       async endSessions(user: AdminUser): Promise<void> {
-        await act(api.adminEndSessions(user.id));
+        await act(api.endSessions(user.id));
       },
       /** The new code, to be shown once; null if refused. */
       async createInvite(days: number): Promise<string | null> {
-        return (await act(api.adminCreateInvite(days)))?.code ?? null;
+        return (await act(api.createInvite(days)))?.code ?? null;
       },
       async revokeInvite(invite: AdminInvite): Promise<void> {
-        await act(api.adminRevokeInvite(invite.id));
+        await act(api.revokeInvite(invite.id));
       },
     };
   }),

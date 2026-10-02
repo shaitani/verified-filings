@@ -774,4 +774,19 @@ with its count: **Users** and **Invites**, the latter split into **Open**,
 confirm); deactivate, reactivate and end sessions sit apart in a small, italic
 "debug" menu, kept for debugging and removable later. An administrator's row
 stays visible with its actions greyed out. A new invite's code is shown once,
-with a copy button. After every action both lists are re-read from the server.
+with a copy button. After every action the lists are re-read from the server.
+
+Two more tabs. **Rounds**: the newest 100, filtered **All**, **Reported** or
+**Failed** by the server (`GET jobs`), each with its reports' notes under the
+question — so problem reports need no tab of their own (`GET reports` feeds the
+notes). **Audit log**: the newest 100 entries, the debug actions set apart as
+in Users, a trace opening linked to its round. A list that holds all the
+server sent is counted "100+". A round opens on its own page,
+`/admin/rounds/:jobId`, linkable: the question and its facts (reader, status,
+time, code version — marked when written from uncommitted code — and models),
+the problem reports, errors with their tracebacks, timings, every model call's
+prompt and reply, every statement with the validator's verdict, and QueryIn,
+QueryPlan and Result as JSON — each with a copy button, and **Copy the whole
+trace as JSON**, so one paste hands a round over for debugging. The admin
+calls live in `admin/admin-api.ts`, not `ApiService`, so they ship in the admin
+bundle alone.

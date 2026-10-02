@@ -1,10 +1,11 @@
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 
-import type { AdminInvite, AdminUser } from '../api/types';
+import type { AdminActionView, AdminInvite, AdminJob, AdminReport, AdminUser } from '../api/types';
 import { ConfirmDialog, NewInviteDialog, ShownOnceDialog } from './admin-dialogs';
 import { AdminPage } from './admin-page';
 import { adminProblem } from './admin-store';
@@ -43,6 +44,58 @@ const USERS = [
   user({ id: 'a1', email: 'boss@example.com', is_superuser: true }),
   user({ id: 'u1', email: 'reader@example.com' }),
 ];
+function round(over: Partial<AdminJob>): AdminJob {
+  return {
+    job_id: 'j1',
+    conversation_id: 'c1',
+    user_email: 'reader@example.com',
+    question: "Apple's balances?",
+    round: 1,
+    status: 'done',
+    created_at: '2026-10-01T15:00:00Z',
+    finished_at: '2026-10-01T15:00:09Z',
+    reply_status: 'partial',
+    reports: 0,
+    has_trace: true,
+    ...over,
+  };
+}
+
+const ROUNDS = [
+  round({ job_id: 'j1', reports: 1 }),
+  round({ job_id: 'j2', status: 'failed', reply_status: null }),
+];
+const REPORTS: AdminReport[] = [
+  {
+    id: 'r1',
+    job_id: 'j1',
+    user_email: 'reader@example.com',
+    question: "Apple's balances?",
+    note: 'goodwill looks wrong',
+    created_at: '2026-10-01T15:01:00Z',
+  },
+];
+const ACTIONS: AdminActionView[] = [
+  {
+    id: 'x1',
+    created_at: '2026-10-01T16:00:00Z',
+    admin_email: 'boss@example.com',
+    action: 'end_sessions',
+    target_id: 'u1',
+    target_email: 'reader@example.com',
+    detail: { ended: 1 },
+  },
+  {
+    id: 'x2',
+    created_at: '2026-10-01T15:30:00Z',
+    admin_email: 'boss@example.com',
+    action: 'create_invite',
+    target_id: 'i1',
+    target_email: null,
+    detail: { days: 14 },
+  },
+];
+
 const INVITES = [
   invite({ id: 'i1' }),
   invite({ id: 'i2' }),
@@ -69,6 +122,7 @@ describe('AdminPage', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: MatDialog, useValue: dialog },
       ],
     });
@@ -77,9 +131,22 @@ describe('AdminPage', () => {
 
   afterEach(() => http.verify());
 
-  function flushLists(users = USERS, invites = INVITES) {
+  function flushLists(users = USERS, invites = INVITES, rounds = ROUNDS) {
     http.expectOne('/api/admin/users').flush(users);
     http.expectOne((r) => r.url === '/api/admin/invites').flush(invites);
+    http.expectOne((r) => r.url === '/api/admin/jobs').flush(rounds);
+    http.expectOne((r) => r.url === '/api/admin/reports').flush(REPORTS);
+    http.expectOne((r) => r.url === '/api/admin/actions').flush(ACTIONS);
+  }
+
+  async function openTab(
+    fixture: { whenStable(): Promise<unknown> },
+    page: HTMLElement,
+    index: number,
+  ) {
+    (page.querySelectorAll('[role=tab]')[index] as HTMLElement).click();
+    await settle();
+    await fixture.whenStable();
   }
 
   async function shown() {
@@ -105,11 +172,11 @@ describe('AdminPage', () => {
 
   it('counts every tab, the invites by status with open first', async () => {
     const { fixture, page } = await shown();
-    expect(labels(page)).toEqual(['Users (2)', 'Invites (4)']);
+    expect(labels(page)).toEqual(['Users (2)', 'Invites (4)', 'Rounds (2)', 'Audit log (2)']);
     (page.querySelectorAll('[role=tab]')[1] as HTMLElement).click(); // open Invites
     await settle();
     await fixture.whenStable();
-    expect(labels(page).slice(2)).toEqual(['Open (2)', 'Used (1)', 'Revoked (1)', 'Expired (0)']);
+    expect(labels(page).slice(4)).toEqual(['Open (2)', 'Used (1)', 'Revoked (1)', 'Expired (0)']);
   });
 
   it("greys out an administrator's actions, and keeps a reader's", async () => {
@@ -189,6 +256,45 @@ describe('AdminPage', () => {
     expect(page.querySelector('[role=alert]')?.textContent).toContain(
       'already been used or revoked',
     );
+  });
+
+  it('links each round to its trace and shows what was reported on it', async () => {
+    const { fixture, page } = await shown();
+    await openTab(fixture, page, 2);
+    const link = page.querySelector<HTMLAnchorElement>('td.question a')!;
+    expect(link.getAttribute('href')).toBe('/admin/rounds/j1');
+    expect(page.querySelector('.note')?.textContent).toContain('goodwill looks wrong');
+    expect(page.querySelector('td.failed')?.textContent?.trim()).toBe('failed');
+  });
+
+  it('asks the server for the reported rounds when filtered', async () => {
+    const { component } = await shown();
+    const done = component['filterRounds']('reported');
+    const asked = http.expectOne((r) => r.url === '/api/admin/jobs');
+    expect(asked.request.params.get('reported')).toBe('true');
+    expect(asked.request.params.has('failed')).toBe(false);
+    asked.flush([ROUNDS[0]]);
+    await done;
+    await settle();
+  });
+
+  it('sets the debug actions apart in the audit log', async () => {
+    const { fixture, page } = await shown();
+    await openTab(fixture, page, 3);
+    const cells = [...page.querySelectorAll('td.mat-column-action')];
+    expect(cells.map((c) => c.textContent?.trim())).toEqual(['end sessions', 'create invite']);
+    expect(cells[0].classList).toContain('debug-action');
+    expect(cells[1].classList).not.toContain('debug-action');
+  });
+
+  it('says 100+ once a list holds all the server sends', async () => {
+    const fixture = TestBed.createComponent(AdminPage);
+    fixture.detectChanges();
+    const many = Array.from({ length: 100 }, (_, n) => round({ job_id: `j${n}` }));
+    flushLists(USERS, INVITES, many);
+    await settle();
+    await fixture.whenStable();
+    expect(labels(fixture.nativeElement as HTMLElement)).toContain('Rounds (100+)');
   });
 });
 

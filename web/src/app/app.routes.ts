@@ -34,5 +34,10 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     loadComponent: () => import('./admin/admin-page').then((m) => m.AdminPage),
   },
+  {
+    path: 'admin/rounds/:jobId', // one round's trace, linkable
+    canActivate: [adminGuard],
+    loadComponent: () => import('./admin/trace-page').then((m) => m.TracePage),
+  },
   { path: '**', redirectTo: '' },
 ];

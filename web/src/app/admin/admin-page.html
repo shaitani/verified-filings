@@ -7,7 +7,7 @@
 
   <mat-tab-group animationDuration="0ms">
     <!-- Users ------------------------------------------------------------------------- -->
-    <mat-tab [label]="'Users (' + store.users().length + ')'">
+    <mat-tab [label]="'Users (' + count(store.users()) + ')'">
       <div class="scroll">
         <table mat-table [dataSource]="store.users()">
           <ng-container matColumnDef="email">
@@ -105,7 +105,7 @@
     </mat-tab>
 
     <!-- Invites ----------------------------------------------------------------------- -->
-    <mat-tab [label]="'Invites (' + store.invites().length + ')'">
+    <mat-tab [label]="'Invites (' + count(store.invites()) + ')'">
       <div class="invites-head">
         <button mat-flat-button type="button" (click)="newInvite()">
           <mat-icon>add</mat-icon>
@@ -178,6 +178,120 @@
           </mat-tab>
         }
       </mat-tab-group>
+    </mat-tab>
+
+    <!-- Rounds ------------------------------------------------------------------------ -->
+    <mat-tab [label]="'Rounds (' + count(store.rounds()) + ')'">
+      <div class="rounds-head">
+        <mat-button-toggle-group
+          [value]="store.roundsFilter()"
+          (change)="filterRounds($event.value)"
+          aria-label="Which rounds"
+          hideSingleSelectionIndicator
+        >
+          <mat-button-toggle value="all">All</mat-button-toggle>
+          <mat-button-toggle value="reported">Reported</mat-button-toggle>
+          <mat-button-toggle value="failed">Failed</mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+
+      @if (store.rounds().length === 0) {
+        <p class="empty">None.</p>
+      } @else {
+        <div class="scroll">
+          <table mat-table [dataSource]="store.rounds()">
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef>When</th>
+              <td mat-cell *matCellDef="let round">
+                {{ round.created_at | date: 'MMM d, HH:mm' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="reader">
+              <th mat-header-cell *matHeaderCellDef>Reader</th>
+              <td mat-cell *matCellDef="let round">{{ round.user_email }}</td>
+            </ng-container>
+            <ng-container matColumnDef="question">
+              <th mat-header-cell *matHeaderCellDef>Question</th>
+              <td mat-cell *matCellDef="let round" class="question">
+                <a [routerLink]="['/admin/rounds', round.job_id]">{{ round.question }}</a>
+                @for (note of store.notesByJob().get(round.job_id) ?? []; track $index) {
+                  <span class="note">“{{ note }}”</span>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="round">
+              <th mat-header-cell *matHeaderCellDef>Round</th>
+              <td mat-cell *matCellDef="let round">{{ round.round }}</td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let round" [class.failed]="round.status === 'failed'">
+                {{ round.status }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="reply">
+              <th mat-header-cell *matHeaderCellDef>Reply</th>
+              <td mat-cell *matCellDef="let round">{{ round.reply_status ?? '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="flags">
+              <th mat-header-cell *matHeaderCellDef title="Problem reports">⚑</th>
+              <td mat-cell *matCellDef="let round">{{ round.reports || '' }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="roundColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: roundColumns"></tr>
+          </table>
+        </div>
+      }
+    </mat-tab>
+
+    <!-- Audit log --------------------------------------------------------------------- -->
+    <mat-tab [label]="'Audit log (' + count(store.actions()) + ')'">
+      @if (store.actions().length === 0) {
+        <p class="empty">Nothing yet.</p>
+      } @else {
+        <div class="scroll">
+          <table mat-table [dataSource]="store.actions()">
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef>When</th>
+              <td mat-cell *matCellDef="let entry">
+                {{ entry.created_at | date: 'MMM d, y, HH:mm' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="admin">
+              <th mat-header-cell *matHeaderCellDef>Admin</th>
+              <td mat-cell *matCellDef="let entry">{{ entry.admin_email }}</td>
+            </ng-container>
+            <ng-container matColumnDef="action">
+              <th mat-header-cell *matHeaderCellDef>Action</th>
+              <td mat-cell *matCellDef="let entry" [class.debug-action]="isDebug(entry.action)">
+                {{ actionLabel(entry.action) }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="target">
+              <th mat-header-cell *matHeaderCellDef>Target</th>
+              <td mat-cell *matCellDef="let entry">
+                @if (entry.action === 'read_trace' && entry.target_id) {
+                  <a [routerLink]="['/admin/rounds', entry.target_id]"
+                    >a round of {{ entry.target_email }}</a
+                  >
+                } @else {
+                  {{ entry.target_email ?? '' }}
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="detail">
+              <th mat-header-cell *matHeaderCellDef>Detail</th>
+              <td mat-cell *matCellDef="let entry" class="detail">
+                {{ detailText(entry.detail) }}
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="auditColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: auditColumns"></tr>
+          </table>
+        </div>
+      }
     </mat-tab>
   </mat-tab-group>
 </main>

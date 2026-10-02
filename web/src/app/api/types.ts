@@ -55,3 +55,7 @@ export type InviteStatus = AdminInvite['status'];
 export type InviteCreated = Schemas['InviteCreated'];
 export type NewInviteIn = Schemas['NewInviteIn'];
 export type PasswordReset = Schemas['PasswordReset'];
+export type AdminJob = Schemas['AdminJob'];
+export type AdminReport = Schemas['AdminReport'];
+export type AdminTrace = Schemas['AdminTrace'];
+export type AdminActionView = Schemas['AdminActionView'];

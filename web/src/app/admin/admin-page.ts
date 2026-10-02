@@ -1,12 +1,14 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import type { AdminInvite, AdminUser, InviteStatus } from '../api/types';
@@ -17,10 +19,14 @@ import {
   ShownOnceData,
   ShownOnceDialog,
 } from './admin-dialogs';
-import { AdminStore, INVITE_TABS } from './admin-store';
+import { ADMIN_LIST_LIMIT } from './admin-api';
+import { AdminStore, INVITE_TABS, RoundsFilter } from './admin-store';
 
 /** The note on an administrator's row, whose actions are greyed out. */
 export const ADMIN_ROW_NOTE = "Administrators are changed from the server's command line.";
+
+/** The audit log's debug-only actions, shown apart as the Users tab shows them. */
+const DEBUG_ACTIONS = new Set(['deactivate', 'reactivate', 'end_sessions']);
 
 const INVITE_TAB_TITLES: Readonly<Record<InviteStatus, string>> = {
   open: 'Open',
@@ -39,11 +45,13 @@ const INVITE_TAB_TITLES: Readonly<Record<InviteStatus, string>> = {
   imports: [
     DatePipe,
     MatButtonModule,
+    MatButtonToggleModule,
     MatIconModule,
     MatMenuModule,
     MatTableModule,
     MatTabsModule,
     MatTooltipModule,
+    RouterLink,
   ],
   providers: [AdminStore],
   templateUrl: './admin-page.html',
@@ -57,6 +65,37 @@ export class AdminPage implements OnInit {
   protected readonly inviteTabs = INVITE_TABS;
   protected readonly inviteTabTitles = INVITE_TAB_TITLES;
   protected readonly userColumns = ['email', 'joined', 'status', 'sessions', 'today', 'actions'];
+  protected readonly roundColumns = [
+    'when',
+    'reader',
+    'question',
+    'round',
+    'status',
+    'reply',
+    'flags',
+  ];
+  protected readonly auditColumns = ['when', 'admin', 'action', 'target', 'detail'];
+
+  /** A tab's count: "100+" once a list holds all the server sends. */
+  protected count(rows: readonly unknown[]): string {
+    return rows.length >= ADMIN_LIST_LIMIT ? `${ADMIN_LIST_LIMIT}+` : String(rows.length);
+  }
+
+  protected isDebug(action: string): boolean {
+    return DEBUG_ACTIONS.has(action);
+  }
+
+  protected actionLabel(action: string): string {
+    return action.replaceAll('_', ' ');
+  }
+
+  protected detailText(detail: unknown): string {
+    return detail === null || detail === undefined ? '' : JSON.stringify(detail);
+  }
+
+  protected filterRounds(filter: RoundsFilter): void {
+    void this.store.filterRounds(filter);
+  }
 
   /** The columns an invite tab shows: what happened to it, and what can be done. */
   protected inviteColumns(status: InviteStatus): string[] {

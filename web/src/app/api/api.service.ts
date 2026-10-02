@@ -4,8 +4,6 @@ import { Observable, map } from 'rxjs';
 
 import type { paths } from './openapi';
 import type {
-  AdminInvite,
-  AdminUser,
   AnswerIn,
   AnswersIn,
   ConversationSummary,
@@ -13,12 +11,9 @@ import type {
   FeedbackIn,
   GitHubAuthorize,
   GitHubInviteIn,
-  InviteCreated,
   JobCreated,
   JobView,
   NewConversationIn,
-  NewInviteIn,
-  PasswordReset,
   UserCreate,
   UserRead,
 } from './types';
@@ -134,59 +129,5 @@ export class ApiService {
   gitHubSignIn(fromGitHub: Readonly<Record<string, string>>): Observable<void> {
     const params = new HttpParams({ fromObject: fromGitHub });
     return this.http.get<void>(apiPath('/api/auth/github/callback'), { params });
-  }
-
-  // --- administration (DESIGN §13): administrators only, 404 to anyone else ------------
-
-  /** Every account, oldest first. */
-  adminUsers(): Observable<readonly AdminUser[]> {
-    return this.http.get<readonly AdminUser[]>(apiPath('/api/admin/users'));
-  }
-
-  /** A new random password, shown once; their sessions end. */
-  adminResetPassword(userId: string): Observable<PasswordReset> {
-    const url = apiPath('/api/admin/users/{user_id}/reset-password', { user_id: userId });
-    return this.http.post<PasswordReset>(url, null);
-  }
-
-  /** The account and everything of theirs, for good. */
-  adminDeleteUser(userId: string): Observable<void> {
-    return this.http.delete<void>(apiPath('/api/admin/users/{user_id}', { user_id: userId }));
-  }
-
-  /** Debug: out at once, until reactivated. */
-  adminDeactivate(userId: string): Observable<void> {
-    const url = apiPath('/api/admin/users/{user_id}/deactivate', { user_id: userId });
-    return this.http.post<void>(url, null);
-  }
-
-  /** Debug: able to sign in again. */
-  adminReactivate(userId: string): Observable<void> {
-    const url = apiPath('/api/admin/users/{user_id}/reactivate', { user_id: userId });
-    return this.http.post<void>(url, null);
-  }
-
-  /** Debug: signed out everywhere; they may sign in again. */
-  adminEndSessions(userId: string): Observable<void> {
-    const url = apiPath('/api/admin/users/{user_id}/end-sessions', { user_id: userId });
-    return this.http.post<void>(url, null);
-  }
-
-  /** Invites, newest first -- all of them; the page sorts them by status. */
-  adminInvites(): Observable<readonly AdminInvite[]> {
-    const params = new HttpParams({ fromObject: { limit: 500 } });
-    return this.http.get<readonly AdminInvite[]>(apiPath('/api/admin/invites'), { params });
-  }
-
-  /** A single-use code, valid `days`; the code is in this answer and nowhere else. */
-  adminCreateInvite(days: number): Observable<InviteCreated> {
-    const body: NewInviteIn = { days };
-    return this.http.post<InviteCreated>(apiPath('/api/admin/invites'), body);
-  }
-
-  /** An unspent code can no longer be spent. */
-  adminRevokeInvite(inviteId: string): Observable<void> {
-    const url = apiPath('/api/admin/invites/{invite_id}/revoke', { invite_id: inviteId });
-    return this.http.post<void>(url, null);
   }
 }

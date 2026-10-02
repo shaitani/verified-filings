@@ -21,14 +21,7 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 What is left, in order, each planned with the user before it is built. The
 user names these steps, not numbers:
 
-- **Admin tab: users and invites** — next. The client for the user list
-  (deactivate, reactivate, end sessions, reset password, delete) and invites
-  (create, list, revoke), on the routes of app/api/DESIGN.md §13. Shown only
-  when `/api/me` says `is_superuser`; the server checks every request anyway.
-  The user's account is an administrator, so it can be tried live.
-- **Admin tab: traces, problem reports and the audit log** — a readable view
-  of a round's prompts, replies, SQL and errors (§8, §13).
-- **Choose the host** — a walk-through with the user. The GPU decides it;
+- **Choose the host** — next; a walk-through with the user. The GPU decides it;
   options on the table: all at home behind Cloudflare Tunnel (+ Access), a
   droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.
 - **Production Docker setup** — the gate above.

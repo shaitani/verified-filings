@@ -1,0 +1,183 @@
+<main class="trace-page">
+  <a mat-button routerLink="/admin" class="back"><mat-icon>arrow_back</mat-icon> Admin</a>
+
+  @if (problem(); as sentence) {
+    <p class="problem" role="alert">{{ sentence }}</p>
+  }
+
+  @if (trace(); as trace) {
+    <header>
+      <h1>{{ trace.job.question }}</h1>
+      <p class="facts">
+        {{ trace.job.user_email }} · round {{ trace.job.round }} ·
+        <span [class.failed]="trace.job.status === 'failed'">{{ trace.job.status }}</span>
+        @if (trace.job.reply_status) {
+          · reply {{ trace.job.reply_status }}
+        }
+        · {{ trace.job.created_at | date: 'MMM d, y, HH:mm:ss' }}
+        @if (timings().length) {
+          · {{ totalSeconds() | number: '1.1-1' }} s
+        }
+      </p>
+      <p class="facts">
+        code {{ trace.code_version ?? 'unknown' }}
+        @if (dirty()) {
+          <span class="dirty" title="Written by code with uncommitted changes">uncommitted</span>
+        }
+        @for (model of models(); track model) {
+          · {{ model }}
+        }
+      </p>
+      <div class="header-actions">
+        <button mat-stroked-button type="button" (click)="copyAll()">
+          <mat-icon>{{ copied() === 'all' ? 'check' : 'content_copy' }}</mat-icon>
+          Copy the whole trace as JSON
+        </button>
+        <span class="logged">Opening this is recorded in the audit log.</span>
+      </div>
+    </header>
+
+    @if (!trace.job.has_trace) {
+      <p class="empty">This round is still running: its trace is written when it ends.</p>
+    }
+
+    @if (trace.reports.length) {
+      <section class="reports">
+        <h2>Problem reports ({{ trace.reports.length }})</h2>
+        @for (report of trace.reports; track report.id) {
+          <p>
+            <strong>{{ report.user_email }}</strong
+            >, {{ report.created_at | date: 'MMM d, HH:mm' }}:
+            {{ report.note ?? '(no note)' }}
+          </p>
+        }
+      </section>
+    }
+
+    @if (errors().length) {
+      <section class="errors">
+        <h2>Errors ({{ errors().length }})</h2>
+        @for (error of errors(); track $index) {
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>{{ error.stage }} · {{ error.type }}</mat-panel-title>
+              <mat-panel-description>{{ error.message }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <pre>{{ error.traceback }}</pre>
+          </mat-expansion-panel>
+        }
+      </section>
+    }
+
+    @if (timings().length) {
+      <section>
+        <h2>Timings</h2>
+        <table class="timings">
+          @for (timing of timings(); track timing.stage) {
+            <tr>
+              <th>{{ timing.stage }}</th>
+              <td>{{ timing.seconds | number: '1.2-2' }} s</td>
+            </tr>
+          }
+        </table>
+      </section>
+    }
+
+    <section>
+      <h2>Model calls ({{ modelCalls().length }})</h2>
+      @for (call of modelCalls(); track $index) {
+        <mat-expansion-panel>
+          <mat-expansion-panel-header>
+            <mat-panel-title>{{ call.stage }} · {{ call.model }}</mat-panel-title>
+            <mat-panel-description>
+              {{ call.seconds | number: '1.2-2' }} s
+              @if (call.error) {
+                <span class="failed">· {{ call.error }}</span>
+              }
+            </mat-panel-description>
+          </mat-expansion-panel-header>
+          <ng-template matExpansionPanelContent>
+            <div class="block-head">
+              <h3>Prompt</h3>
+              <button mat-button type="button" (click)="copy('prompt' + $index, call.prompt)">
+                <mat-icon>{{ copied() === 'prompt' + $index ? 'check' : 'content_copy' }}</mat-icon>
+                Copy
+              </button>
+            </div>
+            <pre>{{ call.prompt }}</pre>
+            <div class="block-head">
+              <h3>Reply</h3>
+              <button mat-button type="button" (click)="copy('reply' + $index, call.reply ?? '')">
+                <mat-icon>{{ copied() === 'reply' + $index ? 'check' : 'content_copy' }}</mat-icon>
+                Copy
+              </button>
+            </div>
+            <pre>{{ call.reply ?? '(no reply)' }}</pre>
+          </ng-template>
+        </mat-expansion-panel>
+      } @empty {
+        <p class="empty">None.</p>
+      }
+    </section>
+
+    <section>
+      <h2>SQL statements ({{ statements().length }})</h2>
+      @for (statement of statements(); track $index) {
+        <mat-expansion-panel>
+          <mat-expansion-panel-header>
+            <mat-panel-title>Statement {{ $index + 1 }}</mat-panel-title>
+            <mat-panel-description>
+              @if (statement.error) {
+                <span class="failed">{{ statement.error }}</span>
+              } @else {
+                ran
+              }
+            </mat-panel-description>
+          </mat-expansion-panel-header>
+          <ng-template matExpansionPanelContent>
+            <pre>{{ statement.sql }}</pre>
+            @if (statement.verdict) {
+              <h3>Validator</h3>
+              <pre>{{ json(statement.verdict) }}</pre>
+            }
+          </ng-template>
+        </mat-expansion-panel>
+      } @empty {
+        <p class="empty">None.</p>
+      }
+    </section>
+
+    <section>
+      <h2>What the stages made</h2>
+      @for (
+        part of [
+          { name: 'QueryIn', value: trace.query_in },
+          { name: 'QueryPlan', value: trace.plan },
+          { name: 'Result', value: trace.result },
+        ];
+        track part.name
+      ) {
+        <mat-expansion-panel>
+          <mat-expansion-panel-header>
+            <mat-panel-title>{{ part.name }}</mat-panel-title>
+            <mat-panel-description>{{
+              part.value ? '' : 'none: an earlier stage stopped'
+            }}</mat-panel-description>
+          </mat-expansion-panel-header>
+          <ng-template matExpansionPanelContent>
+            <div class="block-head">
+              <span></span>
+              <button mat-button type="button" (click)="copy(part.name, json(part.value))">
+                <mat-icon>{{ copied() === part.name ? 'check' : 'content_copy' }}</mat-icon>
+                Copy
+              </button>
+            </div>
+            <pre>{{ json(part.value) }}</pre>
+          </ng-template>
+        </mat-expansion-panel>
+      }
+    </section>
+  } @else if (!problem()) {
+    <p class="empty">Loading…</p>
+  }
+</main>
