@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { signedInGuard, signedOutGuard } from './auth/auth-guards';
+import { adminGuard, signedInGuard, signedOutGuard } from './auth/auth-guards';
 
 export const routes: Routes = [
   {
@@ -28,6 +28,11 @@ export const routes: Routes = [
     path: 'c/:conversationId', // a conversation, reopenable by its address
     canActivate: [signedInGuard],
     loadComponent: () => import('./conversation/thread-page').then((m) => m.ThreadPage),
+  },
+  {
+    path: 'admin', // administrators only: its own bundle, never downloaded by anyone else
+    canActivate: [adminGuard],
+    loadComponent: () => import('./admin/admin-page').then((m) => m.AdminPage),
   },
   { path: '**', redirectTo: '' },
 ];

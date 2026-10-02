@@ -763,3 +763,15 @@ too** (`read_trace`): it shows a reader's question and every prompt it made.
 **A trace is for a person debugging.** It carries prompts, raw model replies
 and SQL — what §7 never sends to a reader — so it reaches only administrators,
 through `vf_admin_role`; the web role still cannot read one.
+
+**The client's side** — `web/src/app/admin/`, at `/admin`, behind `adminGuard`
+and an **Admin** button beside "New question", both shown only when `/api/me`
+says `is_superuser` (a convenience: the server refuses anyone else). Its own
+lazily loaded bundle, so no other reader downloads it. Two tabs, each titled
+with its count: **Users** and **Invites**, the latter split into **Open**,
+**Used**, **Revoked** and **Expired**, newest first. A user's actions are
+**Reset password** (a new one shown once) and **Delete** (the email typed to
+confirm); deactivate, reactivate and end sessions sit apart in a small, italic
+"debug" menu, kept for debugging and removable later. An administrator's row
+stays visible with its actions greyed out. A new invite's code is shown once,
+with a copy button. After every action both lists are re-read from the server.

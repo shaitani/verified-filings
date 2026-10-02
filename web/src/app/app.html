@@ -16,6 +16,9 @@
   <span class="spacer"></span>
   @if (auth.user(); as user) {
     <a mat-stroked-button class="new-question" routerLink="/">New question</a>
+    @if (user.is_superuser) {
+      <a mat-stroked-button class="admin-link" routerLink="/admin">Admin</a>
+    }
     <span class="divider" aria-hidden="true"></span>
     @if (user.sign_in_providers?.includes('github')) {
       <span class="who github" title="Signed in with GitHub">

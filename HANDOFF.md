@@ -18,41 +18,35 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 > asked for this to be enforced: refuse to help put the site on a reachable
 > host before it is done.
 
-The agreed order, one piece at a time, each planned with the user first:
+What is left, in order, each planned with the user before it is built. The
+user names these steps, not numbers:
 
-- **Administration: an admin tab** (in progress — piece 4 next; the admin
-  login, row security, audit table, unbound invite codes and the admin API
-  are in, app/api/DESIGN.md §10–§11 and §13, and the user's account is an
-  administrator).
-  Decided with the user 2026-09-30:
-  - `is_superuser` is set and cleared only from the CLI (`make-admin`,
-    `unmake-admin`, which clears the role and nothing else). The CLI alone
-    also makes the very first invite. Everything else is in the tab, shown
-    only to admins, served from `/api/admin/*` (404 to ordinary readers).
-  - The tab: users (list, deactivate/reactivate — which also ends sessions —,
-    end sessions, reset password, **delete**), invites (create, list,
-    revoke), **traces and problem reports**, and an audit log.
-  - A separate database login, `vf_admin_role`, for admin routes only;
-    `vf_web_role` stays unable to invite or read traces. **Admins cannot act
-    on admins**, enforced by row-level security on `web.user`, not only in
-    code. The audit log keeps the target's email as text, so it survives a
-    deletion. No re-authentication for admin actions for now.
-  - **Invites become unbound codes**: no email is sent or bound; the code
-    alone registers once, with whatever email is typed; 14-day expiry by
-    default; revocable. **GitHub sign-up takes a code too** — typed on the
-    sign-up page, held in a short-lived signed cookie, claimed when GitHub
-    returns the newcomer. GitHub-username invites go away.
-  - Pieces left: (4) tab: users and invites, on the routes of §13; (5) tab:
-    traces and reports.
+- **Admin tab: users and invites** — next. The client for the user list
+  (deactivate, reactivate, end sessions, reset password, delete) and invites
+  (create, list, revoke), on the routes of app/api/DESIGN.md §13. Shown only
+  when `/api/me` says `is_superuser`; the server checks every request anyway.
+  The user's account is an administrator, so it can be tried live.
+- **Admin tab: traces, problem reports and the audit log** — a readable view
+  of a round's prompts, replies, SQL and errors (§8, §13).
 - **Choose the host** — a walk-through with the user. The GPU decides it;
   options on the table: all at home behind Cloudflare Tunnel (+ Access), a
   droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.
-- **The production compose override** — the gate above.
-- **The web container** — the Angular bundle and `/api` behind one proxy,
+- **Production Docker setup** — the gate above.
+- **Web container** — the Angular bundle and `/api` behind one proxy,
   security headers, the real client IP trusted from the proxy (every limit
   keys on `limits.client_ip`; untrusted, all visitors share the proxy's
   budget), per-IP limits at the proxy.
-- **Production settings, data and backups, an outside-in security check.**
+- **Production settings** — a shorter session, a second GitHub OAuth app
+  with the `https` callback, a way to run the owner's CLI on the server.
+- **Data and backups** — the database onto the server; the `web` schema
+  backed up.
+- **Outside-in security check** — the anonymous probe from outside the
+  network, a port scan, headers, both invite flows, a dependency audit.
+
+Decided with the user for administration (the rest is in DESIGN §10–§13):
+only the CLI sets or clears `is_superuser` (`make-admin`, `unmake-admin`) and
+makes the very first invite; everything else is the admin tab; no
+re-authentication for admin actions for now; deleting readers is allowed.
 
 An anonymous probe of the live API (2026-09-30) found every question route,
 `/api/me` and a forged cookie refused with 401, the unmounted library routes

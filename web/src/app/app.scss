@@ -64,7 +64,8 @@ main {
   margin-left: 4px;
 }
 
-.new-question {
+.new-question,
+.admin-link {
   background-color: var(
     --mat-sys-surface-container-high
   ); // the outlined button has no container-color token

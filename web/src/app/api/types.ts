@@ -47,3 +47,11 @@ export type GitHubInviteIn = Schemas['GitHubInviteIn'];
 
 // Who is signed in.
 export type UserRead = Schemas['UserRead'];
+
+// Administration (DESIGN §13): administrators only.
+export type AdminUser = Schemas['AdminUser'];
+export type AdminInvite = Schemas['AdminInvite'];
+export type InviteStatus = AdminInvite['status'];
+export type InviteCreated = Schemas['InviteCreated'];
+export type NewInviteIn = Schemas['NewInviteIn'];
+export type PasswordReset = Schemas['PasswordReset'];

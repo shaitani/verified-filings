@@ -32,3 +32,14 @@ export const signedOutGuard: CanActivateFn = async () => {
   await auth.check();
   return !auth.signedIn() || router.createUrlTree(['/']);
 };
+
+/**
+ * The admin pages: administrators only; anyone else goes home. A convenience, not the
+ * control -- the server answers every admin route with 404 to anyone else (DESIGN §13).
+ */
+export const adminGuard: CanActivateFn = async (_, state) => {
+  const [auth, router] = [inject(AuthStore), inject(Router)];
+  await auth.check();
+  if (!auth.signedIn()) return signInPage(router, state.url);
+  return auth.user()?.is_superuser === true || router.createUrlTree(['/']);
+};

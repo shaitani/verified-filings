@@ -1,0 +1,97 @@
+.admin {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  font: var(--mat-sys-headline-small);
+  margin: 0 0 8px;
+}
+
+.problem {
+  color: var(--mat-sys-error);
+}
+
+// A wide table scrolls inside its panel; the page itself never scrolls sideways.
+.scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 720px;
+}
+
+.actions {
+  white-space: nowrap;
+  text-align: right;
+
+  button + button {
+    margin-left: 8px;
+  }
+}
+
+.delete:not(:disabled) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+}
+
+// Debug-only actions: small, italic, quiet, so they never read as the real ones.
+.debug {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.7;
+  min-width: 0;
+}
+
+::ng-deep .debug-menu .mat-mdc-menu-item {
+  font-size: 12px;
+  font-style: italic;
+  min-height: 32px;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.admin-tag {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+// An administrator's row: visible, its actions greyed out (ADMIN_ROW_NOTE says why).
+.greyed td {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.inactive td {
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.invites-head {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 4px;
+}
+
+.empty {
+  padding: 16px 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -9,7 +9,7 @@ import {
   provideRouter,
 } from '@angular/router';
 
-import { safeReturnTo, signedInGuard, signedOutGuard } from './auth-guards';
+import { adminGuard, safeReturnTo, signedInGuard, signedOutGuard } from './auth-guards';
 
 describe('safeReturnTo', () => {
   it.each([
@@ -36,12 +36,12 @@ describe('the guards', () => {
 
   afterEach(() => http.verify());
 
-  function run(guard: typeof signedInGuard, url: string, signedIn: boolean) {
+  function run(guard: typeof signedInGuard, url: string, signedIn: boolean, admin = false) {
     const decided = TestBed.runInInjectionContext(() =>
       guard({} as ActivatedRouteSnapshot, { url } as RouterStateSnapshot),
     ) as Promise<boolean | UrlTree>;
     const me = http.expectOne('/api/me');
-    if (signedIn) me.flush({ id: 'u1', email: 'me@example.com' });
+    if (signedIn) me.flush({ id: 'u1', email: 'me@example.com', is_superuser: admin });
     else me.flush(null, { status: 401, statusText: 'Unauthorized' });
     return decided;
   }
@@ -59,6 +59,15 @@ describe('the guards', () => {
 
   it('sends a signed-in reader away from the sign-in pages', async () => {
     const decided = await run(signedOutGuard, '/login', true);
+    expect(TestBed.inject(Router).serializeUrl(decided as UrlTree)).toBe('/');
+  });
+
+  it('lets an administrator into the admin page', async () => {
+    expect(await run(adminGuard, '/admin', true, true)).toBe(true);
+  });
+
+  it('sends a reader who is not an administrator home', async () => {
+    const decided = await run(adminGuard, '/admin', true, false);
     expect(TestBed.inject(Router).serializeUrl(decided as UrlTree)).toBe('/');
   });
 });

@@ -1,0 +1,183 @@
+<main class="admin">
+  <h1>Admin</h1>
+
+  @if (store.problem(); as sentence) {
+    <p class="problem" role="alert">{{ sentence }}</p>
+  }
+
+  <mat-tab-group animationDuration="0ms">
+    <!-- Users ------------------------------------------------------------------------- -->
+    <mat-tab [label]="'Users (' + store.users().length + ')'">
+      <div class="scroll">
+        <table mat-table [dataSource]="store.users()">
+          <ng-container matColumnDef="email">
+            <th mat-header-cell *matHeaderCellDef>Email</th>
+            <td mat-cell *matCellDef="let user">
+              {{ user.email }}
+              @if (user.is_superuser) {
+                <span class="tag admin-tag">Admin</span>
+              }
+              @if (user.sign_in_providers.includes('github')) {
+                <span class="tag">GitHub</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="joined">
+            <th mat-header-cell *matHeaderCellDef>Joined</th>
+            <td mat-cell *matCellDef="let user">{{ user.created_at | date: 'MMM d, y' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let user">
+              {{ user.is_active ? 'Active' : 'Deactivated' }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="sessions">
+            <th mat-header-cell *matHeaderCellDef>Sessions</th>
+            <td mat-cell *matCellDef="let user">{{ user.sessions }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="today">
+            <th mat-header-cell *matHeaderCellDef title="Questions in the last 24 hours">Today</th>
+            <td mat-cell *matCellDef="let user">{{ user.questions_today }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
+            <td mat-cell *matCellDef="let user" class="actions">
+              <!-- A disabled button shows no tooltip, so the note sits on a wrapper. -->
+              <span [matTooltip]="user.is_superuser ? adminRowNote : ''">
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="user.is_superuser"
+                  (click)="resetPassword(user)"
+                >
+                  Reset password
+                </button>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="delete"
+                  [disabled]="user.is_superuser"
+                  (click)="deleteUser(user)"
+                >
+                  Delete
+                </button>
+                <button
+                  mat-button
+                  type="button"
+                  class="debug"
+                  [disabled]="user.is_superuser"
+                  [matMenuTriggerFor]="debug"
+                  [matMenuTriggerData]="{ user }"
+                >
+                  debug ▾
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="userColumns"></tr>
+          <tr
+            mat-row
+            *matRowDef="let user; columns: userColumns"
+            [class.greyed]="user.is_superuser"
+            [class.inactive]="!user.is_active"
+          ></tr>
+        </table>
+      </div>
+
+      <!-- Debug-only actions, kept apart from the two real ones. -->
+      <mat-menu #debug="matMenu" class="debug-menu">
+        <ng-template matMenuContent let-user="user">
+          @if (user.is_active) {
+            <button mat-menu-item type="button" (click)="deactivate(user)">Deactivate</button>
+          } @else {
+            <button mat-menu-item type="button" (click)="reactivate(user)">Reactivate</button>
+          }
+          <button mat-menu-item type="button" (click)="endSessions(user)">End sessions</button>
+        </ng-template>
+      </mat-menu>
+    </mat-tab>
+
+    <!-- Invites ----------------------------------------------------------------------- -->
+    <mat-tab [label]="'Invites (' + store.invites().length + ')'">
+      <div class="invites-head">
+        <button mat-flat-button type="button" (click)="newInvite()">
+          <mat-icon>add</mat-icon>
+          New invite code
+        </button>
+      </div>
+
+      <mat-tab-group animationDuration="0ms" class="invite-tabs">
+        @for (status of inviteTabs; track status) {
+          <mat-tab
+            [label]="inviteTabTitles[status] + ' (' + store.invitesByStatus()[status].length + ')'"
+          >
+            @if (store.invitesByStatus()[status].length === 0) {
+              <p class="empty">None.</p>
+            } @else {
+              <div class="scroll">
+                <table mat-table [dataSource]="store.invitesByStatus()[status]">
+                  <ng-container matColumnDef="created">
+                    <th mat-header-cell *matHeaderCellDef>Created</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.created_at | date: 'MMM d, y, HH:mm' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="expires">
+                    <th mat-header-cell *matHeaderCellDef>Expires</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.expires_at | date: 'MMM d, y, HH:mm' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="usedBy">
+                    <th mat-header-cell *matHeaderCellDef>Used by</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.used_by_email ?? '(account deleted)' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="usedAt">
+                    <th mat-header-cell *matHeaderCellDef>Used</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.used_at | date: 'MMM d, y, HH:mm' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="revokedAt">
+                    <th mat-header-cell *matHeaderCellDef>Revoked</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.revoked_at | date: 'MMM d, y, HH:mm' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="madeBy">
+                    <th mat-header-cell *matHeaderCellDef>Made by</th>
+                    <td mat-cell *matCellDef="let invite">
+                      {{ invite.created_by_email ?? 'the command line' }}
+                    </td>
+                  </ng-container>
+                  <ng-container matColumnDef="revoke">
+                    <th mat-header-cell *matHeaderCellDef>
+                      <span class="visually-hidden">Actions</span>
+                    </th>
+                    <td mat-cell *matCellDef="let invite" class="actions">
+                      <button mat-stroked-button type="button" (click)="revokeInvite(invite)">
+                        Revoke
+                      </button>
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="inviteColumns(status)"></tr>
+                  <tr mat-row *matRowDef="let row; columns: inviteColumns(status)"></tr>
+                </table>
+              </div>
+            }
+          </mat-tab>
+        }
+      </mat-tab-group>
+    </mat-tab>
+  </mat-tab-group>
+</main>
