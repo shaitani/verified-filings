@@ -21,10 +21,10 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 What is left, in order, each planned with the user before it is built. The
 user names these steps, not numbers:
 
-- **Choose the host** — next; a walk-through with the user. The GPU decides it;
-  options on the table: all at home behind Cloudflare Tunnel (+ Access), a
-  droplet with Ollama at home over Tailscale, a rented GPU VM, Tailscale-only.
-- **Production Docker setup** — the gate above.
+- **Production Docker setup** — next; the gate above. The host is decided:
+  the user's PC, reached through Tailscale Funnel run as a container
+  (docs/FUTURE.md). Funnel makes the site reachable, so it is not switched
+  on until this is in use.
 - **Web container** — the Angular bundle and `/api` behind one proxy,
   security headers, the real client IP trusted from the proxy (every limit
   keys on `limits.client_ip`; untrusted, all visitors share the proxy's

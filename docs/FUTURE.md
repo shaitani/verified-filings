@@ -8,30 +8,50 @@ progress is in [HANDOFF.md](../HANDOFF.md).
 
 ## Next
 
-### Deployment — host not decided
+### Deployment — the user's PC, through Tailscale Funnel
 
-DigitalOcean is likely, not decided, and the user is not ready to be walked
-through it. Until then it is a constraint: flag anything built now that would
-not run on a rented Linux VM with Docker. None of this is done:
+Decided with the user (2026-10-02): every container runs on the user's own
+Windows PC (its GTX 1080 Ti, 11 GB, serves Ollama), reached from the internet
+through **Tailscale Funnel**, run as a container in the compose file. No
+router port is opened and the home IP stays hidden; TLS ends on the PC, so
+Tailscale relays the traffic without reading it. The address is
+`<machine>.<tailnet>.ts.net` — the machine name is the user's to choose, the
+tailnet name only a re-roll of Tailscale's offered pairs. Set aside: rented
+GPU servers (no budget for them), Cloudflare Tunnel (Cloudflare reads the
+traffic; Access adds a second sign-in). Later options the user keeps open: a
+Linux box on the home network (B) or a small VPS in front with a custom
+domain (E) — both keep the containers as they are and change only the front
+door and the GitHub callback.
+
+**Funnel makes the site reachable, so the gate below holds before it is
+switched on.** None of this is done:
 
 - **A production compose override — a gate: nothing is deployed before it
-  exists and is in use.** Publish only the reverse proxy's 443
-  (and 80, to redirect); drop `db-test` and `pgadmin`; replace the committed
-  `postgres`/`postgres` and pgAdmin password; secrets from a secret store, not
-  readable with `docker inspect`.
-- **A reverse proxy** (nginx or Caddy, with TLS) serving the Angular bundle
-  and proxying `/api`, with response buffering off for the event stream. One
-  origin keeps the cookie and the stream simple.
-- **A second GitHub OAuth app** for production, with the `https` callback.
-- **The real client IP, and per-IP limits at the front door.** The server's
-  own limits (app/api/DESIGN.md §4, §10) key on `limits.client_ip`, which
-  behind a proxy sees only the proxy — every visitor would share one budget.
-  Trust the proxy's header for it (uvicorn `--forwarded-allow-ips`, or
-  Cloudflare's), and add the proxy's own per-IP request limits.
+  exists and is in use.** Publish no ports (Funnel reaches the web container
+  over the compose network); drop `db-test` and `pgadmin`; replace the
+  committed `postgres`/`postgres`; secrets as files, not readable with
+  `docker inspect`; restart policies; Ollama pinned to a version.
+- **A web container** (Caddy) serving the Angular bundle and proxying
+  `/api`, with response buffering off for the event stream, security headers,
+  and `/api/health` not forwarded. Plain HTTP inside: Funnel holds the
+  certificate. One origin keeps the cookie and the stream simple.
+- **The Tailscale container**, with Funnel pointing `https://…ts.net` at the
+  web container.
+- **The real client IP.** The server's limits (app/api/DESIGN.md §4, §10) key
+  on `limits.client_ip`, which behind a proxy sees only the proxy — every
+  visitor would share one budget. Funnel passes the visitor in
+  `X-Forwarded-For`: Caddy trusts it only from the Tailscale container, and
+  uvicorn (`--forwarded-allow-ips`) only from Caddy.
+- **An ops container**, run only by hand, holding the owner's login:
+  migrations, role provisioning, `make-admin`, `invite`.
+- **A second GitHub OAuth app** for production, with the
+  `https://<machine>.<tailnet>.ts.net/auth/github/callback` callback.
 - **A shorter session** — `AUTH_SESSION_DAYS` is 30; the user expects to
   change it.
-- **A GPU** for Ollama on the server; on a CPU generation is an order of
-  magnitude slower.
+- **Data and backups** — the server's database restored from a dump of
+  today's; a nightly `pg_dump`, copied off the machine.
+- **The PC itself** — Docker Desktop starting at sign-in, sleep off, Windows
+  Update restarts held to active hours.
 - **Optionally an email sender**, which turns on email verification and
   password reset (below).
 
