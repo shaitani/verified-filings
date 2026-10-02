@@ -66,3 +66,17 @@ def test_the_production_secrets_are_made_once_and_agree(tmp_path) -> None:
     before = {p.name: p.read_text() for p in tmp_path.iterdir()}
     assert prod_secrets.make(tmp_path) == []  # never overwrites
     assert {p.name: p.read_text() for p in tmp_path.iterdir()} == before
+
+
+def test_a_role_s_pool_never_outgrows_its_connection_limit() -> None:
+    """Otherwise a burst of requests asks the database for more than the role may
+    hold, and the overflow fails with "too many connections"."""
+    from app.db import roles, session
+
+    url = "postgresql+asyncpg://{}:pw@localhost:5432/verified_filings"
+    for factory, spec in (
+        (session.web_sessionmaker, roles.WEB),
+        (session.admin_sessionmaker, roles.ADMIN),
+    ):
+        pool = factory(url.format(spec.name)).kw["bind"].pool
+        assert pool.size() + pool._max_overflow == spec.connection_limit, spec.name

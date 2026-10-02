@@ -676,6 +676,10 @@ without its own login, rather than fail on an admin's first click.
   name.**
 - `search_path` pinned per role (`web` for the web role); `statement_timeout`,
   `idle_in_transaction_session_timeout` and connection limits per role.
+  Each role's connection pool (`app/db/session.py` `_role_engine`) is capped at
+  that limit with no overflow, so a burst of requests waits for a connection
+  rather than being refused one — the admin page loads five lists at once
+  against the admin role's four.
 - Each password is read from the URL the application connects with.
 - `--check` reports every privilege type in every managed schema.
 

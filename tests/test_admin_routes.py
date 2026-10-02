@@ -4,6 +4,7 @@ captures test_routes.py uses, so a reader's question leaves a real job and trace
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 
@@ -350,3 +351,14 @@ async def test_the_audit_log_reads_newest_first(site) -> None:
     assert reader is not None
     logged = [a["action"] for a in (await boss.get("/api/admin/actions")).json()]
     assert logged[:2] == ["end_sessions", "create_invite"]
+
+
+async def test_a_burst_of_admin_requests_waits_for_connections_rather_than_failing(site) -> None:
+    """The admin page loads five lists at once, and vf_admin_role may hold only
+    four connections: the pool must queue the rest, not ask for a fifth (which
+    the database refuses -- a 500 on the page)."""
+    signed_in, _, _ = site
+    boss = await signed_in("boss", as_admin=True)
+    paths = ["/api/admin/users", "/api/admin/invites", "/api/admin/jobs", "/api/admin/reports"]
+    answers = await asyncio.gather(*(boss.get(path) for path in paths * 3))
+    assert [a.status_code for a in answers] == [200] * len(answers)

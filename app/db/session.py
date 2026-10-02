@@ -29,7 +29,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.db.roles import ADMIN, WEB
+from app.db.roles import ADMIN, QUERY_MAPPER, RETRIEVAL, WEB, RoleSpec
 
 #: One per process: a managed pool of connections to PostgreSQL.
 engine = create_async_engine(settings.database_url)
@@ -39,7 +39,20 @@ engine = create_async_engine(settings.database_url)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
-def _readonly_engine(url: str | None, *, missing: list[str], variable: str):
+def _role_engine(url: str, spec: RoleSpec):
+    """An engine whose pool never asks for more connections than the role may
+    hold. The default pool grows to 15, and a role capped below that (the admin
+    role's 4) then fails a burst of requests with "too many connections" -- the
+    admin page loads five lists at once. Capped, a request beyond the limit waits
+    for a free connection instead."""
+    if spec.connection_limit < 0:  # unlimited
+        return create_async_engine(url)
+    return create_async_engine(
+        url, pool_size=spec.connection_limit, max_overflow=0, pool_timeout=30
+    )
+
+
+def _readonly_engine(url: str | None, *, missing: list[str], variable: str, spec: RoleSpec):
     """An engine for a read-only role, or the writable one if it is not
     configured.
 
@@ -52,7 +65,7 @@ def _readonly_engine(url: str | None, *, missing: list[str], variable: str):
     if url is None:
         missing.append(variable)
         return engine
-    return create_async_engine(url)
+    return _role_engine(url, spec)
 
 
 _missing: list[str] = []
@@ -61,11 +74,13 @@ query_mapper_engine = _readonly_engine(
     settings.database_url_query_mapper,
     missing=_missing,
     variable="DATABASE_URL_QUERY_MAPPER",
+    spec=QUERY_MAPPER,
 )
 retrieval_engine = _readonly_engine(
     settings.database_url_retrieval,
     missing=_missing,
     variable="DATABASE_URL_RETRIEVAL",
+    spec=RETRIEVAL,
 )
 
 #: True when *both* read-only factories are genuinely read-only. Worth
@@ -110,7 +125,7 @@ def web_sessionmaker(url: str | None = None) -> async_sessionmaker:
     if user != WEB.name:
         # Pointing it at the owner by mistake would quietly undo every grant.
         raise WebRoleMissing(f"DATABASE_URL_WEB logs in as {user!r}, not {WEB.name!r}")
-    return async_sessionmaker(create_async_engine(url), expire_on_commit=False)
+    return async_sessionmaker(_role_engine(url, WEB), expire_on_commit=False)
 
 
 class AdminRoleMissing(RuntimeError):
@@ -130,4 +145,4 @@ def admin_sessionmaker(url: str | None = None) -> async_sessionmaker:
     user = make_url(url).username
     if user != ADMIN.name:
         raise AdminRoleMissing(f"DATABASE_URL_ADMIN logs in as {user!r}, not {ADMIN.name!r}")
-    return async_sessionmaker(create_async_engine(url), expire_on_commit=False)
+    return async_sessionmaker(_role_engine(url, ADMIN), expire_on_commit=False)
