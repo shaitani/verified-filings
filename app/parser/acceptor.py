@@ -324,6 +324,9 @@ def check_span(
     shared = _SharedHead.find(normalized_question) if element.kind == "metric" else None
     readings = list(shared.readings) if shared else []
     if normalized_span not in " ~ ".join([haystack, *readings]):
+        asked = _curated_question_text(element)
+        if asked is not None:
+            return asked
         hint = (
             f" The list after the colon is written one metric per item, each "
             f"with its heading: {', '.join(repr(r) for r in readings)}."
@@ -348,6 +351,37 @@ def check_span(
             element, normalized_span, " ~ ".join([normalized_question, *readings])
         )
     return span
+
+
+def _curated_question_text(element: WireElement) -> str | None:
+    """The text a vague metric is given when its own words are not the
+    question's, but it names a curated question -- or ``None``.
+
+    Measured 2026-10-02 on "how much did google make in 2025?" and "how much
+    money did google make in 2025?": the model set ``clarify_as: money_made``
+    -- exactly right -- and wrote the metric as "how much money was made" or
+    "money made", words neither question contains. The faithfulness gate
+    refused both, and the retry lost ``clarify_as`` while keeping the wording.
+
+    Accepting it is safe because the element can then only ever ask. The gate
+    exists to stop a reworded phrase from *binding the wrong figure*; this
+    replaces the model's text with one that the curated lookup resolves to
+    that same ``clarify`` entry, so the mapper asks its question and nothing
+    else. A paraphrase with no ``clarify_as`` -- or one naming something that
+    is not a curated question -- is still refused, and "revenue" carrying a
+    ``clarify_as`` never reaches the mapper as "revenue".
+    """
+    if element.kind != "metric" or not element.clarify_as:
+        return None
+    index = alias_index()
+    entry = index.clarify_entry(element.clarify_as)
+    if entry is None:
+        return None
+    for text in (entry.label, entry.metric):
+        hit = index.lookup(text)
+        if hit is not None and hit.metric == entry.metric:
+            return text
+    return None
 
 
 def _haystack(normalized_question: str, answers: list[tuple[str, str]] | None) -> str:

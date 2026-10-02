@@ -560,3 +560,13 @@ questions:
     question: What was Nvidia's quarterly net income in 2023, 2024 and 2025?
     expect: [answered]  # net income, by quarter: "quarterly" sits on the metric, away from the years
     needs: [retrieval]
+
+  - id: q065
+    question: how much did google make in 2025?
+    expect: [asked]
+    needs: [retrieval]
+
+  - id: q066
+    question: how much money did google make in 2025?
+    expect: [asked]
+    needs: [retrieval]

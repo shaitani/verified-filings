@@ -471,6 +471,40 @@ def test_every_ranking_example_says_which_end_comes_first():
     assert "lowest" in directions and "highest" in directions
 
 
+def test_unfaithful_text_naming_a_curated_question_is_asked_not_refused():
+    """q065/q066: the model named the right question and reworded the metric.
+    The element can only ask, so it is kept -- under text the curated lookup
+    resolves to that same question, never the model's own words."""
+    from app.semantic.metric_aliases import alias_index
+
+    question = "how much did google make in 2025?"
+    reply = _reply(
+        intent="lookup",
+        elements=[
+            {"id": "e1", "kind": "company", "text": "google"},
+            {"id": "e2", "kind": "metric", "text": "money made", "clarify_as": "money_made"},
+            {"id": "e3", "kind": "period", "text": "2025", "fiscal_year": 2025},
+        ],
+    )
+    (metric,) = [e for e in accept(reply, question).elements if e.kind == "metric"]
+    assert alias_index().lookup(metric.text).metric == "money_made"
+
+
+def test_unfaithful_text_without_a_curated_question_is_still_refused():
+    question = "how much did google make in 2025?"
+    for extra in ({}, {"clarify_as": "no_such_entry"}):
+        reply = _reply(
+            intent="lookup",
+            elements=[
+                {"id": "e1", "kind": "company", "text": "google"},
+                {"id": "e2", "kind": "metric", "text": "revenue", **extra},
+                {"id": "e3", "kind": "period", "text": "2025", "fiscal_year": 2025},
+            ],
+        )
+        with pytest.raises((UnfaithfulSpan, MalformedProposal)):
+            accept(reply, question)
+
+
 def test_an_invented_company_is_refused():
     reply = _reply(
         elements=[

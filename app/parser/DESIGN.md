@@ -493,6 +493,18 @@ vague, and should get none. If the model needs a new example to reach a new
 entry, add one and re-measure the colon-list questions: every prompt change
 here has moved them.
 
+**The one exception to the faithfulness gate.** When a metric's text is not
+in the question but it carries a valid `clarify_as`, `accept()` keeps the
+element and replaces the text with the curated entry's label, which the
+lookup resolves to that same question (`_curated_question_text`). Measured
+2026-10-02: "how much did google make in 2025?" and "how much money did google
+make in 2025?" both came back with `clarify_as: money_made` — right — and the
+metric written as "money made", which neither question contains; the gate
+refused both and the retry lost `clarify_as`. Safe because such an element can
+only ever ask: the gate exists to stop a reworded phrase *binding a wrong
+figure*, and the replaced text cannot bind anything but the curated question.
+A reworded metric without a valid `clarify_as` is still refused.
+
 **Examples in the prompt.** "how much money was made" → `money_made`, "margins"
 → `profit_margin`, and "fare" → `performance`, the last a word the file does
 not list, so the model sees the field is for unlisted words too.

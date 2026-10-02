@@ -687,7 +687,7 @@ metrics:
         make, made, earn, earned,
       ]
     clarify:
-      question: Which do you mean by money made -- the money that came in, or the money that was left?
+      question: Which do you mean by money made?
       options:
         - metric: revenue
           description: Everything customers paid. The top line, before any cost is taken out.
