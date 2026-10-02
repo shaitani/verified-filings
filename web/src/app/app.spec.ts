@@ -115,4 +115,23 @@ describe('App on a phone', () => {
     await fixture.whenStable();
     expect(page.querySelector('.account-panel')).toBeNull();
   });
+
+  it('moves the theme toggle into the account panel, making room for the name', async () => {
+    const { fixture, page } = await signedIn(false);
+    expect(page.querySelector('mat-toolbar .theme-toggle')).toBeNull();
+    expect(page.querySelector('mat-toolbar .word')?.textContent).toContain('Verified Filings');
+    page.querySelector<HTMLButtonElement>('[aria-label=Account][aria-haspopup]')!.click();
+    await fixture.whenStable();
+    const toggle = page.querySelector<HTMLButtonElement>('.account-panel .theme-item')!;
+    // The test DOM has no matchMedia; "reduced motion" makes the switch instant.
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    const wasDark = document.body.classList.contains('dark');
+    toggle.click();
+    await fixture.whenStable();
+    expect(document.body.classList.contains('dark')).toBe(!wasDark);
+    expect(page.querySelector('.account-panel')).not.toBeNull(); // a click inside keeps it open
+    toggle.click(); // leave the theme as it was
+    await fixture.whenStable();
+    vi.unstubAllGlobals();
+  });
 });

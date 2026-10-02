@@ -45,6 +45,11 @@
               }
               {{ user.email }}
             </p>
+            <!-- The theme lives here on a phone, making room in the banner for the name. -->
+            <button mat-button type="button" class="theme-item" (click)="toggleTheme()">
+              <mat-icon [svgIcon]="dark() ? 'light_mode' : 'dark_mode'" />
+              {{ dark() ? 'Light mode' : 'Dark mode' }}
+            </button>
             <button mat-button type="button" (click)="signOut()">
               <mat-icon svgIcon="logout" />
               Sign out
@@ -74,16 +79,19 @@
       <button mat-button type="button" (click)="signOut()">Sign out</button>
     }
   }
-  <button
-    mat-icon-button
-    type="button"
-    class="theme-toggle"
-    [attr.aria-label]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
-    [attr.title]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
-    (click)="toggleTheme()"
-  >
-    <mat-icon [svgIcon]="dark() ? 'light_mode' : 'dark_mode'" />
-  </button>
+  <!-- On a phone, signed in, the toggle is in the account panel instead (above). -->
+  @if (!(phone() && auth.user())) {
+    <button
+      mat-icon-button
+      type="button"
+      class="theme-toggle"
+      [attr.aria-label]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
+      [attr.title]="dark() ? 'Switch to light mode' : 'Switch to dark mode'"
+      (click)="toggleTheme()"
+    >
+      <mat-icon [svgIcon]="dark() ? 'light_mode' : 'dark_mode'" />
+    </button>
+  }
 </mat-toolbar>
 
 <mat-sidenav-container class="body">

@@ -119,10 +119,27 @@ main {
 }
 
 // A phone: the check badge stands for the name, and the account sits in a menu.
+// A phone: the name at a smaller size, the buttons as icons, the account and the
+// theme in a panel. Below 360px wide (the narrowest phones) the badge stands alone.
 .compact {
   padding: 0 8px;
 
+  .mark {
+    width: 24px;
+    height: 24px;
+  }
+
   .word {
+    font-size: 18px;
+  }
+
+  .title {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 359.98px) {
+  .compact .word {
     display: none;
   }
 }
