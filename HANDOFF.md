@@ -21,10 +21,12 @@ what is wrong in [docs/GAPS.md](docs/GAPS.md), what comes later in
 What is left, in order, each planned with the user before it is built. The
 user names these steps, not numbers:
 
-- **Production Docker setup** — next; the gate above. The host is decided:
-  the user's PC, reached through Tailscale Funnel run as a container
-  (docs/FUTURE.md). Funnel makes the site reachable, so it is not switched
-  on until this is in use.
+- **Production Docker setup** — in progress; the gate above. The host is
+  decided: the user's PC, reached through Tailscale Funnel run as a container
+  (docs/FUTURE.md). `docker-compose.prod.yml`, its secrets and the ops
+  container are in and tried (app/api/DESIGN.md §12); the user stops
+  production while developing, never runs both. Funnel makes the site
+  reachable, so it is not switched on until the web container is in too.
 - **Web container** — the Angular bundle and `/api` behind one proxy,
   security headers, the real client IP trusted from the proxy (every limit
   keys on `limits.client_ip`; untrusted, all visitors share the proxy's

@@ -255,7 +255,7 @@ travels on the `ResultSet`. Detail:
 | `app/api/admin_routes.py`, `admin_storage.py` | `/api/admin/*`: users, invites, traces, reports, the audit log — administrators only, as `vf_admin_role` |
 | `app/api/schemas.py`, `app/schemas/answer_view.py` | the wire contract; the client's TypeScript types are generated from it |
 | `app/db/web.py` | the `web` schema |
-| `api.Dockerfile`, `docker-compose.yml` `api` | the server's container, behind the `web` profile |
+| `api.Dockerfile`, `docker-compose.dev.yml` `api` | the server's container, behind the `web` profile |
 | `web/` | the Angular client |
 
 A question takes ~10 s on average and ~60 s at worst on one GPU, so a question

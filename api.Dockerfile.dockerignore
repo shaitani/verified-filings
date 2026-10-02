@@ -19,3 +19,6 @@ tests/
 evals/
 *.md
 !README.md
+
+# Production secrets: never in an image.
+secrets/

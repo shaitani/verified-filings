@@ -14,10 +14,10 @@ Run from the repository root. Don't ask anything, don't commit.
 
    ```bash
    V=$(git rev-parse --short=12 HEAD); [ -n "$(git status --porcelain)" ] && V="$V+dirty"
-   CODE_VERSION="$V" docker compose --profile web up -d --build --wait api
+   CODE_VERSION="$V" docker compose -f docker-compose.dev.yml --profile web up -d --build --wait api
    ```
 
-   If it fails, show `docker compose logs --tail 60 api` and stop.
+   If it fails, show `docker compose -f docker-compose.dev.yml logs --tail 60 api` and stop.
 
 2. **Restart the Web Client dev server**, hidden: no window, and no Angular
    prompts (output to a file is not a terminal, and `NG_CLI_ANALYTICS=false`

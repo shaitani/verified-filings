@@ -13,7 +13,7 @@ Exact Python versions are in `uv.lock`, JavaScript versions in
 | **Python 3.13+** | everything under `app/`, `evals/`, `tests/` | `.python-version` pins 3.13. Moved up from 3.9 when 3.9 reached end of life. The `from __future__ import annotations` headers are now unnecessary and harmless |
 | **uv** | dependency management, every Python command | Run everything as `uv run …`; the global `python` lacks the project's packages |
 | **ruff** | lint and import sorting | Rule set pinned in `pyproject.toml` (`E F I UP B`) so it does not drift with ruff's defaults. `app/db/migrations/` is excluded (Alembic owns that style). `app/parser/prompt.py` ignores `E501`: its line breaks are prompt content, and reflowing one example changed the model's output for an unrelated question |
-| **Docker Desktop + Compose** | `docker-compose.yml` | Five services: `db`, `db-test`, `pgadmin`, `ollama`, and `api` (behind the `web` profile). Every port is published on this machine's loopbacks only (`127.0.0.1` and `[::1]` — Windows resolves `localhost` to `::1` first, and binding only `127.0.0.1` made every connection wait ~2 s). `gpus: all` gives Ollama the card; Docker Desktop supplies the NVIDIA runtime |
+| **Docker Desktop + Compose** | `docker-compose.dev.yml`, `docker-compose.prod.yml` | Two projects, never run together (app/api/DESIGN.md §12). Dev — five services: `db`, `db-test`, `pgadmin`, `ollama`, and `api` (behind the `web` profile). Every port is published on this machine's loopbacks only (`127.0.0.1` and `[::1]` — Windows resolves `localhost` to `::1` first, and binding only `127.0.0.1` made every connection wait ~2 s). `gpus: all` gives Ollama the card; Docker Desktop supplies the NVIDIA runtime |
 | **Node 24, npm 11** | `web/` | |
 
 ## Data and database
@@ -25,7 +25,7 @@ Exact Python versions are in `uv.lock`, JavaScript versions in
 | **asyncpg** | the database driver | Chosen over psycopg (async throughout). Never imported: SQLAlchemy loads it from the `postgresql+asyncpg://` URL scheme. `greenlet` is SQLAlchemy's async bridge |
 | **pgvector (Python)** | `app/db/models.py`, the embedding migration | The `Vector` column type for concept embeddings |
 | **Alembic** | `alembic.ini`, `app/db/migrations/` | Async template. The URL comes from `.env`, not `alembic.ini`. How to write a migration: [ALEMBIC.md](ALEMBIC.md) |
-| **pgAdmin** | `docker-compose.yml`, http://localhost:5050 | Browsing the databases by hand. Local only |
+| **pgAdmin** | `docker-compose.dev.yml`, http://localhost:5050 | Browsing the databases by hand. Local only |
 | **PyYAML** | `app/semantic/metric_aliases.py`, `evals/` | The curated alias file and the eval questions |
 
 ## SEC access
@@ -44,7 +44,7 @@ Exact Python versions are in `uv.lock`, JavaScript versions in
 | **`qwen2.5-coder:7b`** | [C] Query Parser (question → elements); [E] Executor (only a derivation above Python's figures) | Temperature 0, 8,192-token context. Loads fully onto a GTX 1080 Ti (11 GB) at ~48 tok/s; `ollama ps` must say `100% GPU` or generation is an order of magnitude slower. Its replies depend on Ollama's prompt cache: [TESTING.md](TESTING.md#the-prompt-cache) |
 | **`nomic-embed-text` (v1.5)** | concept embeddings (`app/db/embedder.py`), question embeddings (mapper fallback) | Trained with task prefixes the Ollama model does not add: `search_document:` is baked into each concept's embedded text and `search_query:` is added to questions. Unprefixed, "net income" ranked `NetIncomeLoss` fifth |
 
-Both model tags are named in code, which is authoritative; `docker-compose.yml`
+Both model tags are named in code, which is authoritative; `docker-compose.dev.yml`
 repeats them for the pull and must be kept in step.
 
 ## SQL safety

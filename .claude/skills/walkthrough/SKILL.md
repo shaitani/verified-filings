@@ -23,7 +23,7 @@ Invoking this skill **is** the explicit request for a whole-set run (the usual
 
 1. **Preflight** (fix, don't ask):
    - `docker ps` must show `verified-filings-db-1` and `verified-filings-ollama-1`
-     healthy. If either is down: `docker compose up -d db ollama` and wait for
+     healthy. If either is down: `docker compose -f docker-compose.dev.yml up -d db ollama` and wait for
      healthy (poll with a Monitor until-loop, not sleep).
    - Run from the repo root: `C:\claude\verified-filings`.
 

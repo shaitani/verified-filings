@@ -12,3 +12,6 @@ build/
 
 # Office temp/lock files
 ~$*
+
+# Production secrets (app/prod_secrets.py): never in git.
+/secrets/

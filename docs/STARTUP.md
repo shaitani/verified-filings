@@ -14,13 +14,13 @@ Data, roles and models survive a restart. Only the processes need starting.
 2. Containers:
 
    ```
-   docker compose up -d
+   docker compose -f docker-compose.dev.yml up -d
    ```
 
 3. Wait until `db`, `db-test` and `ollama` show `(healthy)`:
 
    ```
-   docker compose ps
+   docker compose -f docker-compose.dev.yml ps
    ```
 
 4. Web Server — in its own terminal, leave it running:
@@ -38,13 +38,13 @@ Data, roles and models survive a restart. Only the processes need starting.
 
 6. Open http://localhost:4200
 
-Stop: `Ctrl+C` in both terminals, then `docker compose stop`.
+Stop: `Ctrl+C` in both terminals, then `docker compose -f docker-compose.dev.yml stop`.
 
 ---
 
 ## From nothing
 
-A new machine, a fresh clone, or after `docker compose down -v`.
+A new machine, a fresh clone, or after `docker compose -f docker-compose.dev.yml down -v`.
 
 ### Install once
 
@@ -79,10 +79,10 @@ GitHub sign-in is optional: see the comments in `.env.example`.
 ### 3. Containers
 
 ```
-docker compose up -d
+docker compose -f docker-compose.dev.yml up -d
 ```
 
-Wait for `(healthy)` on `db`, `db-test`, `ollama` (`docker compose ps`). A
+Wait for `(healthy)` on `db`, `db-test`, `ollama` (`docker compose -f docker-compose.dev.yml ps`). A
 cold start downloads ~5 GB of models first.
 
 ### 4. Database schema — both databases
@@ -163,18 +163,77 @@ nothing* done first):
 PowerShell:
 
 ```
-$env:CODE_VERSION = git rev-parse --short=12 HEAD; docker compose --profile web up -d --build api
+$env:CODE_VERSION = git rev-parse --short=12 HEAD; docker compose -f docker-compose.dev.yml --profile web up -d --build api
 ```
 
 Git Bash:
 
 ```
-CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose --profile web up -d --build api
+CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.dev.yml --profile web up -d --build api
 ```
 
-pgAdmin: http://localhost:5050 (login in `docker-compose.yml`).
+pgAdmin: http://localhost:5050 (login in `docker-compose.dev.yml`).
 
 API docs: http://localhost:8000/docs
 
 When something does not come up: [BOOTSTRAP.md](BOOTSTRAP.md) — why this
 order, and a check for each piece.
+
+---
+
+## Production
+
+`docker-compose.prod.yml`: its own containers and database, on this PC. Never
+run beside dev — stop one before starting the other. Commands from the
+repository root, in Git Bash.
+
+### Once
+
+1. Secrets (in `secrets/`, never in git; run again only fills in what is
+   missing):
+
+   ```
+   uv run python -m app.prod_secrets
+   ```
+
+2. Copy the dev database, with dev running:
+
+   ```
+   docker compose -f docker-compose.dev.yml exec -T db pg_dump -U postgres -d verified_filings -Fc --no-owner --no-privileges > seed.dump
+   ```
+
+3. Stop dev, start the production database, restore into it. Seven errors
+   about missing roles are expected: step 4 makes the roles.
+
+   ```
+   docker compose -f docker-compose.dev.yml stop
+   docker compose -f docker-compose.prod.yml up -d --wait db
+   docker compose -f docker-compose.prod.yml exec -T db pg_restore -U postgres -d verified_filings --no-owner --no-privileges < seed.dump
+   ```
+
+4. Build, provision the roles, delete the dump:
+
+   ```
+   CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.prod.yml build api
+   docker compose -f docker-compose.prod.yml run --rm ops -m app.db.roles
+   rm seed.dump
+   ```
+
+### Start and stop
+
+```
+docker compose -f docker-compose.dev.yml stop
+CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.prod.yml up -d --build --wait
+```
+
+```
+docker compose -f docker-compose.prod.yml stop
+```
+
+### The owner's tools
+
+```
+docker compose -f docker-compose.prod.yml run --rm ops -m alembic upgrade head
+docker compose -f docker-compose.prod.yml run --rm ops -m app.db.roles --check
+docker compose -f docker-compose.prod.yml run --rm ops -m app.api.admin invite
+```

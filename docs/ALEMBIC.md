@@ -30,7 +30,7 @@ Facts worth knowing:
   Re-running is also how a changed grant is applied: provisioning revokes
   before it grants.
 
-**The database URL**, from `docker-compose.yml`:
+**The database URL**, from `docker-compose.dev.yml`:
 
 ```
 postgresql+asyncpg://postgres:postgres@localhost:5432/verified_filings
@@ -54,7 +54,7 @@ foreign key, or anything outside the model files.
 
 ## Writing one
 
-1. Database running: `docker compose up -d`.
+1. Database running: `docker compose -f docker-compose.dev.yml up -d`.
 2. Generate the file (writes a file, touches no database):
 
    ```

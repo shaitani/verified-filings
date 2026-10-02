@@ -38,3 +38,31 @@ def test_without_a_host_nothing_changes() -> None:
     url = "postgresql+asyncpg://u:p@localhost:5432/v"
     settings = Settings(_env_file=None, database_url=url, embedding_url="http://x")
     assert settings.database_url == url
+
+
+def test_a_production_container_reads_its_secrets_from_files(tmp_path) -> None:
+    """docker-compose.prod.yml mounts one file per secret, named after its setting;
+    a file written by an editor ends in a newline, which is not part of the value."""
+    (tmp_path / "database_url").write_text("postgresql+asyncpg://u:pw@localhost:5432/d\n")
+    (tmp_path / "embedding_url").write_text("http://ollama:11434")
+    (tmp_path / "auth_device_secret").write_text("d" * 43 + "\n")
+    settings = Settings(_env_file=None, _secrets_dir=tmp_path, database_host="db:5432")
+    assert settings.auth_device_secret == "d" * 43
+    assert settings.database_url == "postgresql+asyncpg://u:pw@db:5432/d"  # still re-hosted
+
+
+def test_the_production_secrets_are_made_once_and_agree(tmp_path) -> None:
+    from app import prod_secrets
+
+    written = prod_secrets.make(tmp_path)
+    assert "postgres_password" in written and "auth_device_secret" in written
+    password = (tmp_path / "postgres_password").read_text().strip()
+    owner = (tmp_path / "database_url_owner").read_text().strip()
+    assert owner == f"postgresql+asyncpg://postgres:{password}@db:5432/verified_filings"
+    web = (tmp_path / "database_url_web").read_text().strip()
+    assert web.startswith("postgresql+asyncpg://vf_web_role:") and password not in web
+    assert (tmp_path / "github_oauth_client_id").read_text() == "\n"  # filled in by hand
+
+    before = {p.name: p.read_text() for p in tmp_path.iterdir()}
+    assert prod_secrets.make(tmp_path) == []  # never overwrites
+    assert {p.name: p.read_text() for p in tmp_path.iterdir()} == before

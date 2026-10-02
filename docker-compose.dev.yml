@@ -1,3 +1,9 @@
+# Development: this machine only. Production is docker-compose.prod.yml, a separate
+# project (its own containers and database), never run at the same time as this one.
+# Named explicitly, so the containers and volumes stay "verified-filings-*" whatever
+# the folder is called.
+name: verified-filings
+
 services:
   db:
     image: pgvector/pgvector:pg17
@@ -54,7 +60,7 @@ services:
   # HTTP API for concept-search embeddings -- nothing leaves the machine.
   # 11434 is Ollama's standard port.
   #
-  # The image ships no models baked in, and `docker compose down -v` wipes the
+  # The image ships no models baked in, and `docker compose -f docker-compose.dev.yml down -v` wipes the
   # "ollama-models" volume along with the database ones -- so the pull happens
   # here, on startup, rather than as a step in docs/STARTUP.md that gets
   # forgotten. A forgotten pull surfaces as a connection-level error from the
@@ -62,7 +68,7 @@ services:
   #
   # The pull runs in a background subshell that waits for the server to answer,
   # while `exec ollama serve` takes over PID 1 so signals still reach it and
-  # `docker compose stop` stays fast. A one-shot "puller" service would do the
+  # `docker compose -f docker-compose.dev.yml stop` stays fast. A one-shot "puller" service would do the
   # same job but leave an exited container behind after every `up`.
   #
   # Pulling a model already in the volume verifies its digest and returns in
@@ -113,9 +119,9 @@ services:
   # every database URL at "db" while keeping its login, so no password is written
   # twice (app/config.py).
   #
-  # Behind the "web" profile, so the first `docker compose up -d` of docs/STARTUP.md
+  # Behind the "web" profile, so the first `docker compose -f docker-compose.dev.yml up -d` of docs/STARTUP.md
   # does not start it before the migration and roles it needs exist. Start it
-  # with `docker compose --profile web up -d`.
+  # with `docker compose -f docker-compose.dev.yml --profile web up -d`.
   api:
     profiles: ["web"]
     build:

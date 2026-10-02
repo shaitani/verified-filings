@@ -1,12 +1,12 @@
 """``generate(plan)`` -- ask Qwen for SQL. No database.
 
-Ollama serves the model alongside the embedding one (``docker-compose.yml``);
+Ollama serves the model alongside the embedding one (``docker-compose.dev.yml``);
 ``app/embedding_client.py`` is the pattern this follows.
 
 ``GENERATION_MODEL`` below is authoritative. **It is also named in
-``docker-compose.yml``'s pull line and health check, and the two have to be
+``docker-compose.dev.yml``'s pull line and health check, and the two have to be
 kept in step** -- the ``ollama`` service pulls its models on startup because
-``docker compose down -v`` wipes the model volume along with the database
+``docker compose -f docker-compose.dev.yml down -v`` wipes the model volume along with the database
 ones, and a model that only ever arrives by someone running ``ollama pull`` by
 hand is the step that goes missing after a wipe. See ``docs/BOOTSTRAP.md``.
 
@@ -44,7 +44,7 @@ from app.retrieval.prompt import (
 )
 from app.schemas.query import QueryPlan
 
-#: The model that writes the SQL. Mirrored in ``docker-compose.yml``'s pull
+#: The model that writes the SQL. Mirrored in ``docker-compose.dev.yml``'s pull
 #: line and health check -- this constant is authoritative, that is the copy.
 #:
 #: qwen2.5-coder:7b rather than something larger, because the task is narrow:

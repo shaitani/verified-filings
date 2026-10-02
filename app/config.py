@@ -8,9 +8,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # repo root, CWD-independent
 
+#: Where a production container finds its secrets: one file per setting, named
+#: after it (``/run/secrets/database_url_web``), mounted by docker-compose.prod.yml.
+#: Files, not environment variables, so ``docker inspect`` shows none of them.
+#: Absent on a developer's machine, where .env holds everything.
+SECRETS_DIR = Path("/run/secrets")
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        extra="ignore",
+        secrets_dir=SECRETS_DIR if SECRETS_DIR.is_dir() else None,
+    )
     database_url: str
     embedding_url: str
 

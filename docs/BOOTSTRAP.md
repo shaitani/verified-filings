@@ -8,7 +8,7 @@ not come up.
 
 ## What a volume wipe destroys
 
-`docker compose down -v` removes `pgdata`, `pgdata-test` **and**
+`docker compose -f docker-compose.dev.yml down -v` removes `pgdata`, `pgdata-test` **and**
 `ollama-models`.
 
 | | survives | why |
@@ -63,7 +63,7 @@ without the three signing secrets, or with a secret under 32 characters.
 Each check fails loudly rather than returning something plausible.
 
 ```
-docker compose ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"
+docker compose -f docker-compose.dev.yml ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"
 ```
 
 `db`, `db-test` and `ollama` must say `(healthy)`. Every published port must
@@ -89,26 +89,26 @@ uv run python -m app.db.roles --check
   columns without `is_superuser`.
 
 ```
-docker compose exec ollama ollama list
+docker compose -f docker-compose.dev.yml exec ollama ollama list
 ```
 
 Both models present — for when `ollama` is *not* healthy and you want to see
 which one is missing.
 
 ```
-docker compose exec ollama ollama ps
+docker compose -f docker-compose.dev.yml exec ollama ollama ps
 ```
 
 With a model loaded this must say **`100% GPU`**. Less means layers spilled to
 the CPU: roughly ten times slower, and otherwise silent.
 
 ```
-docker compose logs ollama | grep "inference compute"
+docker compose -f docker-compose.dev.yml logs ollama | grep "inference compute"
 ```
 
 Must name the card (`library=CUDA`). If it says nothing, the container cannot
 see the GPU and Ollama has fallen back to the CPU — it starts, answers, and
-passes every other check here, slowly. `gpus: all` in `docker-compose.yml` is
+passes every other check here, slowly. `gpus: all` in `docker-compose.dev.yml` is
 what grants it; Docker Desktop supplies the runtime.
 
 ```
@@ -130,14 +130,14 @@ looks like the home for it and does not work, for two reasons:
 
 - Init scripts run **before** anything else connects, so the schemas Alembic
   creates do not exist yet and the grants have nothing to grant on. No ordering
-  in `docker-compose.yml` can fix that: the init hook is the earliest thing by
+  in `docker-compose.dev.yml` can fix that: the init hook is the earliest thing by
   definition.
 - They run **only on the first initialisation of an empty data directory**,
   and are silently skipped on every existing volume — so drift between them and
   the migrations would go unnoticed until the next wipe.
 
 The schemas and the view stay in migrations: idempotent, re-runnable,
-versioned. `docker-compose.yml` carries what belongs to the container
+versioned. `docker-compose.dev.yml` carries what belongs to the container
 lifecycle: health checks and the model pull. The pull is folded into the
 `ollama` service rather than a one-shot "puller" service, which would leave an
 exited container behind after every `up` — and a row of dead containers is how

@@ -689,13 +689,13 @@ and refused cell by refused cell (`tests/test_roles.py`).
 
 The Web Server runs in its own container: `api.Dockerfile`, its paired
 `api.Dockerfile.dockerignore` (Docker matches it to the Dockerfile by name),
-and the `api` service in `docker-compose.yml`.
+and the `api` service in `docker-compose.dev.yml`.
 
 - **Python 3.13-slim with `uv`**, a frozen install from `uv.lock`, **one
   uvicorn worker** (§4), a non-root user, port 8000 on this machine's
   loopbacks only. It waits for `db` and `ollama` to be healthy; its own health
   check calls `GET /api/health`, which runs `SELECT 1` as the web role.
-- **Behind the `web` profile**, so a plain `docker compose up -d` does not
+- **Behind the `web` profile**, so a plain `docker compose -f docker-compose.dev.yml up -d` does not
   start it before the migration and roles it needs exist.
 - **Only the credentials it needs, by name** — the four role URLs, the
   secrets, GitHub — never `.env` whole. The owner's login and the test
@@ -712,9 +712,34 @@ and the `api` service in `docker-compose.yml`.
   **[A] deployed**: a small web-server container serving the built bundle and
   proxying `/api`, with response buffering off for the event stream.
 
-Why it is not yet fit for a public server, and what deployment needs:
-[docs/GAPS.md](../../docs/GAPS.md#g9-smaller-gaps),
-[docs/FUTURE.md](../../docs/FUTURE.md#deployment--host-not-decided).
+**Production is a second compose file**, `docker-compose.prod.yml` beside
+`docker-compose.dev.yml`, standalone rather than an override (an override cannot
+remove a service cleanly, and one file should say plainly what production is).
+Each names its project (`verified-filings`, `verified-filings-prod`), so the two
+share no container, network or database; they are never run together — one
+GPU. The Ollama model volume is the one thing shared, to save 5 GB.
+
+- **Nothing is published.** No service maps a port to the PC; the front door
+  reaches the api over the project's network.
+- **Secrets are files**, made by `app/prod_secrets.py` into `secrets/`
+  (git-ignored, and in the image's ignore file), each mounted only into the
+  containers that need it at `/run/secrets/<setting>`, which `app/config.py`
+  reads (`secrets_dir`). `docker inspect` shows none of them — checked value by
+  value. Postgres takes its superuser password the same way
+  (`POSTGRES_PASSWORD_FILE`), a new one, not dev's `postgres`.
+- **The owner's login lives in no running container.** The `ops` service — the
+  api image with Python as the entry point, behind the `ops` profile — is run by
+  hand for migrations, provisioning and administration, and removed when done.
+  The api gets the four role logins and the signing keys only.
+- **Images pinned** (`ollama/ollama:0.34.0`), and every long-running service
+  restarts on its own.
+- Inside the database container, the official image trusts local connections
+  without a password; over the network the password is required (checked: the
+  old `postgres` is refused). Only someone already able to run Docker on the PC
+  can reach the former.
+
+Commands: [docs/STARTUP.md](../../docs/STARTUP.md#production). What the
+deployment still needs: [docs/FUTURE.md](../../docs/FUTURE.md#deployment--the-users-pc-through-tailscale-funnel).
 
 ## 13. Administration
 

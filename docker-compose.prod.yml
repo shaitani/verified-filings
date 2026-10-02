@@ -1,0 +1,139 @@
+# Production: what runs when the site is served (docs/FUTURE.md, app/api/DESIGN.md §12).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# A project of its own ("verified-filings-prod"): its own containers, network and
+# database, never sharing a port or a volume with docker-compose.dev.yml -- the two
+# are not run at the same time (one GPU). The Ollama models are the one exception:
+# the dev project's volume is reused rather than downloading 5 GB twice.
+#
+# What makes this production rather than development:
+#   - no db-test, no pgadmin;
+#   - **no ports published**: nothing on this machine listens for the outside world.
+#     The front door (the web and Tailscale containers, still to come) reaches the
+#     api over this project's own network;
+#   - **secrets are files** in ./secrets (app/prod_secrets.py makes them; git and the
+#     image never see them), each mounted into only the containers that need it at
+#     /run/secrets/<name>. Not environment variables, so `docker inspect` shows none;
+#   - a new Postgres superuser password -- the committed postgres/postgres is dev's;
+#   - every image pinned, and every long-running service restarts on its own.
+name: verified-filings-prod
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: verified_filings
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d verified_filings"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # As in docker-compose.dev.yml, which explains the pull-on-start and the health
+  # check; pinned here to the version the project was measured on.
+  ollama:
+    image: ollama/ollama:0.34.0
+    volumes: ["ollama-models:/root/.ollama"]
+    gpus: all
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "( until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text; ollama pull qwen2.5-coder:7b ) & exec ollama serve"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "ollama list 2>/dev/null | grep -q nomic-embed-text && ollama list 2>/dev/null | grep -q qwen2.5-coder"
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  # The Web Server ([B]). One worker (app/api/DESIGN.md §4). Its secrets are the four
+  # role logins -- `database_url` is the web role's, so even an accidental "owner"
+  # session holds only vf_web_role's grants -- and the signing keys. Never the owner's.
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+      args:
+        CODE_VERSION: ${CODE_VERSION:-unknown}
+    image: verified-filings-prod-api
+    depends_on:
+      db: {condition: service_healthy}
+      ollama: {condition: service_healthy}
+    environment:
+      EMBEDDING_URL: http://ollama:11434
+      API_DOCS: "false"
+    secrets:
+      - {source: database_url_web, target: database_url}
+      - database_url_web
+      - database_url_admin
+      - database_url_query_mapper
+      - database_url_retrieval
+      - auth_reset_secret
+      - auth_verify_secret
+      - auth_oauth_state_secret
+      - auth_device_secret
+      - github_oauth_client_id
+      - github_oauth_client_secret
+    volumes: ["api-data:/srv/data"]  # retrieval_log.jsonl
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /srv/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # The owner's tools, run by hand and gone when they finish -- never left running,
+  # so the owner's login is in no long-lived container. The api image, Python as the
+  # entry point:
+  #
+  #   docker compose -f docker-compose.prod.yml run --rm ops -m alembic upgrade head
+  #   docker compose -f docker-compose.prod.yml run --rm ops -m app.db.roles
+  #   docker compose -f docker-compose.prod.yml run --rm ops -m app.api.admin invite
+  ops:
+    profiles: ["ops"]
+    image: verified-filings-prod-api
+    depends_on:
+      db: {condition: service_healthy}
+    entrypoint: ["/srv/.venv/bin/python"]
+    environment:
+      EMBEDDING_URL: http://ollama:11434
+    secrets:
+      - {source: database_url_owner, target: database_url}
+      - database_url_web  # provisioning reads each role's password from its URL
+      - database_url_admin
+      - database_url_query_mapper
+      - database_url_retrieval
+
+secrets:
+  postgres_password: {file: ./secrets/postgres_password}
+  database_url_owner: {file: ./secrets/database_url_owner}
+  database_url_web: {file: ./secrets/database_url_web}
+  database_url_admin: {file: ./secrets/database_url_admin}
+  database_url_query_mapper: {file: ./secrets/database_url_query_mapper}
+  database_url_retrieval: {file: ./secrets/database_url_retrieval}
+  auth_reset_secret: {file: ./secrets/auth_reset_secret}
+  auth_verify_secret: {file: ./secrets/auth_verify_secret}
+  auth_oauth_state_secret: {file: ./secrets/auth_oauth_state_secret}
+  auth_device_secret: {file: ./secrets/auth_device_secret}
+  github_oauth_client_id: {file: ./secrets/github_oauth_client_id}
+  github_oauth_client_secret: {file: ./secrets/github_oauth_client_secret}
+
+volumes:
+  pgdata:
+  api-data:
+  ollama-models:
+    external: true
+    name: verified-filings_ollama-models  # the dev project's: see the top

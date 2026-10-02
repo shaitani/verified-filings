@@ -123,11 +123,11 @@ the second).
   only, not the XBRL data store.
 - **The loader does not cross-check** a file's internal `cik` against the
   ticker used to find it.
-- **Not ready for a public server.** `docker-compose.yml` commits
-  `postgres`/`postgres` and pgAdmin's password, publishes database and Ollama
-  ports (loopback only), and the API container's secrets are readable with
-  `docker inspect`. The rate limits key on the connecting address, which
-  behind a proxy is the proxy. See the deployment entry in [FUTURE.md](FUTURE.md).
+- **Not ready for a public server yet.** `docker-compose.prod.yml` closes
+  what the dev file left open (committed passwords, published ports, secrets
+  in `docker inspect`), but there is no front door yet — no web container, no
+  Funnel — and the rate limits key on the connecting address, which behind a
+  proxy is the proxy. See the deployment entry in [FUTURE.md](FUTURE.md).
 
 ### Deferred by the user — do not reopen unprompted
 

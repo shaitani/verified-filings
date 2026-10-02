@@ -1,9 +1,9 @@
-# The Web Server ([B]). docker-compose.yml names this file for its "api" service.
+# The Web Server ([B]). docker-compose.dev.yml names this file for its "api" service.
 #
-#   CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose --profile web build api
+#   CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.dev.yml --profile web build api
 #
 # Nothing secret is baked in: every credential arrives as an environment variable
-# at run time (docker-compose.yml), and api.Dockerfile.dockerignore -- the ignore
+# at run time (docker-compose.dev.yml), and api.Dockerfile.dockerignore -- the ignore
 # file Docker pairs with this Dockerfile by its name -- keeps .env out of the image.
 
 FROM python:3.13-slim
