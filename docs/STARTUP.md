@@ -230,6 +230,15 @@ CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.p
 docker compose -f docker-compose.prod.yml stop
 ```
 
+Production in a browser on this PC: http://localhost:8080
+
+After a change to the production file's network, recreate the containers (the
+data stays; never add `-v`):
+
+```
+docker compose -f docker-compose.prod.yml down
+```
+
 ### The owner's tools
 
 ```

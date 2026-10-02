@@ -1,0 +1,10 @@
+# What web.Dockerfile's build sees: the Web Client's sources and the Caddy file,
+# nothing else. Docker pairs an ignore file with a Dockerfile by name
+# (<dockerfile>.dockerignore); it cannot be pointed at.
+*
+!web.Caddyfile
+!web/
+web/node_modules/
+web/dist/
+web/.angular/
+web/coverage/

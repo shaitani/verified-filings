@@ -26,24 +26,15 @@ door and the GitHub callback.
 **Funnel makes the site reachable, so the gate below holds before it is
 switched on.** None of this is done:
 
-- **A production compose override — a gate: nothing is deployed before it
-  exists and is in use.** Publish no ports (Funnel reaches the web container
-  over the compose network); drop `db-test` and `pgadmin`; replace the
-  committed `postgres`/`postgres`; secrets as files, not readable with
-  `docker inspect`; restart policies; Ollama pinned to a version.
-- **A web container** (Caddy) serving the Angular bundle and proxying
-  `/api`, with response buffering off for the event stream, security headers,
-  and `/api/health` not forwarded. Plain HTTP inside: Funnel holds the
-  certificate. One origin keeps the cookie and the stream simple.
-- **The Tailscale container**, with Funnel pointing `https://…ts.net` at the
-  web container.
-- **The real client IP.** The server's limits (app/api/DESIGN.md §4, §10) key
-  on `limits.client_ip`, which behind a proxy sees only the proxy — every
-  visitor would share one budget. Funnel passes the visitor in
-  `X-Forwarded-For`: Caddy trusts it only from the Tailscale container, and
-  uvicorn (`--forwarded-allow-ips`) only from Caddy.
-- **An ops container**, run only by hand, holding the owner's login:
-  migrations, role provisioning, `make-admin`, `invite`.
+`docker-compose.prod.yml` — the gate — and its web container are in
+(app/api/DESIGN.md §12). Left:
+
+- **The Tailscale container**, at `10.42.42.20` (the address Caddy trusts for
+  `X-Forwarded-For`), with Funnel pointing `https://…ts.net` at the web
+  container. Confirm what Funnel sends as the visitor's address before relying
+  on it.
+- **Per-IP request limits at the proxy** — Caddy's core has none; a plugin
+  build would add them. The api's own limits (sign-in, questions) stand.
 - **A second GitHub OAuth app** for production, with the
   `https://<machine>.<tailnet>.ts.net/auth/github/callback` callback.
 - **A shorter session** — `AUTH_SESSION_DAYS` is 30; the user expects to

@@ -1,0 +1,63 @@
+# The web container's Caddy (web.Dockerfile, docker-compose.prod.yml): the built
+# Web Client, and /api passed to the Web Server -- one origin, so the session cookie
+# and the event stream need no CORS. Plain HTTP inside: the front door (Tailscale
+# Funnel) holds the certificate. Design: app/api/DESIGN.md §12.
+{
+	admin off
+	auto_https off
+	servers {
+		# Who may say who the visitor is: the Tailscale container, by its fixed
+		# address on the project's network (docker-compose.prod.yml). From anyone
+		# else an X-Forwarded-For is ignored and the connecting address is used.
+		trusted_proxies static 10.42.42.20
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+:8080 {
+	encode zstd gzip
+
+	# A question is at most 2,000 characters; nothing a reader sends is near this.
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		# Scripts only from this site: no inline script, no eval. Styles may be
+		# inline (Angular and the chart library set them) and come from Google
+		# Fonts, as do the fonts. The API is this site; nothing may frame it.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+
+	# /api/health passes like the rest: the Web Client shows "Web Server: ok" from
+	# it, and it says nothing more than that.
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# The event stream: pass each event on the moment it arrives.
+			flush_interval -1
+			# One address -- the visitor's, as resolved above. uvicorn trusts this
+			# header from this container alone (docker-compose.prod.yml).
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	handle {
+		root * /srv
+		# Angular names its bundles by their content (main-FV2XSHRF.js), so a
+		# name never changes meaning: cache it for good. Everything else, the
+		# page above all, is checked each time so a new release shows at once.
+		@hashed path_regexp -[A-Za-z0-9_-]{8}\.(js|css)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@unhashed not path_regexp -[A-Za-z0-9_-]{8}\.(js|css)$
+		header @unhashed Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

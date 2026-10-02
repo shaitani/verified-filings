@@ -719,8 +719,29 @@ Each names its project (`verified-filings`, `verified-filings-prod`), so the two
 share no container, network or database; they are never run together — one
 GPU. The Ollama model volume is the one thing shared, to save 5 GB.
 
-- **Nothing is published.** No service maps a port to the PC; the front door
-  reaches the api over the project's network.
+- **Nothing is published but the web container, on the PC's loopback**
+  (`localhost:8080`, to check production in a browser here); the network and
+  the internet reach nothing. The front door reaches the web container over the
+  project's network.
+- **The web container** (`web.Dockerfile`, `web.Caddyfile`): the Angular app
+  built in one stage and served by Caddy in the next, as a user of its own,
+  with `/api/*` passed to the api — one origin. Plain HTTP inside; the front
+  door holds the certificate. It sets the security headers: a Content Security
+  Policy allowing scripts from the site alone (no inline script, no eval —
+  which is why Angular's critical-CSS inlining, which adds an inline script, is
+  off in `angular.json`), styles and fonts also from Google Fonts, nothing that
+  frames it; HSTS, `nosniff`, a referrer policy, a permissions policy. Hashed
+  bundles are cached for good, the page never. Request bodies over 1 MB are
+  refused (413). The event stream passes each event on as it comes
+  (`flush_interval -1`; measured: stages arrive live). Any path outside
+  `/api` is the app, so `/docs` there is the app's page, not the API's.
+- **Who the visitor is.** The rate limits key on `limits.client_ip`. Caddy
+  believes `X-Forwarded-For` only from the Tailscale container and otherwise
+  takes the connecting address; it hands the api one address, the visitor's,
+  and uvicorn believes that header from the web container alone
+  (`--forwarded-allow-ips`). Both trust a fixed address, so the project's
+  network has a fixed range (`10.42.42.0/24`). Measured: a forged
+  `X-Forwarded-For` from outside is ignored.
 - **Secrets are files**, made by `app/prod_secrets.py` into `secrets/`
   (git-ignored, and in the image's ignore file), each mounted only into the
   containers that need it at `/run/secrets/<setting>`, which `app/config.py`

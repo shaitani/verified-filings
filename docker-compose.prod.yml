@@ -9,9 +9,10 @@
 #
 # What makes this production rather than development:
 #   - no db-test, no pgadmin;
-#   - **no ports published**: nothing on this machine listens for the outside world.
-#     The front door (the web and Tailscale containers, still to come) reaches the
-#     api over this project's own network;
+#   - **nothing published but the web container, on this PC's loopback** (8080, for
+#     checking production in a browser here): nothing listens for the network or the
+#     internet. The front door (Tailscale, still to come) reaches the web container
+#     over this project's own network;
 #   - **secrets are files** in ./secrets (app/prod_secrets.py makes them; git and the
 #     image never see them), each mounted into only the containers that need it at
 #     /run/secrets/<name>. Not environment variables, so `docker inspect` shows none;
@@ -94,6 +95,45 @@ services:
       timeout: 5s
       retries: 6
       start_period: 20s
+    # As api.Dockerfile's, plus: believe X-Forwarded-For from the web container alone,
+    # which sets it to the visitor's address -- what the rate limits key on
+    # (app/api/limits.py client_ip). From anyone else it is ignored.
+    command:
+      - /srv/.venv/bin/uvicorn
+      - app.api.server:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - 10.42.42.10
+
+  # The front door's inside half: the built Web Client and /api, one origin
+  # (web.Dockerfile, web.Caddyfile). Published on this PC's loopback only, so
+  # production can be opened at http://localhost:8080 here; the network and the
+  # internet cannot reach it.
+  web:
+    build:
+      context: .
+      dockerfile: web.Dockerfile
+    image: verified-filings-prod-web
+    depends_on:
+      api: {condition: service_healthy}
+    ports: ["127.0.0.1:8080:8080", "[::1]:8080:8080"]
+    networks:
+      default:
+        ipv4_address: 10.42.42.10  # the one address the api believes (above)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
   # The owner's tools, run by hand and gone when they finish -- never left running,
   # so the owner's login is in no long-lived container. The api image, Python as the
@@ -130,6 +170,14 @@ secrets:
   auth_device_secret: {file: ./secrets/auth_device_secret}
   github_oauth_client_id: {file: ./secrets/github_oauth_client_id}
   github_oauth_client_secret: {file: ./secrets/github_oauth_client_secret}
+
+# A fixed range, so the web container's address -- which the api trusts -- and the
+# Tailscale container's -- which the web container trusts -- never change.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.42.42.0/24
 
 volumes:
   pgdata:

@@ -25,6 +25,7 @@ Exact Python versions are in `uv.lock`, JavaScript versions in
 | **asyncpg** | the database driver | Chosen over psycopg (async throughout). Never imported: SQLAlchemy loads it from the `postgresql+asyncpg://` URL scheme. `greenlet` is SQLAlchemy's async bridge |
 | **pgvector (Python)** | `app/db/models.py`, the embedding migration | The `Vector` column type for concept embeddings |
 | **Alembic** | `alembic.ini`, `app/db/migrations/` | Async template. The URL comes from `.env`, not `alembic.ini`. How to write a migration: [ALEMBIC.md](ALEMBIC.md) |
+| **Caddy** | `web.Dockerfile`, `web.Caddyfile` | The production web container: serves the built Web Client, passes `/api` to the api, sets the security headers. Chosen over nginx for its short config and its client-IP handling (`trusted_proxies`). Its core has no per-IP rate limiting — that needs a plugin build, not done; the api's own limits stand |
 | **pgAdmin** | `docker-compose.dev.yml`, http://localhost:5050 | Browsing the databases by hand. Local only |
 | **PyYAML** | `app/semantic/metric_aliases.py`, `evals/` | The curated alias file and the eval questions |
 

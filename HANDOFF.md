@@ -23,14 +23,11 @@ user names these steps, not numbers:
 
 - **Production Docker setup** — in progress; the gate above. The host is
   decided: the user's PC, reached through Tailscale Funnel run as a container
-  (docs/FUTURE.md). `docker-compose.prod.yml`, its secrets and the ops
-  container are in and tried (app/api/DESIGN.md §12); the user stops
-  production while developing, never runs both. Funnel makes the site
-  reachable, so it is not switched on until the web container is in too.
-- **Web container** — the Angular bundle and `/api` behind one proxy,
-  security headers, the real client IP trusted from the proxy (every limit
-  keys on `limits.client_ip`; untrusted, all visitors share the proxy's
-  budget), per-IP limits at the proxy.
+  (docs/FUTURE.md). `docker-compose.prod.yml`, its secrets, the ops
+  container and the web container are in and tried (app/api/DESIGN.md §12;
+  production at http://localhost:8080 on this PC). The user stops production
+  while developing, never runs both. Next: the Tailscale container and
+  Funnel.
 - **Production settings** — a shorter session, a second GitHub OAuth app
   with the `https` callback, a way to run the owner's CLI on the server.
 - **Data and backups** — the database onto the server; the `web` schema
