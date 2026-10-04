@@ -35,7 +35,12 @@
   vertical-align: middle;
 
   mat-icon {
-    // `inline` sizes the glyph to the text; without this it sits on the baseline, off-centre.
+    // Sized outright: the icons are SVGs drawn at 100% of their box, and `inline` lets that
+    // box grow with the tag, so an unsized icon swells and pushes the label out of the row.
+    flex: none;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
     vertical-align: 0;
   }
 }
