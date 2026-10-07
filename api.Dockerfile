@@ -39,5 +39,7 @@ USER app
 EXPOSE 8000
 
 # One worker: the job queue and its watchers live in the process (app/api/DESIGN.md §4).
+# --ws none: replies stream as server-sent events and no route is a WebSocket, so
+# uvicorn's WebSocket handling (the websockets package) is never reachable.
 CMD ["/srv/.venv/bin/uvicorn", "app.api.server:create_app", "--factory", \
-     "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+     "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--ws", "none"]
