@@ -47,6 +47,18 @@ class UnsupportedPlan(ValueError):
     """
 
 
+class TooManyFigures(ValueError):
+    """A plan needing more rows than one answer may hold (``MAX_ROWS``).
+
+    Unlike ``UnsupportedPlan``, a refusal to answer: the reader can fix it by
+    asking about fewer companies or a shorter period, and is told so.
+    """
+
+    def __init__(self, figures: int) -> None:
+        super().__init__(f"the plan needs {figures:,} rows; the ceiling is {MAX_ROWS:,}")
+        self.figures = figures
+
+
 @dataclass(frozen=True)
 class PlanCell:
     """One ``(binding, period)`` pair: **one row of the answer**.
@@ -155,6 +167,14 @@ def plan_cells(plan: QueryPlan) -> list[PlanCell]:
     if not cells:
         raise UnsupportedPlan("the plan binds nothing, so there is no query to write")
     return cells
+
+
+def statement_limit(plan: QueryPlan) -> int:
+    """The ``LIMIT`` every statement for ``plan`` carries: one more row than the
+    plan names. An answer is never cut short, and a statement that fans out
+    returns that one extra row, which the verdict refuses as ``over`` -- without
+    fetching however many more it would have produced."""
+    return len(plan_cells(plan)) + 1
 
 
 #: Each over-time cell's arithmetic, in operand terms: ``cur`` is the metric
@@ -565,7 +585,7 @@ def _emit_figures_over_time(plan: QueryPlan, cells: list[PlanCell]) -> str:
     return chr(10).join(lines)
 
 
-def _select(derivation: str, order_by: str = "") -> str:
+def _select(derivation: str, limit: int, order_by: str = "") -> str:
     """The whole SELECT over ``figures``, for a plan the model is not asked about."""
     return (
         f"""SELECT element_id, company_cik, ticker, entity_name,
@@ -574,16 +594,8 @@ def _select(derivation: str, order_by: str = "") -> str:
 FROM {FIGURES_NAME}
 """
         + (order_by + chr(10) if order_by else "")
-        + f"LIMIT {MAX_ROWS}"
+        + f"LIMIT {limit}"
     )
-
-
-#: The figures, as they are.
-FIGURES_SELECT = _select("NULL::text AS derivation")
-
-#: The same, when some metric is asked for over time: `figures` then carries
-#: each row's `derivation` ("growth", ...) and it is passed through.
-FIGURES_SELECT_OVER_TIME = _select("derivation")
 
 
 def _order_by(plan: QueryPlan) -> str:
@@ -603,9 +615,12 @@ def _order_by(plan: QueryPlan) -> str:
 
 
 def figures_select(plan: QueryPlan) -> str:
-    """The SELECT over ``figures`` for a plan the model is not asked about."""
+    """The SELECT over ``figures`` for a plan the model is not asked about. When
+    some metric is asked for over time, `figures` carries each row's
+    `derivation` ("growth", ...) and it is passed through."""
     over_time = _carries_derivation(plan_cells(plan))
-    return _select("derivation" if over_time else "NULL::text AS derivation", _order_by(plan))
+    derivation = "derivation" if over_time else "NULL::text AS derivation"
+    return _select(derivation, statement_limit(plan), _order_by(plan))
 
 
 def needs_the_model(plan: QueryPlan) -> bool:
@@ -628,6 +643,7 @@ difference) and `derivation` to a short name for what you computed.
 Keep every row: the first period of a series has nothing before it, so its
 result is NULL, which is expected. No LIMIT 1."""
 
+#: Filled in per plan: ``{limit}`` is ``statement_limit``.
 _FIGURES_EXAMPLE_DERIVE = f"""WORKED EXAMPLE (invented name -- copy the FORM)
 
   SELECT f.element_id, f.company_cik, f.ticker, f.entity_name,
@@ -637,7 +653,7 @@ _FIGURES_EXAMPLE_DERIVE = f"""WORKED EXAMPLE (invented name -- copy the FORM)
          f.unit, 'change_from_prior' AS derivation
   FROM {FIGURES_NAME} f
   ORDER BY value ASC
-  LIMIT {MAX_ROWS}"""
+  LIMIT {{limit}}"""
 
 
 def _figures_prompt(plan: QueryPlan) -> str:
@@ -665,7 +681,8 @@ def _figures_prompt(plan: QueryPlan) -> str:
     # Only a derivation reaches here, and never over an over-time metric
     # (`needs_the_model`), so `figures` carries no `derivation` column.
     job = _FIGURES_JOB_DERIVE
-    example = _FIGURES_EXAMPLE_DERIVE
+    limit = statement_limit(plan)
+    example = _FIGURES_EXAMPLE_DERIVE.format(limit=limit)
     signature = "unit)"
     return f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
 
@@ -704,7 +721,7 @@ Project exactly these column names, in any order:
 RULES (the statement is rejected if it breaks one)
 1. Begin at SELECT and read FROM `{FIGURES_NAME}`. No `WITH`, no `VALUES`.
    SELECT only: no SET, no set_config(), no SELECT INTO, no locking clause.
-2. End with `LIMIT {MAX_ROWS}`.
+2. End with `LIMIT {limit}`.
 3. Give every projected column an explicit alias unless it is a bare column
    reference. `NULL::text` without an alias is a column named "text".
 4. Never write a number, a date or a company name into the SQL as a literal.

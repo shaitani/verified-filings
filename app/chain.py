@@ -23,7 +23,14 @@ from app.parser import ProposalError, UnacceptableProposal, parse_question
 from app.parser.acceptor import normalize
 from app.presenter import PresentationError, present
 from app.presenter.format import condition
-from app.retrieval import GenerationError, InvalidSQL, UnsupportedPlan, answer
+from app.retrieval import (
+    MAX_ROWS,
+    GenerationError,
+    InvalidSQL,
+    TooManyFigures,
+    UnsupportedPlan,
+    answer,
+)
 from app.schemas.answer_view import AnswerView
 from app.schemas.job import JobStage
 from app.schemas.query import ConceptRef, QueryIn, QueryPlan, _Base
@@ -42,6 +49,10 @@ EXECUTE_FAILED = (
     "expecting, so I haven't shown them."
 )
 PRESENT_FAILED = "Something went wrong attempting to display the results."
+TOO_MANY_FIGURES = (
+    "Answering this would take {figures:,} figures, more than the {ceiling:,} one answer "
+    "can hold. Try asking about fewer companies or a shorter period."
+)
 BUG = (
     "Something went terribly wrong, likely a backend bug. Please contact your database "
     "administrator, jk, time to debug."
@@ -313,6 +324,9 @@ async def _answer(
     with _timed(outcome, "answer"):
         try:
             outcome.result = await answer(plan)
+        except TooManyFigures as exc:
+            _record(outcome, "execute", exc)
+            return refuse_all(TOO_MANY_FIGURES.format(figures=exc.figures, ceiling=MAX_ROWS))
         except (GenerationError, InvalidSQL, UnsupportedPlan) as exc:
             _record(outcome, "execute", exc)
             return refuse_all(EXECUTE_FAILED)

@@ -18,7 +18,7 @@ import app.chain as chain
 from app.chain import BUG, EXECUTE_FAILED, PARSE_FAILED, PRESENT_FAILED, ask
 from app.parser import UnacceptableProposal
 from app.presenter import PresentationError
-from app.retrieval import InvalidSQL
+from app.retrieval import InvalidSQL, TooManyFigures
 from app.schemas.query import Note, PlanThreshold, QueryIn, QueryPlan, Unresolved
 from app.schemas.result import ResultSet
 
@@ -181,6 +181,17 @@ async def test_a_rejected_statement_refuses_the_figures_but_not_the_mapper_s_par
     assert reasons["assets"] == EXECUTE_FAILED
     assert reasons["goodwill"].startswith("No filed figure")  # the curated refusal stands
     assert reply.answer is None
+
+
+async def test_too_many_figures_tells_the_reader_how_to_narrow_it(monkeypatch) -> None:
+    _stub(monkeypatch, "q052", answer=_raises(TooManyFigures(12_345)))
+    outcome = await ask("q")
+    reasons = {part.text: part.reason for part in _reply(outcome).parts}
+    assert reasons["assets"].startswith("Answering this would take 12,345 figures")
+    assert "more than the 10,000" in reasons["assets"]
+    assert reasons["assets"].endswith("fewer companies or a shorter period.")
+    assert reasons["goodwill"].startswith("No filed figure")  # the curated refusal stands
+    assert outcome.errors[0].type == "TooManyFigures"
 
 
 async def test_an_unanswerable_verdict_is_not_shown(monkeypatch) -> None:

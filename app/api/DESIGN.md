@@ -80,6 +80,7 @@ goes to the trace (§8). The sentences, as the user worded them:
 |---|---|
 | parse | "I couldn't work out what that question is asking for. Try naming the figure, the company and the period explicitly." |
 | execute | "The figures for this query came back in a form that mismatches what I was expecting, so I haven't shown them." |
+| execute, a plan over the row ceiling (refused before any SQL) | "Answering this would take {figures} figures, more than the {ceiling} one answer can hold. Try asking about fewer companies or a shorter period." |
 | present | "Something went wrong attempting to display the results." |
 | anything else (a bug) | "Something went terribly wrong, likely a backend bug. Please contact your database administrator, jk, time to debug." |
 

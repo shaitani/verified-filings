@@ -247,7 +247,7 @@ travels on the `ResultSet`. Detail:
 
 | piece | what it is |
 |---|---|
-| `app/chain.py` | one round: parse → map → answer → present, every outcome a reply part; the four fixed sentences a reader gets when a stage fails; `Pending`, what the next round needs |
+| `app/chain.py` | one round: parse → map → answer → present, every outcome a reply part; the fixed sentences a reader gets when a stage fails; `Pending`, what the next round needs |
 | `app/api/jobs.py` | `JobRunner`: one job at a time (one GPU), stages saved and streamed as server-sent events; the trace is always written |
 | `app/api/storage.py` | conversations and jobs, as `vf_web_role`; each round chains through the picks stored with it |
 | `app/trace.py`, `app/api/trace.py` | the per-job trace — full prompts, raw replies, every statement, timings, errors — written write-only, read by administrators (`/api/admin`) or the owner's CLI |

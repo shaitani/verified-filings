@@ -345,6 +345,17 @@ Anything not positively understood is refused:
 7. A `LIMIT`, a plain integer, at or under the row cap. `FETCH … WITH TIES` is
    refused: its own count is not a cap.
 
+**The row cap is per plan: its cell count plus one** (`statement_limit`). A
+fixed cap cuts a legitimate answer short as the corpus grows — 26 companies of
+twenty quarters pass 500 — and a statement cut at its `LIMIT` reads as missing
+cells. One row past the plan never cuts an answer, and a statement that fans
+out returns exactly that extra row, which every verdict branch refuses as
+`over` before fetching the rest. Measured 2026-10-06 over the 974 statements in
+`data/retrieval_log.jsonl`: none returned more rows than its plan named, so
+nothing that was answered before is refused by this. Above it sits a fixed ceiling, `MAX_ROWS` (10,000): a plan needing more
+is refused before the model is asked (`TooManyFigures`), with a sentence asking
+for fewer companies or a shorter period.
+
 **It returns its input byte-identical.** An earlier version appended a
 missing `LIMIT`; a validator that edits its input means what runs is not what
 was read. A missing `LIMIT` is a refusal.

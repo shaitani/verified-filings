@@ -21,12 +21,14 @@ import pytest
 
 from app.retrieval import (
     GenerationError,
+    TooManyFigures,
     UnsupportedPlan,
     build_prompt,
     executor,
     generate,
     plan_cells,
     prompt as prompt_module,
+    statement_limit,
 )
 from app.retrieval.generator import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT, extract_sql
 from app.schemas.query import (
@@ -199,6 +201,74 @@ def test_a_multi_operand_metric_never_reaches_the_model_as_operands() -> None:
 def test_a_plan_binding_nothing_is_refused() -> None:
     with pytest.raises(UnsupportedPlan, match="binds nothing"):
         plan_cells(_plan([], [_annual()]))
+
+
+# --------------------------------------------------------------------------- #
+# The LIMIT -- one row past the plan, under a fixed ceiling
+# --------------------------------------------------------------------------- #
+
+
+class _NoModel:
+    def __init__(self, *args, **kwargs) -> None:
+        raise AssertionError("the model was asked")
+
+
+def _years(*years: int) -> list:
+    return [_annual(APPLE, year) for year in years]
+
+
+async def test_a_statement_s_limit_is_one_row_past_its_plan(monkeypatch) -> None:
+    """Set from the plan rather than a fixed number, so no answer is cut short
+    however many companies there are -- and a statement that fans out returns
+    the one extra row, which the verdict refuses as `over`."""
+    from app.retrieval.validator import validate
+
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", _NoModel)
+    plan = _plan([_binding()], _years(2021, 2022, 2023, 2024, 2025))
+    assert statement_limit(plan) == len(plan_cells(plan)) + 1 == 6
+    sql = await generate(plan)
+    assert sql.endswith("LIMIT 6")
+    assert validate(sql, max_rows=statement_limit(plan)) == sql
+
+
+def test_the_model_is_told_the_plan_s_own_limit() -> None:
+    """In the worked example and in the rule; nothing else reaches the model
+    as a number it may copy."""
+    import re
+
+    prompt = build_prompt(_plan([_binding()], _years(2023, 2024), intent="derive"))
+    limits = re.findall(r"LIMIT (\d+)", prompt)
+    assert limits.count("3") == 2, limits
+    assert set(limits) <= {"1", "3"}, limits  # "No LIMIT 1." is the other
+
+
+async def test_a_plan_past_the_ceiling_is_refused_before_the_model(monkeypatch) -> None:
+    import app.retrieval as retrieval
+
+    monkeypatch.setattr("app.retrieval.generator.AsyncClient", _NoModel)
+    monkeypatch.setattr(retrieval, "MAX_ROWS", 2)
+    with pytest.raises(TooManyFigures) as refused:
+        await retrieval.answer(_plan([_binding()], _years(2022, 2023, 2024)))
+    assert refused.value.figures == 3
+
+
+def test_a_result_cut_at_the_limit_is_refused_by_every_verdict() -> None:
+    """One row past the plan is what a fanned-out statement returns once the
+    LIMIT stops it. The lenient branches -- a threshold, a model's derivation
+    -- must not wave it through as `complete`."""
+    threshold = _plan([_binding()], [_annual()]).model_copy(
+        update={"thresholds": [_threshold()]}
+    )
+    verdict = executor._verdict([_annotated("101"), _annotated("102")], threshold)
+    assert verdict.status == "over" and not verdict.is_answerable
+
+    def derived(value: str) -> AnnotatedRow:
+        row = _annotated(value)
+        return row.model_copy(update={"row": row.row.model_copy(update={"derivation": "change"})})
+
+    derive = _plan([_binding()], [_annual()], intent="derive")
+    verdict = executor._verdict([derived("1"), derived("2")], derive)
+    assert verdict.status == "over" and not verdict.is_answerable
 
 
 # --------------------------------------------------------------------------- #
@@ -584,7 +654,7 @@ def _margin_plan(intent: str = "compare") -> QueryPlan:
 def test_a_margin_plan_is_answered_from_figures_without_the_model() -> None:
     """q007: the plan says `c0 / c1` in `pure`, so `figures` says exactly that,
     and a plan that computes nothing above its cells reads it as it is."""
-    from app.retrieval.prompt import FIGURES_SELECT, emit_figures, uses_figures
+    from app.retrieval.prompt import emit_figures, figures_select, uses_figures
     from app.retrieval.validator import validate
 
     plan = _margin_plan()
@@ -593,7 +663,7 @@ def test_a_margin_plan_is_answered_from_figures_without_the_model() -> None:
     assert "/ NULLIF(max(v.value) FILTER (WHERE w.operand = 1), 0)" in figures
     assert "THEN 'pure'" in figures and "GROUP BY" in figures
     head = prompt_module.emit_cte(plan_cells(plan)) + "," + chr(10) + figures
-    sql = head + chr(10) + FIGURES_SELECT
+    sql = head + chr(10) + figures_select(plan)
     assert validate(sql) == sql
 
 
@@ -652,15 +722,15 @@ async def test_a_ranking_is_ordered_in_python_without_the_model(monkeypatch) -> 
 
 
 def test_each_metric_is_ranked_in_its_own_direction() -> None:
-    from app.retrieval.prompt import FIGURES_SELECT, figures_select
+    from app.retrieval.prompt import figures_select
 
     plan = _ranked(_margin_plan(intent="rank"), e1="highest", e2="lowest")
     select = figures_select(plan)
     assert "IN ('e1') THEN value END DESC NULLS LAST" in select
     assert "IN ('e2') THEN value END ASC NULLS LAST" in select
     assert select.index("ORDER BY") < select.index("LIMIT")
-    # A plan with nothing to rank keeps the statement it always had.
-    assert figures_select(_margin_plan()) == FIGURES_SELECT
+    # A plan with nothing to rank is not ordered.
+    assert "ORDER BY" not in figures_select(_margin_plan())
 
 
 def test_arithmetic_or_a_threshold_is_never_handed_to_the_model() -> None:

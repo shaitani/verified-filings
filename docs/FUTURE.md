@@ -154,6 +154,12 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   `frame` (every current value matches); a tighter `fy` bound than
   2000–2100.
 - **A `sic_office` source**, if one is found (G9).
+- **Decide whether the 10,000-row ceiling needs raising** (`MAX_ROWS`,
+  `app/retrieval/validator.py`). A plan needing more rows is refused with a
+  request for fewer companies or a shorter period. 10,000 was chosen without a
+  measurement: as the corpus grows, time a large real plan end to end (every
+  company, quarterly, several metrics) and the size of its stored reply, and
+  raise it if questions people ask reach it.
 
 ## Web
 

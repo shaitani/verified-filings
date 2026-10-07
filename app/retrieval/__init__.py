@@ -36,7 +36,13 @@ See ``app/retrieval/DESIGN.md``.
 from app import trace
 from app.retrieval.executor import execute
 from app.retrieval.generator import GENERATION_MODEL, GenerationError, generate
-from app.retrieval.prompt import UnsupportedPlan, build_prompt, plan_cells
+from app.retrieval.prompt import (
+    TooManyFigures,
+    UnsupportedPlan,
+    build_prompt,
+    plan_cells,
+    statement_limit,
+)
 from app.retrieval.validator import (
     MAX_ROWS,
     ContractViolation,
@@ -54,12 +60,14 @@ __all__ = [
     "GenerationError",
     "InvalidSQL",
     "OutOfRole",
+    "TooManyFigures",
     "UnsupportedPlan",
     "answer",
     "build_prompt",
     "execute",
     "generate",
     "plan_cells",
+    "statement_limit",
     "validate",
 ]
 
@@ -70,13 +78,18 @@ async def answer(plan: QueryPlan, *, model: str = GENERATION_MODEL) -> ResultSet
     Raises rather than returning a half-answer. ``GenerationError`` means the
     model produced no statement; ``InvalidSQL`` means it produced one this
     layer will not run; ``UnsupportedPlan`` means the plan itself cannot be
-    rendered yet. A ``ResultSet`` that comes back may still be unanswerable --
-    check ``is_answerable`` -- because that is a judgement about the *data*,
-    not about whether the machinery worked.
+    rendered yet; ``TooManyFigures`` means it needs more rows than one answer
+    may hold, and is raised before the model is asked. A ``ResultSet`` that
+    comes back may still be unanswerable -- check ``is_answerable`` -- because
+    that is a judgement about the *data*, not about whether the machinery
+    worked.
     """
+    figures = len(plan_cells(plan))
+    if figures > MAX_ROWS:
+        raise TooManyFigures(figures)
     sql = await generate(plan, model=model)
     try:
-        checked = validate(sql)
+        checked = validate(sql, max_rows=statement_limit(plan))
     except InvalidSQL as exc:
         # Refused before it ran, so the executor's log never sees it -- and a
         # refused statement is the one a debugging session wants first.

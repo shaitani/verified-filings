@@ -275,6 +275,10 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
 
     if not rows:
         status = "empty"
+    elif len(rows) > len(expected):
+        # Before every lenient branch below: the LIMIT is one row past the plan
+        # (`statement_limit`), so this is also a result cut short at it.
+        status = "over"
     elif plan.thresholds:
         # A threshold is *meant* to cut rows, so neither the row-count equality
         # nor the per-company coverage check applies: a company below the bar is
@@ -291,8 +295,6 @@ def _verdict(rows: list[AnnotatedRow], plan: QueryPlan) -> ResultVerdict:
         returned_pairs = {(r.row.element_id, r.row.company_cik) for r in rows}
         status = "complete" if returned_pairs >= expected_pairs else "partial"
         missing = [] if status == "complete" else missing
-    elif len(rows) > len(expected):
-        status = "over"
     elif missing:
         status = "partial"
     else:
@@ -342,10 +344,10 @@ def _verdict_exact(rows: list[AnnotatedRow], plan: QueryPlan, expected) -> Resul
     )
     if not rows:
         status = "empty"
+    elif len(rows) > len(expected):
+        status = "over"  # first, as in `_verdict`: a result cut short at the LIMIT
     elif plan.thresholds:
         status, missing = "complete", []
-    elif len(rows) > len(expected):
-        status = "over"
     elif missing:
         status = "partial"
     else:

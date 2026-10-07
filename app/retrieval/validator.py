@@ -90,9 +90,12 @@ from app.schemas.result import RESULT_COLUMNS
 
 logger = logging.getLogger(__name__)
 
-#: Ceiling on rows returned by one execution. PostgreSQL has no per-role row
-#: limit, so this is the only place it can be set.
-MAX_ROWS = 500
+#: The most rows one answer may need -- its plan's cells (``plan_cells``). A
+#: plan needing more is refused before any SQL is written (``TooManyFigures``),
+#: and each statement's own ``LIMIT`` is its plan's cell count plus one
+#: (``statement_limit``). PostgreSQL has no per-role row limit, so these are the
+#: only places it can be set. Whether 10,000 is enough: docs/FUTURE.md.
+MAX_ROWS = 10_000
 
 #: The one relation ``vf_retrieval_role`` can read. See the migration
 #: ``3fcc714d6050`` and ``app/retrieval/DESIGN.md`` §3.
