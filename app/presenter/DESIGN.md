@@ -48,10 +48,27 @@ then date.
 
 A count the question put on a ranking (`ResultSpec.top_n`) is applied **after**
 that sort, so the rows kept are the top because everything else was ranked
-below them; retrieval still returns and proves the whole ranking. When rows were
-cut, a condition says so ("showing the first 3 of 16 in the ranking"); a count
-at or above the ranking's size says nothing. A row with no value sorts last, so
-it is kept only if the count reaches it.
+below them; retrieval still returns and proves the whole ranking. The count is
+kept exactly and goes unremarked: the reader asked for it, and a sentence about
+the cut would only tell them how many companies the dataset holds. A row with
+no value sorts last, so it is kept only if the count reaches it.
+
+**A question that named no companies** — every filer, or a group like
+"semiconductor companies" (`ResultSpec.companies_named` false) — and stated no
+count shows `SHOWN_LIMIT` (10) of what it asked for. Retrieval still fetches
+and proves everything; only what is shown is cut, after ordering:
+
+- a ranked metric keeps its first ten rows, so "worst quarters in 2023" shows
+  ten quarters, one company more than once if it ranks so;
+- anything else keeps ten companies, the same ones for every metric: the
+  highest by the first metric asked for at its latest period. A company is kept
+  or dropped whole, so no series is cut partway; an across-companies figure (an
+  average) is one figure and is never cut.
+
+A condition says why, never how many there were: "Limiting results to the 10
+companies with the highest revenue", "Limiting results to the 10 lowest by
+revenue change". It stays out of chart titles. Named companies are never cut:
+twelve typed out are twelve shown.
 
 ## 3. Display strings
 

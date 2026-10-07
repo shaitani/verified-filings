@@ -103,6 +103,7 @@ async def test_plan_shape_end_to_end(test_session_factory, clean_fake_company) -
 
     assert plan.question == "test question"
     assert plan.filters.ciks == [FAKE_CIK]
+    assert plan.result.companies_named  # the Presenter shows all of it
 
     # The metric element is the only thing outstanding.
     assert [u.element_id for u in plan.unresolved] == ["e1"]
@@ -493,6 +494,7 @@ async def test_naming_no_company_means_every_loaded_filer(
     assert plan.filters.ciks == [FAKE_CIK]
     assert [b.company_cik for b in plan.bindings] == [FAKE_CIK]
     assert plan.is_complete
+    assert not plan.result.companies_named  # the Presenter shows ten of everything
 
 
 async def test_a_company_that_failed_to_resolve_does_not_widen_the_scope(
@@ -799,6 +801,7 @@ async def test_company_group_resolves_once_sic_data_exists(
 
     assert plan.filters.ciks == [FAKE_CIK]
     assert plan.unresolved == []
+    assert not plan.result.companies_named  # a group is not a name: ten of it are shown
 
 
 async def test_company_group_matches_an_exact_sic_code(

@@ -1019,8 +1019,15 @@ class ResultSpec(_Base):
     rank: dict[str, RankDirection] = Field(default_factory=dict)
 
     #: element_id -> how many of that ranking to show, for the metrics whose
-    #: question stated a count. Absent means show them all.
+    #: question stated a count. Absent means show them all, unless the
+    #: companies were not named (``companies_named``).
     top_n: dict[str, int] = Field(default_factory=dict)
+
+    #: False when the question reached its companies without naming each one:
+    #: every loaded filer, or a company group. The Presenter then shows ten of
+    #: what was asked for and says why (presenter DESIGN §2); retrieval still
+    #: fetches and proves everything.
+    companies_named: bool = True
 
     #: The plan's thresholds, for the same reason: a list filtered by "revenue
     #: over 100 billion" has to say so, and the Presenter never sees the plan.

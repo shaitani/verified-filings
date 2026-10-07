@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from app.presenter import BAR_LIMIT, PresentationError, present
+from app.presenter import BAR_LIMIT, SHOWN_LIMIT, PresentationError, present
 from app.presenter.format import condition, display
 from app.schemas.answer_view import AnswerView
 from app.schemas.result import ResultSet
@@ -68,16 +68,15 @@ def test_a_ranking_is_drawn_in_the_direction_asked() -> None:
     assert [n.kind for n in view.notes] == ["partial_coverage", "period_misalignment"]
 
 
-def test_a_count_keeps_the_top_of_the_ranking_and_says_so() -> None:
+def test_a_count_keeps_exactly_the_top_of_the_ranking_and_says_nothing() -> None:
+    """The reader asked for three; a sentence about it would only tell them how
+    many companies the dataset holds."""
     result, metrics = _load("q009")  # highest operating margin, 16 filers
     full = present(result, metrics)
     (element_id,) = result.result.rank
-    counted = result.model_copy(
-        update={"result": result.result.model_copy(update={"top_n": {element_id: 3}})}
-    )
-    view = present(counted, metrics)
+    view = present(_spec(result, top_n={element_id: 3}), metrics)
     assert [r.company for r in view.rows] == [r.company for r in full.rows[:3]]
-    assert "showing the first 3 of 16 in the ranking" in view.conditions
+    assert view.conditions == []
     (bar,) = view.views
     assert len(bar.rows) == 3 and "top 10 of" not in bar.title
 
@@ -85,12 +84,82 @@ def test_a_count_keeps_the_top_of_the_ranking_and_says_so() -> None:
 def test_a_count_larger_than_the_ranking_says_nothing() -> None:
     result, metrics = _load("q009")
     (element_id,) = result.result.rank
-    counted = result.model_copy(
-        update={"result": result.result.model_copy(update={"top_n": {element_id: 50}})}
-    )
-    view = present(counted, metrics)
+    view = present(_spec(result, top_n={element_id: 50}), metrics)
     assert len(view.rows) == 16
-    assert not any("showing the first" in c for c in view.conditions)
+    assert view.conditions == []
+
+
+# --------------------------------------------------------------------------- #
+# A question that named no companies shows ten of what it asked for
+# --------------------------------------------------------------------------- #
+
+
+def _spec(result: ResultSet, **update) -> ResultSet:
+    return result.model_copy(update={"result": result.result.model_copy(update=update)})
+
+
+def test_a_ranking_over_every_company_shows_its_first_ten() -> None:
+    result, metrics = _load("q009")  # highest operating margin, 16 filers
+    full = present(result, metrics)
+    view = present(_spec(result, companies_named=False), metrics)
+    assert [r.company for r in view.rows] == [r.company for r in full.rows[:SHOWN_LIMIT]]
+    assert view.conditions == ["Limiting results to the 10 highest by operating margin."]
+    (bar,) = view.views
+    assert "Limiting" not in bar.title and "top 10 of" not in bar.title
+
+
+def test_ranked_rows_are_what_is_limited_not_companies() -> None:
+    """"Largest single-quarter decline" shows ten quarters, a company more than
+    once if it ranks so, and names what was ranked."""
+    result, metrics = _load("q038")  # 359 quarter-on-quarter changes, 19 filers
+    full = present(result, metrics)
+    view = present(_spec(result, companies_named=False), metrics)
+    assert view.rows == full.rows[:SHOWN_LIMIT]
+    assert view.conditions == ["Limiting results to the 10 lowest by revenue change."]
+
+
+def test_a_stated_count_is_kept_exactly_over_every_company_too() -> None:
+    result, metrics = _load("q009")
+    (element_id,) = result.result.rank
+    view = present(_spec(result, companies_named=False, top_n={element_id: 12}), metrics)
+    assert len(view.rows) == 12 and view.conditions == []
+
+
+def test_unranked_figures_over_every_company_keep_the_ten_highest() -> None:
+    """No order was asked for, so the ten with the highest figure -- not the
+    first ten by name."""
+    result, metrics = _load("q009")
+    unranked = _spec(result, rank={}, shape="table")
+    full = present(unranked, metrics)
+    view = present(_spec(unranked, companies_named=False), metrics)
+    highest = sorted(full.rows, key=lambda r: r.value, reverse=True)[:SHOWN_LIMIT]
+    assert {r.company for r in view.rows} == {r.company for r in highest}
+    assert view.conditions == [
+        "Limiting results to the 10 companies with the highest operating margin."
+    ]
+
+
+def test_a_series_over_every_company_keeps_whole_companies() -> None:
+    """Ten companies, each with every period it had: no line is cut partway."""
+    result, metrics = _load("q038")
+    unranked = _spec(result, rank={}, shape="series")
+    full = present(unranked, metrics)
+    view = present(_spec(unranked, companies_named=False), metrics)
+    kept = {r.company for r in view.rows}
+    assert len(kept) == SHOWN_LIMIT
+    assert view.rows == [r for r in full.rows if r.company in kept]
+
+
+def test_an_across_companies_figure_is_not_limited() -> None:
+    """An average over fourteen companies is one figure, not fourteen."""
+    result, metrics = _load("q040")
+    assert present(_spec(result, companies_named=False), metrics) == present(result, metrics)
+
+
+def test_ten_or_fewer_says_nothing() -> None:
+    result, metrics = _load("q017")  # three companies
+    view = present(_spec(result, companies_named=False), metrics)
+    assert view == present(result, metrics)
 
 
 def test_a_largest_decline_ranks_lowest_first() -> None:

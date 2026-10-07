@@ -279,6 +279,7 @@ async def map_query(
         },
         thresholds=thresholds,
         top_n={m.id: m.top_n for m in metrics if m.top_n and m.id in bound_elements},
+        companies_named=bool(companies) and not groups,
     )
     over_time += _series_growth(metrics, bindings, result, query.intent, over_time, thresholds)
 
@@ -654,6 +655,7 @@ def _describe_result(
     rank: dict[str, RankDirection],  # only metrics that bound: nothing else has rows to order
     thresholds: list[PlanThreshold],  # the plan's own list; the Presenter states them
     top_n: dict[str, int] | None = None,  # how many of a ranking the question asked for
+    companies_named: bool = True,  # False: every filer, or a group -- the Presenter shows ten
 ) -> ResultSpec:
     """What the answer has to contain, from what actually resolved.
 
@@ -695,6 +697,7 @@ def _describe_result(
         rank=rank,
         thresholds=thresholds,
         top_n=top_n or {},
+        companies_named=companies_named,
     )
 
 

@@ -25,10 +25,14 @@ from app.schemas.answer_view import (
 )
 from app.schemas.result import AnnotatedRow, ResultSet
 
-__all__ = ["BAR_LIMIT", "PresentationError", "present"]
+__all__ = ["BAR_LIMIT", "SHOWN_LIMIT", "PresentationError", "present"]
 
 #: Bars drawn for a ranking. The table below the chart holds every row.
 BAR_LIMIT = 10
+
+#: How much of what was asked for is shown when the question named no companies
+#: -- every filer, or a group -- and stated no count (DESIGN §2).
+SHOWN_LIMIT = 10
 
 #: Arithmetic over time, written in Python (retrieval DESIGN §4.1).
 OVER_TIME = frozenset({"change", "growth", "cagr"})
@@ -50,8 +54,7 @@ def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
     rows = [_row(annotated, result, metrics) for annotated in result.rows]
     rows = _order(_collapse_aggregates(rows, result), result, metrics)
     conditions = _conditions(rows, result, metrics)
-    rows, shown = _top_n(rows, result, metrics)
-    conditions += shown
+    rows, limited = _limit(rows, result, metrics)  # stated, but kept out of chart titles
 
     shape = result.result.shape
     if len(rows) == 1:
@@ -81,7 +84,7 @@ def present(result: ResultSet, metrics: Mapping[str, str]) -> AnswerView:
             for key, citation in result.citations.items()
         },
         notes=result.notes,  # verbatim: never summarised, never dropped
-        conditions=conditions,
+        conditions=conditions + limited,
     )
 
 
@@ -201,29 +204,88 @@ def _order(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str])
     return ordered
 
 
-def _top_n(
+def _limit(
     rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]
 ) -> tuple[list[AnswerRow], list[str]]:
-    """Only the top N of a ranking the question put a count on, and a sentence
-    saying how many there were.
+    """How much of the answer is shown, and a sentence for each cut the reader
+    did not ask for.
 
-    Cut here, after the whole ranking has been ordered, so the rows kept are the
+    A count the question stated is kept exactly and goes unremarked: the reader
+    asked for it. Otherwise a question that named no companies shows
+    ``SHOWN_LIMIT`` of what it asked for -- a ranked metric its first rows, an
+    unranked one its companies (``_limit_companies``). Retrieval has still
+    fetched and proved everything.
+
+    Cut here, after the whole answer has been ordered, so the rows kept are the
     top because everything else was ranked below them. A row with no value sorts
     last (``_order``), so it is only kept when the count reaches it.
     """
+    spec = result.result
+    capped = not spec.companies_named
+    limits = dict(spec.top_n)
+    if capped:
+        limits = {element_id: SHOWN_LIMIT for element_id in spec.rank} | limits
+
     kept: list[AnswerRow] = []
-    stated: list[str] = []
     seen: dict[str, int] = {}
     for row in rows:
-        limit = result.result.top_n.get(row.element_id)
+        limit = limits.get(row.element_id)
         seen[row.element_id] = seen.get(row.element_id, 0) + 1
         if limit is None or seen[row.element_id] <= limit:
             kept.append(row)
-    for element_id, limit in result.result.top_n.items():
-        total = seen.get(element_id, 0)
-        if total > limit:
-            stated.append(f"showing the first {limit} of {total} in the ranking")
+    stated = [
+        # Named from a kept row: "revenue growth" when growth is what was ranked.
+        f"Limiting results to the {SHOWN_LIMIT} {direction} by "
+        f"{_name(next(row for row in kept if row.element_id == element_id))}."
+        for element_id, direction in spec.rank.items()
+        if capped and element_id not in spec.top_n and seen.get(element_id, 0) > SHOWN_LIMIT
+    ]
+    if capped:
+        kept, note = _limit_companies(kept, result, metrics)
+        stated += note
     return kept, stated
+
+
+def _limit_companies(
+    rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]
+) -> tuple[list[AnswerRow], list[str]]:
+    """``SHOWN_LIMIT`` companies of the unranked metrics, the same ones for
+    every metric: the highest by the first metric asked for, at its latest
+    period. A company is kept or dropped whole, so no series is cut partway.
+    Ranked rows were cut by rank already; an across-companies row stays."""
+    rank = result.result.rank
+
+    def limited(row: AnswerRow) -> bool:
+        return row.element_id not in rank and row.company_cik is not None
+
+    ciks = {row.company_cik for row in rows if limited(row)}
+    if len(ciks) <= SHOWN_LIMIT:
+        return rows, []
+
+    first = next(e for e in metrics if any(row.element_id == e and limited(row) for row in rows))
+    latest: dict[int, AnswerRow] = {}
+    for row in rows:
+        if row.element_id == first and limited(row):
+            held = latest.get(row.company_cik)
+            if held is None or _recency(row) > _recency(held):
+                latest[row.company_cik] = row
+
+    def standing(cik: int) -> tuple:
+        value = latest[cik].value if cik in latest else None
+        return value is None, -(value or 0), cik  # no figure goes last; cik breaks ties
+
+    ordered = sorted(ciks, key=standing)
+    chosen = set(ordered[:SHOWN_LIMIT])
+    kept = [row for row in rows if not limited(row) or row.company_cik in chosen]
+    deciding = next(latest[cik] for cik in ordered if cik in latest)  # "revenue growth", if so
+    note = f"Limiting results to the {SHOWN_LIMIT} companies with the highest {_name(deciding)}."
+    return kept, [note]
+
+
+def _recency(row: AnswerRow) -> tuple:
+    """Latest period first; at the same date a filed figure before a derived
+    one, and a year before the quarter that ends it."""
+    return row.period_end, row.derivation is None, row.granularity == "annual"
 
 
 def _conditions(rows: list[AnswerRow], result: ResultSet, metrics: Mapping[str, str]) -> list[str]:
