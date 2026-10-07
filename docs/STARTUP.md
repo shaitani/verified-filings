@@ -172,6 +172,9 @@ Git Bash:
 CODE_VERSION=$(git rev-parse --short=12 HEAD) docker compose -f docker-compose.dev.yml --profile web up -d --build api
 ```
 
+Run it again after every server change: the image is built from the working
+tree, and a stale one serves an older contract than the client expects.
+
 pgAdmin: http://localhost:5050 (login in `docker-compose.dev.yml`).
 
 API docs: http://localhost:8000/docs

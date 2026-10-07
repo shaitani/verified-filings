@@ -1,8 +1,7 @@
 # Future work
 
 Planned and deferred tasks. Where a task closes a gap, the gap's evidence is
-in [GAPS.md](GAPS.md) and is not repeated here. The work currently in
-progress is in [HANDOFF.md](../HANDOFF.md).
+in [GAPS.md](GAPS.md) and is not repeated here.
 
 ---
 
@@ -23,13 +22,16 @@ Linux box on the home network (B) or a small VPS in front with a custom
 domain (E) — both keep the containers as they are and change only the front
 door and the GitHub callback.
 
-**Funnel makes the site reachable, so the gate below holds before it is
-switched on.** None of this is done:
+Built: `docker-compose.prod.yml` with its web container, the Tailscale front
+door, the production GitHub OAuth app and the `ops` container for the owner's
+tools (app/api/DESIGN.md §12; commands in
+[STARTUP.md](STARTUP.md#production)). The door opens and closes only with
+`/open-the-door` and `/close-the-door`.
 
-`docker-compose.prod.yml` — the gate — its web container and the Tailscale
-front door are in (app/api/DESIGN.md §12); the door opens and closes with
-`/open-the-door` and `/close-the-door`. Left:
+Left, in this order, each planned with the user before it is built:
 
+- **A shorter session** — `AUTH_SESSION_DAYS` is 30; the user expects to
+  change it.
 - **Confirm the visitor's address through Funnel.** Caddy trusts
   `X-Forwarded-For` from the Tailscale container (`10.42.42.20`); check, with
   the door open and a request from another network, that the api logs that
@@ -37,12 +39,10 @@ front door are in (app/api/DESIGN.md §12); the door opens and closes with
   rate-limit budget.
 - **Per-IP request limits at the proxy** — Caddy's core has none; a plugin
   build would add them. The api's own limits (sign-in, questions) stand.
-- **A second GitHub OAuth app** for production, with the
-  `https://<machine>.<tailnet>.ts.net/auth/github/callback` callback.
-- **A shorter session** — `AUTH_SESSION_DAYS` is 30; the user expects to
-  change it.
-- **Data and backups** — the server's database restored from a dump of
-  today's; a nightly `pg_dump`, copied off the machine.
+- **Backups** — a nightly `pg_dump` of the production database, the `web`
+  schema above all, copied off the machine.
+- **Outside-in security check** — the anonymous probe from outside the
+  network, a port scan, the headers, both invite flows, a dependency audit.
 - **The PC itself** — Docker Desktop starting at sign-in, sleep off, Windows
   Update restarts held to active hours.
 - **Optionally an email sender**, which turns on email verification and
@@ -124,7 +124,6 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   `kind: text`), every stored answer keeps its text, and the chain already
   takes text. Adding it costs the input in the client, the `text` branch in the
   server, and a measurement of the round trip with typed answers.
-- **An admin page**, perhaps. Administration is the owner's CLI today.
 
 ## Testing
 
@@ -170,8 +169,10 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
 - **Two-factor sign-in** (an authenticator app's codes): a guessed password
   alone would then sign no one in, whatever the limits allow.
 - **A CAPTCHA after failed sign-ins** instead of a wait — Cloudflare Turnstile
-  is free and does not track visitors; worth it only if the site is behind
-  Cloudflare (decided with the host).
+  is free and does not track visitors; worth it only if the site is ever
+  behind Cloudflare, and the front door is Tailscale (above).
+- **Re-authentication for admin actions** — none for now, decided with the
+  user: an administrator's session is enough (app/api/DESIGN.md §13).
 
 ## Deferred by the user — do not reopen unprompted
 

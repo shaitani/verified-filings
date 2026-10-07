@@ -103,6 +103,10 @@ hand-written ones. Test-only helpers end in `.testing.ts`, which
 Regenerating the types also triggers the TypeScript-override check in
 [TOOLS.md](TOOLS.md#the-typescript-override).
 
+**Checking by hand on the running site.** The real `web` tables hold the
+owner's own account, so a live check signs up a `zz-…@example.com` account
+and deletes it afterwards.
+
 ---
 
 ## The eval set

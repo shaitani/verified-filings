@@ -10,7 +10,6 @@ presenter over US filers' 10-K and 10-Q data in PostgreSQL.
 |---|---|
 | [docs/STARTUP.md](docs/STARTUP.md) | bring everything up |
 | [docs/DESIGN.md](docs/DESIGN.md) | how it works, and the doc map |
-| [HANDOFF.md](HANDOFF.md) | work in progress |
 
 ## Layout
 

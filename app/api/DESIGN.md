@@ -472,9 +472,9 @@ address's budget, a browser it has never signed in on waits 15 minutes —
 existing sessions and GitHub sign-in still work.
 
 **Who is asking** is `limits.client_ip`, the connecting address. Behind a
-proxy that is the proxy, so the deployment's front door must be trusted for
-the real one (docs/FUTURE.md). Two-factor sign-in and a CAPTCHA after
-failures are later options in the same file.
+proxy that is the proxy, so production takes the visitor's from the front
+door's header (§12). Two-factor sign-in and a CAPTCHA after failures are
+later options in docs/FUTURE.md.
 
 ### Guard rails on GitHub sign-in
 

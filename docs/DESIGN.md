@@ -311,7 +311,6 @@ guard against accident, not attack; `validate` covers what they cannot.
 | [ALEMBIC.md](ALEMBIC.md) | writing and applying a migration |
 | [LOADER.md](LOADER.md) | the load step |
 | [sec-retriever.md](sec-retriever.md) | the SEC client's rules, the corpus, the curated files |
-| [../HANDOFF.md](../HANDOFF.md) | work in progress |
 | [app/api/DESIGN.md](../app/api/DESIGN.md) | [A] [B]: replies, questions back, jobs, drawing, citations, trace, sign-in, the `web` schema, containers |
 | [app/parser/DESIGN.md](../app/parser/DESIGN.md) | [C]: the faithfulness gate and the parser's measured failures |
 | [app/semantic/DESIGN.md](../app/semantic/DESIGN.md) | [D]: the alias layer and how the mapper decides |
