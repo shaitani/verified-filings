@@ -42,11 +42,11 @@ async def get_submissions(
     refresh_sic_index: bool = True,
 ) -> dict[str, Any]:
     """The "get-submission" action. Fetches the SEC submissions JSON for
-    any number of corpus companies — as few as one, as many as the full
-    20-company corpus — in a single call.
+    any number of corpus companies — as few as one, as many as the whole
+    corpus — in a single call.
 
     Each entry in `identifiers` may be a ticker, a ticker alias, or a CIK;
-    every one is resolved against the closed 20-company corpus in
+    every one is resolved against the corpus in
     `corpus_companies.json` via `find_company()` *before* any request is
     made — if any identifier doesn't match a corpus company, nothing is
     fetched and `UnknownCompanyError` is raised naming every identifier
@@ -79,7 +79,7 @@ async def get_submissions(
 
     if unresolved:
         raise UnknownCompanyError(
-            f"{unresolved!r} did not match any of the 20 corpus companies "
+            f"{unresolved!r} did not match any corpus company "
             "-- no requests were made for this batch"
         )
 
@@ -117,13 +117,13 @@ async def get_xbrl_data(
 ) -> dict[str, Any]:
     """The "get-xbrl" action. Fetches SEC **XBRL data** (the
     `companyfacts` endpoint) for any number of corpus companies — one or the
-    full 20 — filters each document down to this project's scope (10-K/10-Q
+    whole corpus — filters each document down to this project's scope (10-K/10-Q
     facts, most recent 5 fiscal years), and writes the curated local store
     `data/xbrl/<TICKER>.json` for each.
 
     Identifier resolution matches `get_submissions()` exactly: every entry in
     `identifiers` may be a ticker, ticker alias, or CIK, and all are resolved
-    against the closed 20-company corpus *before* any request is made — if any
+    against the corpus *before* any request is made — if any
     identifier doesn't resolve, nothing is fetched and `UnknownCompanyError`
     is raised naming every failure.
 
@@ -150,7 +150,7 @@ async def get_xbrl_data(
 
     if unresolved:
         raise UnknownCompanyError(
-            f"{unresolved!r} did not match any of the 20 corpus companies "
+            f"{unresolved!r} did not match any corpus company "
             "-- no requests were made for this batch"
         )
 

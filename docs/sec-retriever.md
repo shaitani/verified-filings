@@ -14,8 +14,8 @@ path. `https://data.sec.gov/submissions/CIK##########.json` is
 
 ## The corpus
 
-**Exactly the 20 companies in `corpus_companies.json`** — a master list, never
-added to. Each entry holds the CIK (`cik`, `cik_padded`), tickers, the
+**The companies listed in `corpus_companies.json`** — the master list, 20 today
+and open to more. Each entry holds the CIK (`cik`, `cik_padded`), tickers, the
 company's title, and its two SEC URLs. All ingest code resolves identifiers
 (ticker, ticker alias or CIK, case-insensitive) through `app/ingest/corpus.py`,
 so nothing outside the corpus can be requested.
@@ -95,7 +95,7 @@ concepts). `filter_facts()` keeps:
 
 - **Forms:** exactly `10-K` and `10-Q`. Amendments (`10-K/A`) and every other
   form are dropped.
-- **Fiscal years:** one **fixed window for all 20** — `FISCAL_YEAR_MAX` (2025)
+- **Fiscal years:** one **fixed window for every company** — `FISCAL_YEAR_MAX` (2025)
   back `FISCAL_YEARS_KEPT` (5): FY2021–FY2025. Not derived per company:
   cross-company questions need every store on the same grid.
   `FISCAL_YEAR_MAX` is the newest year every company has an annual 10-K for;

@@ -25,7 +25,7 @@ and whether anything catches each one.
 |---|---|---|---|
 | 1 | Malformed JSON / bad schema | the grammar, then `accept` | loud, repairable |
 | 2 | Misspelled or invented company | mapper's deterministic lookup | refusal |
-| 3 | Company outside the 20-filer corpus | mapper | refusal |
+| 3 | Company outside the corpus | mapper | refusal |
 | 4 | **Substituted metric phrase** | `accept` — faithfulness | refusal |
 | 5 | **Dropped modifier** ("gross revenue" → "revenue") | `accept` — `_METRIC_MODIFIERS` | refusal |
 | 6 | **Invented `fiscal_year`** | `accept` — `_check_period` | refusal |

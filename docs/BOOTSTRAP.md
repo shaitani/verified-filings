@@ -21,7 +21,7 @@ not come up.
 | `data/xbrl/*.json` | ✅ untouched | files on disk, not in any volume |
 | `.env` | ✅ untouched | a file on disk (git-ignored) |
 
-Because the 20 curated JSON files survive, **restoring the data is a reload,
+Because the curated JSON files survive, **restoring the data is a reload,
 not a re-fetch**: nothing goes back to the SEC, and the corpus cannot drift
 while you rebuild. Because `.env` survives, so do the role passwords.
 

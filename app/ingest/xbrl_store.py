@@ -13,7 +13,7 @@ Scope filter applied on ingest (docs/sec-retriever.md):
   (``10-K/A`` etc.) and every other form are dropped.
 * **Fiscal years:** a single fixed window, ``FISCAL_YEAR_MAX`` back
   ``FISCAL_YEARS_KEPT`` years -- currently **FY2021-FY2025** -- applied
-  identically to all 20 corpus companies. A fact's ``fy`` is the fiscal year
+  identically to every corpus company. A fact's ``fy`` is the fiscal year
   of the *filing* it was reported in (not the period it covers), so a kept
   10-K still carries its prior-year comparative figures.
 
@@ -47,8 +47,8 @@ XBRL_STORE_DIR = CORPUS_FILE.parent / "data" / "xbrl"
 
 FORMS_IN_SCOPE: tuple[str, ...] = ("10-K", "10-Q")
 
-# Newest *complete* fiscal year kept, and how many years back from it. All 20
-# corpus companies have a 10-K for FY2021..FY2025. Bump FISCAL_YEAR_MAX (and
+# Newest *complete* fiscal year kept, and how many years back from it. Every
+# corpus company should have a 10-K for FY2021..FY2025. Bump FISCAL_YEAR_MAX (and
 # re-run `get-xbrl`, which re-filters from cache) once every corpus company has
 # filed a 10-K for the next year -- get-xbrl's stderr note flags when that day
 # has come for some but not yet all of them.

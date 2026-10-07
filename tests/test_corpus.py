@@ -3,8 +3,11 @@ import pytest
 from app.ingest.corpus import UnknownCompanyError, find_company, load_corpus
 
 
-def test_corpus_has_exactly_twenty_companies():
-    assert len(load_corpus()) == 20
+def test_corpus_tickers_and_ciks_are_unique():
+    corpus = load_corpus()
+    assert corpus
+    assert len({company["ticker"] for company in corpus}) == len(corpus)
+    assert len({company["cik"] for company in corpus}) == len(corpus)
 
 
 def test_find_by_primary_ticker():

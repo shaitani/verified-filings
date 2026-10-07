@@ -45,7 +45,7 @@ def test_main_rejects_unknown_identifier(capsys):
     exit_code = cli.main(["get-submission", "NOTACOMPANY"])
     assert exit_code == 1
     captured = capsys.readouterr()
-    assert "did not match any of the 20 corpus companies" in captured.err
+    assert "did not match any corpus company" in captured.err
 
 
 def test_main_accepts_several_identifier_arguments():

@@ -13,6 +13,7 @@ import json
 import pytest
 
 from app.ingest.alias_index import name_variants, update_alias_index
+from app.ingest.corpus import load_corpus
 from app.semantic.company_aliases import ALIAS_FILE, load_company_aliases
 
 
@@ -85,7 +86,7 @@ def test_shipped_file_resolves_the_names_that_used_to_miss() -> None:
     that failed before it existed."""
     index = load_company_aliases()
     rows = json.loads(ALIAS_FILE.read_text("utf-8"))
-    assert len(rows) == 20
+    assert len(rows) == len(load_corpus())  # one row per corpus company
 
     for typed, ticker in [
         ("Google", "GOOGL"),

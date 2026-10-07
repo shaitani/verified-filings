@@ -138,8 +138,8 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
 
 - **Roll the fiscal-year window forward.** The store keeps FY2021–FY2025 for
   every filer. `get-xbrl` prints a note for any company that has already filed
-  a later 10-K (MSFT, NVDA, ORCL had filed FY2026 as of 2026-08). Once **all
-  20** have, bump `FISCAL_YEAR_MAX` and re-run `get-xbrl` (it re-filters from
+  a later 10-K (MSFT, NVDA, ORCL had filed FY2026 as of 2026-08). Once **every
+  corpus company** has, bump `FISCAL_YEAR_MAX` and re-run `get-xbrl` (it re-filters from
   the cache, no network) and the load.
 - **Recover NVIDIA's FY2021 Q1 and Q2** (D3.8), dropped because the filings
   carry `fy: 2020`. Decide how ingest scopes a filing whose `fy` disagrees with

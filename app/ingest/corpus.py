@@ -1,13 +1,13 @@
-"""Loader for the closed-corpus company list.
+"""Loader for the corpus company list.
 
-`corpus_companies.json` (project root) is the master list of the 20
-companies this project will ever cover — see docs/sec-retriever.md.
+`corpus_companies.json` (project root) is the master list of the
+companies this project covers — see docs/sec-retriever.md.
 This module is the single place that reads it and resolves a caller-
 supplied identifier (ticker, ticker alias, or CIK) to the matching entry.
 
 Ingest code should always resolve identifiers through `find_company()`
 rather than accepting a raw CIK/URL from elsewhere, so a request can never
-silently be made for a company outside the 20-company corpus.
+silently be made for a company outside the corpus.
 """
 
 from __future__ import annotations
@@ -34,8 +34,7 @@ def find_company(identifier: str, *, path: Path = CORPUS_FILE) -> dict[str, Any]
 
     Matches case-insensitively against the primary ticker, any ticker
     alias in `all_tickers`, the raw integer CIK, or the zero-padded CIK.
-    Raises `UnknownCompanyError` if nothing in the 20-company corpus
-    matches.
+    Raises `UnknownCompanyError` if nothing in the corpus matches.
     """
     needle = identifier.strip().upper()
     for company in load_corpus(path):
@@ -47,6 +46,4 @@ def find_company(identifier: str, *, path: Path = CORPUS_FILE) -> dict[str, Any]
         if needle == company["cik_padded"].upper():
             return company
 
-    raise UnknownCompanyError(
-        f"{identifier!r} is not one of the 20 corpus companies in {path.name}"
-    )
+    raise UnknownCompanyError(f"{identifier!r} is not a corpus company in {path.name}")

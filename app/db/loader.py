@@ -266,7 +266,7 @@ async def load_batch(
             tickers.append(ticker)
     if unresolved:
         raise UnknownCompanyError(
-            f"{unresolved!r} did not match any of the 20 corpus companies -- nothing loaded"
+            f"{unresolved!r} did not match any corpus company -- nothing loaded"
         )
 
     # Check every file up front too, so a batch can't load half its companies

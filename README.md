@@ -4,7 +4,7 @@ Answers natural-language questions about SEC financial data with figures that
 are actually correct, and refuses plainly when it cannot. Every figure in an
 answer is attributable to a filed XBRL fact. A web client asks; a FastAPI
 server runs the question through a parser, a mapper, an executor and a
-presenter over 20 US filers' 10-K and 10-Q data in PostgreSQL.
+presenter over US filers' 10-K and 10-Q data in PostgreSQL.
 
 | start here | |
 |---|---|
