@@ -311,6 +311,24 @@ def test_gaps_name_a_whole_year_or_the_quarters_missing_from_it() -> None:
     )
 
 
+async def test_a_gap_over_many_companies_never_states_the_dataset_s_size() -> None:
+    """"Since 2020" over every filer is a note about fiscal 2020, not about "the
+    20 companies that resolved". Past four, a subset is counted, never totalled.
+    Neither path names a company, so no session is needed."""
+    ciks = range(1, 9)
+    every = await query_mapper._range_gap_notes({(c, 2020, "FY") for c in ciks}, {}, None)
+    assert [n.message for n in every] == [
+        "Nothing is on file for fiscal 2020; the answer covers the other periods asked for"
+    ]
+
+    held = {(c, 2020, "FY"): None for c in (7, 8)}
+    some = await query_mapper._range_gap_notes({(c, 2020, "FY") for c in ciks}, held, None)
+    assert [n.message for n in some] == [
+        "Nothing is on file for 6 of the companies for fiscal 2020; "
+        "the answer covers the other periods asked for"
+    ]
+
+
 async def test_period_element_carrying_nothing_is_unresolved(
     test_session_factory, clean_fake_company
 ) -> None:

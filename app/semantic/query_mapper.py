@@ -1178,12 +1178,21 @@ async def _range_gap_notes(
         described = _describe_gaps(gaps, asked_by_company[company_cik])
         companies_by_gaps[described].append(company_cik)
 
+    async def whose(company_ciks: list[int]) -> str:
+        """Named while few; past that never a total, which would tell the reader
+        how many companies the dataset holds (presenter DESIGN §2)."""
+        if len(company_ciks) <= 4:
+            return f" for {await _describe_companies(company_ciks, session)}"
+        if set(company_ciks) == set(asked_by_company):
+            return ""  # every company asked about: it is the period that is missing
+        return f" for {len(company_ciks)} of the companies"
+
     return [
         Note(
             kind="partial_coverage",
             message=(
-                f"Nothing is on file for {await _describe_scope(company_ciks, session)} "
-                f"for {described}; the answer covers the other periods asked for"
+                f"Nothing is on file{await whose(company_ciks)} for {described}; "
+                f"the answer covers the other periods asked for"
             ),
         )
         for described, company_ciks in companies_by_gaps.items()
