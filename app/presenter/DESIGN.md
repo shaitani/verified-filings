@@ -61,9 +61,10 @@ and proves everything; only what is shown is cut, after ordering:
 - a ranked metric keeps its first ten rows, so "worst quarters in 2023" shows
   ten quarters, one company more than once if it ranks so;
 - anything else keeps ten companies, the same ones for every metric: the
-  highest by the first metric asked for at its latest period. A company is kept
-  or dropped whole, so no series is cut partway; an across-companies figure (an
-  average) is one figure and is never cut.
+  highest by the first metric asked for at its latest period, and the table
+  lists them in that order rather than by name, so it reads the way the note
+  says. A company is kept or dropped whole, so no series is cut partway; an
+  across-companies figure (an average) is one figure and is never cut.
 
 A condition says why, never how many there were: "Limiting results to the 10
 companies with the highest revenue", "Limiting results to the 10 lowest by

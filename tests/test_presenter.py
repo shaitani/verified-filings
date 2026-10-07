@@ -133,7 +133,7 @@ def test_unranked_figures_over_every_company_keep_the_ten_highest() -> None:
     full = present(unranked, metrics)
     view = present(_spec(unranked, companies_named=False), metrics)
     highest = sorted(full.rows, key=lambda r: r.value, reverse=True)[:SHOWN_LIMIT]
-    assert {r.company for r in view.rows} == {r.company for r in highest}
+    assert [r.company for r in view.rows] == [r.company for r in highest]  # the note's order
     assert view.conditions == [
         "Limiting results to the 10 companies with the highest operating margin."
     ]
@@ -145,9 +145,19 @@ def test_a_series_over_every_company_keeps_whole_companies() -> None:
     unranked = _spec(result, rank={}, shape="series")
     full = present(unranked, metrics)
     view = present(_spec(unranked, companies_named=False), metrics)
-    kept = {r.company for r in view.rows}
+    kept = list(dict.fromkeys(r.company for r in view.rows))
     assert len(kept) == SHOWN_LIMIT
-    assert view.rows == [r for r in full.rows if r.company in kept]
+    for company in kept:  # whole, and in the order it had
+        assert [r for r in view.rows if r.company == company] == [
+            r for r in full.rows if r.company == company
+        ]
+    # Each company's rows together, highest latest figure first.
+    assert [r.company for r in view.rows] == [c for c in kept for r in view.rows if r.company == c]
+    latest = [
+        max((r for r in view.rows if r.company == c), key=lambda r: r.period_end) for c in kept
+    ]
+    assert [r.value for r in latest] == sorted((r.value for r in latest), reverse=True)
+    assert len(view.rows) == sum(1 for r in full.rows if r.company in kept)
 
 
 def test_an_across_companies_figure_is_not_limited() -> None:

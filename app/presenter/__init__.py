@@ -251,8 +251,9 @@ def _limit_companies(
 ) -> tuple[list[AnswerRow], list[str]]:
     """``SHOWN_LIMIT`` companies of the unranked metrics, the same ones for
     every metric: the highest by the first metric asked for, at its latest
-    period. A company is kept or dropped whole, so no series is cut partway.
-    Ranked rows were cut by rank already; an across-companies row stays."""
+    period, and listed in that order. A company is kept or dropped whole, so no
+    series is cut partway. Ranked rows were cut by rank already; an
+    across-companies row stays."""
     rank = result.result.rank
 
     def limited(row: AnswerRow) -> bool:
@@ -275,8 +276,16 @@ def _limit_companies(
         return value is None, -(value or 0), cik  # no figure goes last; cik breaks ties
 
     ordered = sorted(ciks, key=standing)
-    chosen = set(ordered[:SHOWN_LIMIT])
-    kept = [row for row in rows if not limited(row) or row.company_cik in chosen]
+    place = {cik: i for i, cik in enumerate(ordered[:SHOWN_LIMIT])}
+    kept: list[AnswerRow] = []
+    for element_id in dict.fromkeys(row.element_id for row in rows):  # metrics stay in order
+        block = [row for row in rows if row.element_id == element_id]
+        if element_id not in rank:
+            # The note's order, not the alphabet's: highest first, each company's
+            # rows together and as `_order` left them. An across-companies row first.
+            block = [row for row in block if row.company_cik is None or row.company_cik in place]
+            block.sort(key=lambda row: place.get(row.company_cik, -1))
+        kept += block
     deciding = next(latest[cik] for cik in ordered if cik in latest)  # "revenue growth", if so
     note = f"Limiting results to the {SHOWN_LIMIT} companies with the highest {_name(deciding)}."
     return kept, [note]
