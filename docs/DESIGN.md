@@ -17,8 +17,8 @@ This file is the system. Each package's own decisions are in its `DESIGN.md`
 
 ## 1. Scope
 
-- **US filers listed in `corpus_companies.json`** — 20 today; a company is
-  added by listing it. Three are substitutes for companies that are not SEC
+- **US filers listed in `corpus_companies.json`** — 20 today; companies are
+  added with `app/prime_new_companies.py`. Three are substitutes for companies that are not SEC
   filers or file under IFRS (QCOM for Samsung, CVX for Exxon, JPM for HSBC); two banks
   (JPM, BAC) deliberately stress metrics like gross profit that banks do not
   have. Details: [sec-retriever.md](sec-retriever.md).

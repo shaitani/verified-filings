@@ -33,6 +33,37 @@ impairment and asset-retirement lines.
 
 Scope: **10-K and 10-Q only**, **FY2021–FY2025** (below).
 
+### Adding companies
+
+```
+uv run python -m app.prime_new_companies NFLX ADBE --as NFLX=Netflix
+```
+
+`app/prime_new_companies.py`, a LangGraph state machine, does every step: it
+resolves each ticker or CIK against the SEC's own ticker list, drops what is
+already loaded and any filer without 10-K/10-Q (a 20-F filer like HSBC), shows
+the plan and **waits for yes**, then adds the entries here, runs
+`get-submission` and `get-xbrl`, loads, embeds, and checks each company: its
+facts loaded, readable as `vf_retrieval_role`, every concept it uses embedded,
+and the mapper finding it by name and binding `assets` for it. `--dry-run`
+stops at the plan; `--diagram` prints the graph as Mermaid.
+
+- **Names.** A ticker or CIK maps to one company, so nothing is guessed. `--as
+  TICKER=NAME` records the name people use as the entry's `input_name`, which
+  the company lexicon indexes; without it the typed ticker is recorded, or the
+  SEC's title for a CIK.
+- **Resuming.** A company counts as done once it has a `load_run`; anything
+  short of that goes through every step again, and every step is safe to repeat.
+  A run that stops says where; run the same command again.
+- **Dev only.** It refuses while production runs, and writes the dev database.
+  Commit the three files it changes (`corpus_companies.json`,
+  `sic_numbers.json`, `company_aliases.json`), then copy the data into
+  production with `/copy-dev-db-into-production`: it replaces production's
+  `xbrl` rows with dev's, keeps its users and conversations, and rebuilds
+  production so it knows the new companies' names.
+- **The fiscal-year window stays fixed.** A company with less history in
+  FY2021–FY2025 is loaded with a warning, and its answers say what is missing.
+
 ## Rules for every SEC request
 
 1. **At most 10 requests per second**, globally across the whole process — not
