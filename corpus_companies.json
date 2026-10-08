@@ -1,7 +1,7 @@
 {
   "source": "SEC company_tickers.json",
   "corpus_list": "Company Corpus List.txt",
-  "resolved_count": 22,
+  "resolved_count": 30,
   "excluded_count": 0,
   "companies": [
     {
@@ -282,6 +282,102 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000796343.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000796343.json"
+    },
+    {
+      "input_name": "CRM",
+      "title": "Salesforce, Inc.",
+      "ticker": "CRM",
+      "cik": 1108524,
+      "cik_padded": "0001108524",
+      "all_tickers": [
+        "CRM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001108524.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001108524.json"
+    },
+    {
+      "input_name": "NOW",
+      "title": "ServiceNow, Inc.",
+      "ticker": "NOW",
+      "cik": 1373715,
+      "cik_padded": "0001373715",
+      "all_tickers": [
+        "NOW"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001373715.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001373715.json"
+    },
+    {
+      "input_name": "INTU",
+      "title": "INTUIT INC.",
+      "ticker": "INTU",
+      "cik": 896878,
+      "cik_padded": "0000896878",
+      "all_tickers": [
+        "INTU"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000896878.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000896878.json"
+    },
+    {
+      "input_name": "Cisco",
+      "title": "CISCO SYSTEMS, INC.",
+      "ticker": "CSCO",
+      "cik": 858877,
+      "cik_padded": "0000858877",
+      "all_tickers": [
+        "CSCO"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000858877.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000858877.json"
+    },
+    {
+      "input_name": "IBM",
+      "title": "INTERNATIONAL BUSINESS MACHINES CORP",
+      "ticker": "IBM",
+      "cik": 51143,
+      "cik_padded": "0000051143",
+      "all_tickers": [
+        "IBM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000051143.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000051143.json"
+    },
+    {
+      "input_name": "AVGO",
+      "title": "Broadcom Inc.",
+      "ticker": "AVGO",
+      "cik": 1730168,
+      "cik_padded": "0001730168",
+      "all_tickers": [
+        "AVGO"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001730168.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001730168.json"
+    },
+    {
+      "input_name": "PYPL",
+      "title": "PayPal Holdings, Inc.",
+      "ticker": "PYPL",
+      "cik": 1633917,
+      "cik_padded": "0001633917",
+      "all_tickers": [
+        "PYPL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001633917.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001633917.json"
+    },
+    {
+      "input_name": "Uber",
+      "title": "Uber Technologies, Inc",
+      "ticker": "UBER",
+      "cik": 1543151,
+      "cik_padded": "0001543151",
+      "all_tickers": [
+        "UBER"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001543151.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001543151.json"
     }
   ],
   "excluded": [],

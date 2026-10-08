@@ -152,5 +152,61 @@
     "company_name": "ADOBE INC.",
     "sic": "7372",
     "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0001108524",
+    "ticker": "CRM",
+    "company_name": "Salesforce, Inc.",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0001373715",
+    "ticker": "NOW",
+    "company_name": "ServiceNow, Inc.",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0000896878",
+    "ticker": "INTU",
+    "company_name": "INTUIT INC.",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
+  },
+  {
+    "cik": "CIK0000858877",
+    "ticker": "CSCO",
+    "company_name": "CISCO SYSTEMS, INC.",
+    "sic": "3576",
+    "sic_description": "Computer Communications Equipment"
+  },
+  {
+    "cik": "CIK0000051143",
+    "ticker": "IBM",
+    "company_name": "INTERNATIONAL BUSINESS MACHINES CORP",
+    "sic": "3570",
+    "sic_description": "Computer & office Equipment"
+  },
+  {
+    "cik": "CIK0001730168",
+    "ticker": "AVGO",
+    "company_name": "Broadcom Inc.",
+    "sic": "3674",
+    "sic_description": "Semiconductors & Related Devices"
+  },
+  {
+    "cik": "CIK0001633917",
+    "ticker": "PYPL",
+    "company_name": "PayPal Holdings, Inc.",
+    "sic": "7389",
+    "sic_description": "Services-Business Services, NEC"
+  },
+  {
+    "cik": "CIK0001543151",
+    "ticker": "UBER",
+    "company_name": "Uber Technologies, Inc",
+    "sic": "7389",
+    "sic_description": "Services-Business Services, NEC"
   }
 ]
