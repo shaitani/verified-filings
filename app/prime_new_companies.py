@@ -11,7 +11,7 @@ updated separately (docs/STARTUP.md, Production).
 
     preflight          dev database at head, the embedding model up, production stopped
     resolve            each ticker or CIK to one SEC company, from the SEC's ticker list
-    vet                drops what is already loaded, and filers without 10-K/10-Q
+    vet                drops filers without 10-K/10-Q; what is loaded goes to validate
     confirm            shows the plan and waits for yes -- nothing is written before it
     register           adds the new entries to corpus_companies.json
     fetch_submissions  get-submission: sic_numbers.json and company_aliases.json
@@ -22,9 +22,10 @@ updated separately (docs/STARTUP.md, Production).
     report             one block per company
 
 Every step calls the code its manual command runs and is safe to repeat, so a run
-that stops is resumed by running it again: a company counts as done once it has a
-``load_run``, and anything short of that goes through every step. A failure ends
-at ``report``, which says what was done and where it stopped.
+that stops is resumed by running it again: a company with a ``load_run`` has
+nothing left to write and is only checked, and anything short of that goes
+through every step. A failure ends at ``report``, which says what was done and
+where it stopped.
 
 Names: a ticker or CIK resolves to exactly one company, so no name is guessed.
 ``--as TICKER=NAME`` records the name people use ("Netflix") as the entry's
@@ -50,7 +51,7 @@ import httpx
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy, interrupt
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 
 from app.db import Concept, Fact, LoadRun
 from app.db.embedder import build_source_text, embed_stale_concepts, source_hash
@@ -86,7 +87,7 @@ class PrimeState(TypedDict, total=False):
     requested: list[str]  # tickers or CIKs, as typed
     names: dict[str, str]  # TICKER -> the name people use (--as)
     companies: list[dict[str, Any]]  # corpus entries this run primes
-    already_loaded: list[str]  # tickers vet skipped
+    already_loaded: list[dict[str, Any]]  # corpus entries already loaded: only checked
     dropped: Annotated[list[str], operator.add]  # "<input>: why", from resolve and vet
     approved: bool
     manifests: dict[str, dict[str, Any]]  # ticker -> get-xbrl's manifest entry
@@ -250,14 +251,14 @@ async def vet(state: PrimeState) -> dict[str, Any]:
         )
 
     kept: list[dict[str, Any]] = []
-    already: list[str] = []
+    already: list[dict[str, Any]] = []
     dropped: list[str] = []
     async with SECClient() as client:
         for company in state["companies"]:
-            if company["cik"] in loaded:
-                already.append(company["ticker"])
-                continue
             listed = next((entry for entry in corpus if entry["cik"] == company["cik"]), None)
+            if company["cik"] in loaded:
+                already.append(listed or company)  # nothing to write; validate checks it
+                continue
             clash = None if listed else ticker_clash(company, corpus)
             if clash:
                 dropped.append(f"{company['ticker']}: {clash}")
@@ -401,32 +402,41 @@ async def embed(state: PrimeState) -> dict[str, Any]:
 @_step("validate")
 async def validate(state: PrimeState) -> dict[str, Any]:
     company_alias_index.cache_clear()  # fetch_submissions rewrote the lexicon file
+    primed = state["companies"] if state.get("approved") else []
     checks = {
-        company["ticker"]: await company_checks(company, state["loaded"][company["ticker"]])
-        for company in state["companies"]
+        company["ticker"]: await company_checks(company)
+        for company in [*primed, *state.get("already_loaded", [])]
     }
     failing = sum(not check["ok"] for found in checks.values() for check in found)
     return {"checks": checks, "log": [f"validate: {failing} check(s) failing"]}
 
 
-async def company_checks(company: dict[str, Any], loaded: dict[str, int]) -> list[dict[str, Any]]:
+async def company_checks(company: dict[str, Any]) -> list[dict[str, Any]]:
     """What a primed company has to show: its facts, readable the way an answer
-    reads them, every concept embedded, and the mapper finding it by name."""
+    reads them, every concept embedded, and the mapper finding it by name.
+
+    Facts are held to its latest ``load_run``: every fact in the file but those
+    in a unit the loader drops (true of all 21 companies, 2026-10-07), so a
+    company loaded on an earlier run is checked the same way."""
     cik = company["cik"]
     async with SessionLocal() as session:
-        runs = await session.scalar(
-            select(func.count()).select_from(LoadRun).where(LoadRun.company_cik == cik)
+        run = await session.scalar(
+            select(LoadRun).where(LoadRun.company_cik == cik).order_by(LoadRun.loaded_at.desc())
         )
+        expected = run.fact_count - run.facts_dropped_unit if run and run.fact_count else 0
         facts = await session.scalar(
             select(func.count()).select_from(Fact).where(Fact.company_cik == cik)
         )
         used = select(Fact.concept_id).where(Fact.company_cik == cik)
         concepts = list(await session.scalars(select(Concept).where(Concept.id.in_(used))))
     async with RetrievalSessionLocal() as session:
+        # One row, not a count: counting synthesizes every fourth quarter, which
+        # took 4.9 s for AAPL and passed the role's 10 s timeout for NFLX.
         visible = await session.scalar(
-            select(func.count())
+            select(literal(1))
             .select_from(reported_fact)
             .where(reported_fact.c.company_cik == cik)
+            .limit(1)
         )
     stale = [
         concept
@@ -437,8 +447,8 @@ async def company_checks(company: dict[str, Any], loaded: dict[str, int]) -> lis
     checks = [
         _check(
             "loaded",
-            bool(runs) and facts == loaded["facts"] and facts > 0,
-            f"{facts:,} facts in the database, {loaded['facts']:,} loaded",
+            facts == expected > 0,
+            f"{facts:,} facts in the database, {expected:,} in its latest load",
         ),
         _check(
             "embedded",
@@ -447,8 +457,8 @@ async def company_checks(company: dict[str, Any], loaded: dict[str, int]) -> lis
         ),
         _check(
             "visible to retrieval",
-            bool(visible),
-            f"{visible:,} rows in xbrl.reported_fact, read as vf_retrieval_role",
+            visible is not None,
+            "its rows read from xbrl.reported_fact as vf_retrieval_role",
         ),
     ]
     plans = {
@@ -492,9 +502,11 @@ async def report(state: PrimeState) -> dict[str, Any]:
 def summary(state: PrimeState) -> list[str]:
     """What the run did, one block per company, then what stopped it if anything."""
     lines: list[str] = []
-    for company in state.get("companies", []) if state.get("approved") else []:
+    primed = state.get("companies", []) if state.get("approved") else []
+    for company in [*primed, *state.get("already_loaded", [])]:
         ticker = company["ticker"]
-        lines.append(f"{ticker}  {company['title']}  CIK {company['cik']}")
+        earlier = "  (loaded on an earlier run: checked only)" if company not in primed else ""
+        lines.append(f"{ticker}  {company['title']}  CIK {company['cik']}{earlier}")
         manifest, loaded = (
             state.get("manifests", {}).get(ticker),
             state.get("loaded", {}).get(ticker),
@@ -509,8 +521,6 @@ def summary(state: PrimeState) -> list[str]:
     if state.get("embedded"):
         e = state["embedded"]
         lines.append(f"Embedder: {e['embedded']} embedded, {e['skipped']} already up to date")
-    if state.get("already_loaded"):
-        lines.append(f"Already loaded, skipped: {', '.join(state['already_loaded'])}")
     lines += [f"Dropped: {reason}" for reason in state.get("dropped", [])]
     lines += [f"Warning: {warning}" for warning in state.get("warnings", [])]
     if state.get("failed"):
@@ -544,6 +554,17 @@ def _has_companies(next_node: str) -> Callable[[PrimeState], str]:
         return "report" if state.get("failed") or not state.get("companies") else next_node
 
     return route
+
+
+def _after_vet(state: PrimeState) -> str:
+    """New companies need your yes; companies loaded on an earlier run have
+    nothing to write, so they go straight to validate -- which is also how a run
+    that stopped at validate finishes."""
+    if state.get("failed"):
+        return "report"
+    if state.get("companies"):
+        return "confirm"
+    return "validate" if state.get("already_loaded") else "report"
 
 
 def _after_confirm(state: PrimeState) -> str:
@@ -580,7 +601,7 @@ def build_graph() -> StateGraph:
     graph.add_edge(START, "preflight")
     graph.add_conditional_edges("preflight", _onward("resolve"), ["resolve", "report"])
     graph.add_conditional_edges("resolve", _has_companies("vet"), ["vet", "report"])
-    graph.add_conditional_edges("vet", _has_companies("confirm"), ["confirm", "report"])
+    graph.add_conditional_edges("vet", _after_vet, ["confirm", "validate", "report"])
     graph.add_conditional_edges("confirm", _after_confirm, ["register", END])
     graph.add_conditional_edges(
         "register", _onward("fetch_submissions"), ["fetch_submissions", "report"]
@@ -613,7 +634,8 @@ def plan_text(plan: dict[str, Any]) -> list[str]:
             f"tickers {tickers}{named}"
         )
     if plan["already_loaded"]:
-        lines.append(f"Already loaded, skipped: {', '.join(plan['already_loaded'])}")
+        tickers = ", ".join(company["ticker"] for company in plan["already_loaded"])
+        lines.append(f"Already loaded, will only be checked: {tickers}")
     lines += [f"Dropped: {reason}" for reason in plan["dropped"]]
     return lines
 

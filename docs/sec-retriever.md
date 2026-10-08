@@ -52,9 +52,10 @@ stops at the plan; `--diagram` prints the graph as Mermaid.
   TICKER=NAME` records the name people use as the entry's `input_name`, which
   the company lexicon indexes; without it the typed ticker is recorded, or the
   SEC's title for a CIK.
-- **Resuming.** A company counts as done once it has a `load_run`; anything
-  short of that goes through every step again, and every step is safe to repeat.
-  A run that stops says where; run the same command again.
+- **Resuming.** A company with a `load_run` has nothing left to write, so
+  naming it again only checks it; anything short of that goes through every
+  step again, and every step is safe to repeat. A run that stops says where;
+  run the same command again.
 - **Dev only.** It refuses while production runs, and writes the dev database.
   Commit the three files it changes (`corpus_companies.json`,
   `sic_numbers.json`, `company_aliases.json`), then copy the data into

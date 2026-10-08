@@ -208,15 +208,20 @@ async def test_a_dry_run_stops_at_the_plan(steps) -> None:
     assert code == 0 and steps.calls == ["preflight", "resolve", "vet"]
 
 
-async def test_everything_already_loaded_goes_straight_to_report(steps) -> None:
-    steps.stub("vet", {"companies": [], "already_loaded": ["NFLX"]})
+async def test_a_company_loaded_earlier_is_only_checked(steps) -> None:
+    """Nothing to write, so no question and no writing step -- just validate.
+    It is also how a run that stopped at validate finishes."""
+    steps.stub("vet", {"companies": [], "already_loaded": NFLX})
 
     async def never(_prompt: str) -> str:
         raise AssertionError("nothing to confirm")
 
     state, code = await prime(["NFLX"], {}, ask=never)
-    assert code == 0 and steps.calls[-1] == "vet"
-    assert state["summary"] == ["Already loaded, skipped: NFLX"]
+    assert code == 0 and steps.calls == ["preflight", "resolve", "vet", "validate"]
+    assert state["summary"][:2] == [
+        "NFLX  NETFLIX INC  CIK 1065280  (loaded on an earlier run: checked only)",
+        "  ok    embedded: all",
+    ]
 
 
 async def test_stale_embeddings_go_back_to_embed_once(steps) -> None:
