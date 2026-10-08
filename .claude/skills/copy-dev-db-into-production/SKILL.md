@@ -11,7 +11,7 @@ What is copied: the rows of the five `xbrl` tables (company, filing, concept wit
 its embeddings, fact, load_run). Production's rows there are replaced; nothing
 else in its database is touched, and nothing outside `xbrl` points into those
 tables. Dev and production never run together, so production is down from
-step 1 until step 8.
+step 1 until step 9.
 
 1. **Stop production, start dev's database:**
 
@@ -34,16 +34,17 @@ step 1 until step 8.
    docker compose -f docker-compose.dev.yml exec -T db pg_dump -U postgres -d verified_filings --schema=xbrl --data-only --disable-triggers > xbrl-data.sql
    ```
 
-4. **Stop dev, start production's database:**
+4. **Stop all of dev, start production's database.** `--profile web` includes
+   dev's `api` container, which a plain `stop` leaves running:
 
    ```bash
-   docker compose -f docker-compose.dev.yml stop
+   docker compose -f docker-compose.dev.yml --profile web stop
    docker compose -f docker-compose.prod.yml up -d --wait db
    ```
 
 5. **Check production is at dev's migration** -- a data-only copy needs the
-   same tables. If the revision differs from step 2's, stop here, delete
-   `xbrl-data.sql`, and report both revisions:
+   same tables. If the revision differs from step 2's, copy nothing: report both
+   revisions and skip to step 8, so production comes back up with its old data:
 
    ```bash
    docker compose -f docker-compose.prod.yml run --rm ops -m alembic current
@@ -56,8 +57,8 @@ step 1 until step 8.
    ( echo "TRUNCATE xbrl.fact, xbrl.filing, xbrl.load_run, xbrl.concept, xbrl.company;"; cat xbrl-data.sql ) | docker compose -f docker-compose.prod.yml exec -T db psql -U postgres -d verified_filings -v ON_ERROR_STOP=1 --single-transaction
    ```
 
-   If it fails, report the error, delete `xbrl-data.sql`, and go on to step 8
-   so production comes back up with its old data.
+   If it fails, report the error and go on to step 8 so production comes back
+   up with its old data.
 
 7. **Check the counts match step 2's.** If they don't, say so plainly:
 
@@ -65,19 +66,20 @@ step 1 until step 8.
    docker compose -f docker-compose.prod.yml exec -T db psql -U postgres -d verified_filings -c "SELECT (SELECT count(*) FROM xbrl.company) AS companies, (SELECT count(*) FROM xbrl.fact) AS facts, (SELECT count(*) FROM xbrl.concept WHERE embedding IS NULL) AS unembedded"
    ```
 
-8. **Rebuild and start all of production.** The api image holds its own copies
+8. **Delete the dump** -- before the rebuild, so the untracked file does not mark
+   the code version `+dirty`:
+
+   ```bash
+   rm xbrl-data.sql
+   ```
+
+9. **Rebuild and start all of production.** The api image holds its own copies
    of `corpus_companies.json`, `company_aliases.json` and `sic_numbers.json`, so
    it finds new companies by name only once rebuilt:
 
    ```bash
    V=$(git rev-parse --short=12 HEAD); [ -n "$(git status --porcelain)" ] && V="$V+dirty"
    CODE_VERSION="$V" docker compose -f docker-compose.prod.yml up -d --build --wait
-   ```
-
-9. **Delete the dump:**
-
-   ```bash
-   rm xbrl-data.sql
    ```
 
 Report: dev's and production's counts side by side, the `CODE_VERSION` now
