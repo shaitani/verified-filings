@@ -309,5 +309,33 @@
     "tickers": [
       "UNH"
     ]
+  },
+  {
+    "cik": "CIK0001065280",
+    "ticker": "NFLX",
+    "names": [
+      "NETFLIX INC",
+      "NETFLIX",
+      "Netflix",
+      "NETFLIX COM INC",
+      "NETFLIX COM"
+    ],
+    "tickers": [
+      "NFLX"
+    ]
+  },
+  {
+    "cik": "CIK0000796343",
+    "ticker": "ADBE",
+    "names": [
+      "ADOBE INC.",
+      "ADOBE",
+      "ADBE",
+      "ADOBE SYSTEMS INC",
+      "ADOBE SYSTEMS"
+    ],
+    "tickers": [
+      "ADBE"
+    ]
   }
 ]

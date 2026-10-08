@@ -138,5 +138,19 @@
     "company_name": "UNITEDHEALTH GROUP INC",
     "sic": "6324",
     "sic_description": "Hospital & Medical Service Plans"
+  },
+  {
+    "cik": "CIK0001065280",
+    "ticker": "NFLX",
+    "company_name": "NETFLIX INC",
+    "sic": "7841",
+    "sic_description": "Services-Video Tape Rental"
+  },
+  {
+    "cik": "CIK0000796343",
+    "ticker": "ADBE",
+    "company_name": "ADOBE INC.",
+    "sic": "7372",
+    "sic_description": "Services-Prepackaged Software"
   }
 ]

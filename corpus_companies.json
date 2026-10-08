@@ -1,7 +1,7 @@
 {
   "source": "SEC company_tickers.json",
   "corpus_list": "Company Corpus List.txt",
-  "resolved_count": 20,
+  "resolved_count": 22,
   "excluded_count": 0,
   "companies": [
     {
@@ -258,6 +258,30 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000731766.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000731766.json"
+    },
+    {
+      "input_name": "Netflix",
+      "title": "NETFLIX INC",
+      "ticker": "NFLX",
+      "cik": 1065280,
+      "cik_padded": "0001065280",
+      "all_tickers": [
+        "NFLX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001065280.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001065280.json"
+    },
+    {
+      "input_name": "ADBE",
+      "title": "ADOBE INC.",
+      "ticker": "ADBE",
+      "cik": 796343,
+      "cik_padded": "0000796343",
+      "all_tickers": [
+        "ADBE"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000796343.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000796343.json"
     }
   ],
   "excluded": [],
