@@ -1182,7 +1182,7 @@ async def _range_gap_notes(
         """Named while few; past that never a total, which would tell the reader
         how many companies the dataset holds (presenter DESIGN §2)."""
         if len(company_ciks) <= 4:
-            return f" for {await _describe_companies(company_ciks, session)}"
+            return f" for {await _describe_scope(company_ciks, session)}"  # names them
         if set(company_ciks) == set(asked_by_company):
             return ""  # every company asked about: it is the period that is missing
         return f" for {len(company_ciks)} of the companies"
