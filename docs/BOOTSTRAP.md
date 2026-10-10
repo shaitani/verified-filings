@@ -16,7 +16,7 @@ not come up.
 | schemas, tables, the `reported_fact` view | ✅ rebuilt | they are Alembic migrations |
 | the `vector` extension | ✅ rebuilt | `CREATE EXTENSION` is in migration `00b08d07eff8` |
 | the three login roles | ❌ gone | cluster objects, deliberately not migrations |
-| the ~174,000 facts, concept embeddings, users, conversations | ❌ gone | table data |
+| the facts, concept embeddings, users, conversations | ❌ gone | table data |
 | `nomic-embed-text`, `qwen2.5-coder:7b` | ❌ gone | `ollama-models` is a volume too; pulled again on startup |
 | `data/xbrl/*.json` | ✅ untouched | files on disk, not in any volume |
 | `.env` | ✅ untouched | a file on disk (git-ignored) |

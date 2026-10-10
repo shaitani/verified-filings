@@ -17,15 +17,14 @@ This file is the system. Each package's own decisions are in its `DESIGN.md`
 
 ## 1. Scope
 
-- **US filers listed in `corpus_companies.json`** — 20 today; companies are
-  added with `app/prime_new_companies.py`. Three are substitutes for companies that are not SEC
-  filers or file under IFRS (QCOM for Samsung, CVX for Exxon, JPM for HSBC); two banks
-  (JPM, BAC) deliberately stress metrics like gross profit that banks do not
-  have. Details: [sec-retriever.md](sec-retriever.md).
+- **US filers listed in `corpus_companies.json`**, added with
+  `app/prime_new_companies.py`. Three are substitutes for companies that are
+  not SEC filers or file under IFRS (QCOM for Samsung, CVX for Exxon, JPM for
+  HSBC); two banks (JPM, BAC) deliberately stress metrics like gross profit
+  that banks do not have. Details: [sec-retriever.md](sec-retriever.md).
 - **Fiscal years FY2021–FY2025**, one fixed window for every filer so
   cross-company questions share a grid.
-- **10-K and 10-Q only.** ~174,000 facts, `us-gaap`, `dei` and `srt`
-  taxonomies.
+- **10-K and 10-Q only**, `us-gaap`, `dei` and `srt` taxonomies.
 
 **Vocabulary.** The SEC endpoint `api/xbrl/companyfacts/CIK….json` is called
 **"XBRL data"**, never "companyfacts". **Retrieval** is SEC → files on disk

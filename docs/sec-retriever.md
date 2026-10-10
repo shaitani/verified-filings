@@ -14,8 +14,8 @@ path. `https://data.sec.gov/submissions/CIK##########.json` is
 
 ## The corpus
 
-**The companies listed in `corpus_companies.json`** — the master list, 20 today
-and open to more. Each entry holds the CIK (`cik`, `cik_padded`), tickers, the
+**The companies listed in `corpus_companies.json`** — the master list, added to
+with `app/prime_new_companies.py` ([below](#adding-companies)). Each entry holds the CIK (`cik`, `cik_padded`), tickers, the
 company's title, and its two SEC URLs. All ingest code resolves identifiers
 (ticker, ticker alias or CIK, case-insensitive) through `app/ingest/corpus.py`,
 so nothing outside the corpus can be requested.
