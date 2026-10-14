@@ -26,11 +26,13 @@ https://vf.zubron-ratio.ts.net. It stays open, across restarts, until
    grep -A1 '"AllowFunnel"' tailscale.serve.json
    ```
 
-3. **Start the Tailscale container** (it reads the file as it starts, and
-   re-reads it if it was already running):
+3. **Start the Tailscale container, then restart it.** It reads the file only
+   as it starts: a container already running keeps the old copy (the edit
+   replaces the file) and Funnel stays off.
 
    ```bash
    docker compose -f docker-compose.prod.yml up -d tailscale
+   docker compose -f docker-compose.prod.yml restart tailscale
    ```
 
 4. **Check** Funnel is on and the public address answers (up to a minute):
