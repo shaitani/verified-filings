@@ -189,6 +189,7 @@ services:
       - database_url_admin
       - database_url_query_mapper
       - database_url_retrieval
+      - database_url_invite_watch
 
 secrets:
   postgres_password: {file: ./secrets/postgres_password}
@@ -197,6 +198,7 @@ secrets:
   database_url_admin: {file: ./secrets/database_url_admin}
   database_url_query_mapper: {file: ./secrets/database_url_query_mapper}
   database_url_retrieval: {file: ./secrets/database_url_retrieval}
+  database_url_invite_watch: {file: ./secrets/database_url_invite_watch}
   auth_reset_secret: {file: ./secrets/auth_reset_secret}
   auth_verify_secret: {file: ./secrets/auth_verify_secret}
   auth_oauth_state_secret: {file: ./secrets/auth_oauth_state_secret}

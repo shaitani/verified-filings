@@ -35,6 +35,7 @@ LOGINS = {
     "database_url_admin": "vf_admin_role",
     "database_url_query_mapper": "vf_query_mapper_role",
     "database_url_retrieval": "vf_retrieval_role",
+    "database_url_invite_watch": "vf_invite_watch_role",
 }
 
 #: Signing secrets, each its own (app/api/auth.py SECRETS).
