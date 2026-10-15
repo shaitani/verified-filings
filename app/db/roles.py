@@ -1,5 +1,6 @@
-"""Provision the database roles: two read-only readers of ``xbrl``, and the Web
-Server's two writers of ``web`` -- its own, and its admin routes'.
+"""Provision the database roles: two read-only readers of ``xbrl``, the Web
+Server's two writers of ``web`` -- its own, and its admin routes' -- and one
+read-only watcher of ``web.invite``.
 
     uv run python -m app.db.roles          # create/refresh against DATABASE_URL
     uv run python -m app.db.roles --check  # report, change nothing
@@ -39,6 +40,11 @@ Nothing that answers a question has any business reading it.
     needs and the Web Server must not have: making and revoking invites,
     reading traces, deleting a reader. Kept apart so a bug in an ordinary route
     still holds only ``vf_web_role``'s grants. Neither can set ``is_superuser``.
+
+``vf_invite_watch_role``
+    The invite watcher, run on this PC to say when an invite code is spent.
+    Reads three columns of ``web.invite`` -- which invite, when, by whom --
+    and nothing else: not the code hashes, no other table, no write anywhere.
 
 Row-level security on ``web.user`` and ``web.access_token`` keeps an admin off
 an admin's row whatever the admin routes do: ``vf_admin_role`` may change or
@@ -266,7 +272,20 @@ ADMIN = RoleSpec(
     connection_limit=4,
 )
 
-ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL, WEB, ADMIN)
+INVITE_WATCH = RoleSpec(
+    name="vf_invite_watch_role",
+    used_by="the invite watcher (alerts when an invite code is spent)",
+    schema="web",
+    tables=(),
+    # Enough to tell a spent invite from an open one and report each once. Not
+    # code_hash, not who made it, not the user it names.
+    columns={"invite": ("id", "used_at", "used_by")},
+    inherit_future_tables=False,
+    needs_vector_operators=False,
+    connection_limit=1,
+)
+
+ROLES: tuple[RoleSpec, ...] = (QUERY_MAPPER, RETRIEVAL, WEB, ADMIN, INVITE_WATCH)
 
 
 @dataclass(frozen=True)
@@ -677,6 +696,7 @@ _URL_SETTINGS = {
     RETRIEVAL.name: "database_url_retrieval",
     WEB.name: "database_url_web",
     ADMIN.name: "database_url_admin",
+    INVITE_WATCH.name: "database_url_invite_watch",
 }
 
 

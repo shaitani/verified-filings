@@ -4,15 +4,17 @@
 proves that what provisioning *sends* has not changed. A dropped ``REVOKE``
 may not fail any behaviour test, and here it cannot slip by.
 
-Three files, each role added later pinned apart from those before it, so
+Four files, each role added later pinned apart from those before it, so
 adding it provably took nothing from them: the readers', then everything else
 about the ``web`` schema, then everything naming the admin role -- including
-the row-security statements, which exist because of it. A deliberate change
-regenerates a file and shows up as its diff:
+the row-security statements, which exist because of it -- then everything
+naming the invite watcher. A deliberate change regenerates a file and shows up
+as its diff:
 
     UPDATE_PINNED_READERS=1 uv run pytest tests/test_role_statements.py  # readers
     UPDATE_PINNED=1 uv run pytest tests/test_role_statements.py          # web
     UPDATE_PINNED_ADMIN=1 uv run pytest tests/test_role_statements.py    # admin
+    UPDATE_PINNED_INVITE_WATCH=1 uv run pytest tests/test_role_statements.py  # invite watcher
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 PINNED_READERS = FIXTURES / "role_statements.sql"  # the readers, as before web existed
 PINNED_WEB = FIXTURES / "role_statements_web.sql"
 PINNED_ADMIN = FIXTURES / "role_statements_admin.sql"
+PINNED_INVITE_WATCH = FIXTURES / "role_statements_invite_watch.sql"
 
 URL = "postgresql+asyncpg://owner:secret@host:5432/verified_filings"
 PASSWORDS = {spec.name: f"{spec.name}-pw" for spec in roles.ROLES}  # every role provisioned
@@ -69,12 +72,16 @@ async def _sent_by_provision(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return sent
 
 
+def _about_invite_watch(statement: str) -> bool:
+    return roles.INVITE_WATCH.name in statement
+
+
 def _about_admin(statement: str) -> bool:
     return roles.ADMIN.name in statement
 
 
 def _about_web(statement: str) -> bool:
-    if _about_admin(statement):
+    if _about_admin(statement) or _about_invite_watch(statement):
         return False
     return roles.WEB.name in statement or re.search(r"\bweb\b", statement) is not None
 
@@ -94,7 +101,10 @@ async def test_the_readers_statements_are_unchanged(monkeypatch) -> None:
     # Everything about web removed, what is left must be byte-identical to the
     # file pinned before web existed: the readers lost nothing.
     sent = await _sent_by_provision(monkeypatch)
-    readers = [s for s in sent if not _about_web(s) and not _about_admin(s)]
+    readers = [
+        s for s in sent
+        if not _about_web(s) and not _about_admin(s) and not _about_invite_watch(s)
+    ]
     _check(readers, PINNED_READERS, "UPDATE_PINNED_READERS")
 
 
@@ -106,3 +116,12 @@ async def test_the_web_statements_are_pinned(monkeypatch) -> None:
 async def test_the_admin_statements_are_pinned(monkeypatch) -> None:
     sent = await _sent_by_provision(monkeypatch)
     _check([s for s in sent if _about_admin(s)], PINNED_ADMIN, "UPDATE_PINNED_ADMIN")
+
+
+async def test_the_invite_watch_statements_are_pinned(monkeypatch) -> None:
+    sent = await _sent_by_provision(monkeypatch)
+    _check(
+        [s for s in sent if _about_invite_watch(s)],
+        PINNED_INVITE_WATCH,
+        "UPDATE_PINNED_INVITE_WATCH",
+    )

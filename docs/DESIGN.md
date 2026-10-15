@@ -265,7 +265,7 @@ the conversation. Detail: [app/api/DESIGN.md](../app/api/DESIGN.md).
 
 ## 9. Who can do what in the database
 
-Four login roles besides the owner, provisioned by `app/db/roles.py` — not by
+Five login roles besides the owner, provisioned by `app/db/roles.py` — not by
 migrations, because a role is a cluster object whose password has no place in
 version control.
 
@@ -275,6 +275,7 @@ version control.
 | `vf_retrieval_role` | [E] | read `xbrl.reported_fact` only |
 | `vf_web_role` | [B] | write in `web` only, by a per-table grid; never set `is_superuser`, create an invite, or read a trace |
 | `vf_admin_role` | [B]'s admin routes | read all of `web`; make and revoke invites, deactivate, reset or delete a non-administrator — row-level security keeps it off administrators' rows; never set `is_superuser` |
+| `vf_invite_watch_role` | the invite watcher | read `web.invite`'s `id`, `used_at` and `used_by` only |
 
 The grants are the boundary. The readers' session settings
 (`default_transaction_read_only`, `statement_timeout`) are `USERSET`, so they

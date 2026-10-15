@@ -31,6 +31,7 @@ PASSWORDS = {
     roles.RETRIEVAL.name: "retrieval-pw",
     roles.WEB.name: "web-pw",  # needs the web migration on the test database (docs/STARTUP.md)
     roles.ADMIN.name: "admin-pw",
+    roles.INVITE_WATCH.name: "invite-watch-pw",
 }
 
 #: 768 floats, matching the embedding column. A shorter literal fails on
@@ -720,3 +721,74 @@ async def test_the_admin_role_writes_and_lives_in_web(provisioned) -> None:
             assert (read_only.scalar_one(), path.scalar_one()) == ("off", "web")
     finally:
         await engine.dispose()
+
+
+# --------------------------------------------------------------------------- #
+# The invite watcher: three columns of web.invite, and nothing else
+# --------------------------------------------------------------------------- #
+
+INVITE_WATCH = roles.INVITE_WATCH.name
+
+
+async def test_the_invite_watcher_reads_what_it_needs(admin_rows) -> None:
+    engine = _engine(admin_rows, INVITE_WATCH)
+    try:
+        async with engine.connect() as connection:
+            rows = (
+                await connection.execute(
+                    text(f"SELECT id, used_at, used_by FROM invite WHERE id = '{INVITE_ID}'")
+                )
+            ).all()
+            assert len(rows) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("label", "statement"),
+    [
+        ("read a code hash", "SELECT code_hash FROM invite"),
+        ("read every column", "SELECT * FROM invite"),
+        ("read users", 'SELECT count(*) FROM "user"'),
+        ("read conversations", "SELECT count(*) FROM conversation"),
+        ("read xbrl facts", "SELECT count(*) FROM xbrl.fact"),
+        ("spend an invite", "UPDATE invite SET used_at = now()"),
+        ("revoke an invite", "UPDATE invite SET revoked_at = now()"),
+        ("delete an invite", "DELETE FROM invite"),
+        (
+            "create an invite",
+            "INSERT INTO invite (id, code_hash, expires_at) "
+            "VALUES (gen_random_uuid(), 'zz-watch', now())",
+        ),
+        ("create in web", "CREATE TABLE web.should_not_exist (i int)"),
+        ("create in public", "CREATE TABLE public.should_not_exist (i int)"),
+        ("read pg_authid", "SELECT count(*) FROM pg_authid"),
+    ],
+)
+async def test_the_invite_watcher_cannot_leave_its_columns(
+    provisioned, label: str, statement: str
+) -> None:
+    """With read-only switched off first, as for the readers: the grants alone hold."""
+    engine = _engine(provisioned, INVITE_WATCH, autocommit=True)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SET default_transaction_read_only = off"))
+            with pytest.raises(DBAPIError) as caught:
+                await connection.execute(text(statement))
+            assert "InsufficientPrivilege" in str(caught.value), label
+    finally:
+        await engine.dispose()
+
+
+async def test_the_invite_watcher_is_read_only_and_capped(provisioned) -> None:
+    engine = _engine(provisioned, INVITE_WATCH)
+    try:
+        async with engine.connect() as connection:
+            read_only = await connection.execute(text("SHOW default_transaction_read_only"))
+            path = await connection.execute(text("SHOW search_path"))
+            assert (read_only.scalar_one(), path.scalar_one()) == ("on", "web")
+    finally:
+        await engine.dispose()
+    report = await roles.describe(provisioned)
+    assert report[INVITE_WATCH]["connection_limit"] == 1
+    assert report[INVITE_WATCH]["grants"] == {"web.invite": ["SELECT(id, used_at, used_by)"]}
