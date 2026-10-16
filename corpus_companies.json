@@ -1,7 +1,7 @@
 {
   "source": "SEC company_tickers.json",
   "corpus_list": "Company Corpus List.txt",
-  "resolved_count": 114,
+  "resolved_count": 113,
   "excluded_count": 0,
   "companies": [
     {
@@ -751,18 +751,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001601046.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001601046.json"
-    },
-    {
-      "input_name": "TEL",
-      "title": "TE Connectivity plc",
-      "ticker": "TEL",
-      "cik": 1385157,
-      "cik_padded": "0001385157",
-      "all_tickers": [
-        "TEL"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001385157.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001385157.json"
     },
     {
       "input_name": "MSTR",
