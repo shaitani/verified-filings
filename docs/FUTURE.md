@@ -151,8 +151,9 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   - *A label repeated, so a period answers under another year's name.* The
     mapper keeps one window per `(year, period)`; the later filing wins and the
     earlier period is unreachable. Annual: Salesforce (CRM — its FY2026 10-K
-    says FY2025, so "fiscal 2025" read Feb 2025 – Jan 2026, and is in
-    production since 2026-10-08), CrowdStrike (CRWD — FY2022 on two 10-Ks,
+    says FY2025, so "fiscal 2025" read Feb 2025 – Jan 2026; it reached
+    production on 2026-10-08 and was removed from the corpus, dev and
+    production on 2026-10-16, to be primed again once this is fixed), CrowdStrike (CRWD — FY2022 on two 10-Ks,
     every label after it one year behind), Veeva (VEEV — FY2021 on two).
     Quarterly: CRWD, DELL (two 10-Qs labelled FY), MPWR, NTAP, NTNX, PTC, SWKS,
     TTWO, VEEV, VRSN, WDAY, ZS.
