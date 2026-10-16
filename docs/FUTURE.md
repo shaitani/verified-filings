@@ -144,28 +144,37 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
   carry `fy: 2020`. Decide how ingest scopes a filing whose `fy` disagrees with
   its period dates before changing the filter — it is the same field D1.1
   warns about.
-- **Fiscal labels that disagree with their dates, beyond NVIDIA.** Found when
+- **Fiscal windows that disagree with their dates, beyond NVIDIA.** Found when
   100 tech filers were primed on 2026-10-16; `prime_new_companies` now fails a
-  company on a repeated label (its `fiscal labels` check). Two failures, worst
-  first:
+  company on a repeated label (its `fiscal labels` check), but nothing catches
+  the third case below. Three failures, worst first:
   - *A label repeated, so a period answers under another year's name.* The
     mapper keeps one window per `(year, period)`; the later filing wins and the
     earlier period is unreachable. Annual: Salesforce (CRM — its FY2026 10-K
     says FY2025, so "fiscal 2025" read Feb 2025 – Jan 2026; it reached
-    production on 2026-10-08 and was removed from the corpus, dev and
-    production on 2026-10-16, to be primed again once this is fixed), CrowdStrike (CRWD — FY2022 on two 10-Ks,
-    every label after it one year behind), Veeva (VEEV — FY2021 on two).
-    Quarterly: CRWD, DELL (two 10-Qs labelled FY), MPWR, NTAP, NTNX, PTC, SWKS,
-    TTWO, VEEV, VRSN, WDAY, ZS.
+    production on 2026-10-08), CrowdStrike (CRWD — FY2022 on two 10-Ks, every
+    label after it one year behind), Veeva (VEEV — FY2021 on two). Quarterly:
+    CRWD, DELL (two 10-Qs labelled FY), MPWR, NTAP, NTNX, PTC, SWKS, TTWO, VEEV,
+    VRSN, WDAY, ZS.
+  - *A forward-dated fact takes over a filing's window.* `_load_windows` takes
+    a filing's window from its year-long (or quarter-long) fact with the latest
+    `period_end`. TE Connectivity's (TEL) FY2024 10-K reports dividends
+    declared for 2024-03-30 to 2025-03-28 — after the filing — so its FY2024
+    read March to March instead of 2023-09-30 to 2024-09-27, with a clean,
+    unrepeated label. Found by checking every window's end against the filer's
+    fiscal year end in its SEC submissions: of 2,271 windows across 114
+    companies, this was the only one. Fix: ignore facts ending after the
+    filing's own period (`dei:DocumentPeriodEndDate`, or the filed date) when
+    choosing a window.
   - *A year missing from the window, answered with a note or refused.* Seagate
     (STX — labels a year ahead, so its FY2025 10-K falls past the window, and
     "latest year" does not resolve), Coherent (COHR — no FY2021), Marvell (MRVL —
     no FY2021: it re-registered under a new CIK in 2021).
-  The likely fix for both: take a window's label from its dates and the filer's
-  fiscal year end rather than from `fy`. Every company named here except
-  NVIDIA was removed from the corpus and dev on 2026-10-16 (Salesforce from
-  production too; none of the others had reached it); prime them again once
-  this is fixed.
+  The likely fix for the labels: take a window's label from its dates and the
+  filer's fiscal year end rather than from `fy`. Every company named here
+  except NVIDIA was removed from the corpus and dev on 2026-10-16 (Salesforce
+  from production too; none of the others had reached it); prime them again
+  once these are fixed.
 - **Submissions overflow** for JPM and BAC (G9), if a five-year analysis of
   their submissions is ever needed.
 - **Loader:** cross-check a file's `cik` against its ticker; model the
