@@ -339,21 +339,6 @@
     ]
   },
   {
-    "cik": "CIK0001108524",
-    "ticker": "CRM",
-    "names": [
-      "Salesforce, Inc.",
-      "Salesforce",
-      "CRM",
-      "SALESFORCE.COM, INC.",
-      "SALESFORCE COM",
-      "SALESFORCE COM INC"
-    ],
-    "tickers": [
-      "CRM"
-    ]
-  },
-  {
     "cik": "CIK0001373715",
     "ticker": "NOW",
     "names": [
@@ -440,6 +425,1308 @@
     ],
     "tickers": [
       "UBER"
+    ]
+  },
+  {
+    "cik": "CIK0001403161",
+    "ticker": "V",
+    "names": [
+      "VISA INC.",
+      "VISA",
+      "V"
+    ],
+    "tickers": [
+      "V"
+    ]
+  },
+  {
+    "cik": "CIK0001141391",
+    "ticker": "MA",
+    "names": [
+      "Mastercard Inc",
+      "Mastercard",
+      "MA"
+    ],
+    "tickers": [
+      "MA"
+    ]
+  },
+  {
+    "cik": "CIK0001321655",
+    "ticker": "PLTR",
+    "names": [
+      "Palantir Technologies Inc.",
+      "Palantir Technologies",
+      "Palantir",
+      "Palantir Technologies Inc"
+    ],
+    "tickers": [
+      "PLTR"
+    ]
+  },
+  {
+    "cik": "CIK0000707549",
+    "ticker": "LRCX",
+    "names": [
+      "LAM RESEARCH CORP",
+      "LAM RESEARCH",
+      "LRCX"
+    ],
+    "tickers": [
+      "LRCX"
+    ]
+  },
+  {
+    "cik": "CIK0000006951",
+    "ticker": "AMAT",
+    "names": [
+      "APPLIED MATERIALS INC",
+      "APPLIED MATERIALS",
+      "AMAT"
+    ],
+    "tickers": [
+      "AMAT"
+    ]
+  },
+  {
+    "cik": "CIK0001571996",
+    "ticker": "DELL",
+    "names": [
+      "Dell Technologies Inc.",
+      "Dell Technologies",
+      "DELL",
+      "Dell Technologies Inc",
+      "Denali Holding Inc.",
+      "Denali"
+    ],
+    "tickers": [
+      "DELL"
+    ]
+  },
+  {
+    "cik": "CIK0001327567",
+    "ticker": "PANW",
+    "names": [
+      "Palo Alto Networks Inc",
+      "Palo Alto Networks",
+      "PANW"
+    ],
+    "tickers": [
+      "PANW"
+    ]
+  },
+  {
+    "cik": "CIK0001535527",
+    "ticker": "CRWD",
+    "names": [
+      "CrowdStrike Holdings, Inc.",
+      "CrowdStrike",
+      "CRWD"
+    ],
+    "tickers": [
+      "CRWD"
+    ]
+  },
+  {
+    "cik": "CIK0000319201",
+    "ticker": "KLAC",
+    "names": [
+      "KLA CORP",
+      "KLA",
+      "KLAC",
+      "KLA TENCOR CORP",
+      "KLA TENCOR",
+      "KLA INSTRUMENTS CORP",
+      "KLA INSTRUMENTS"
+    ],
+    "tickers": [
+      "KLAC"
+    ]
+  },
+  {
+    "cik": "CIK0000097476",
+    "ticker": "TXN",
+    "names": [
+      "TEXAS INSTRUMENTS INC",
+      "TEXAS INSTRUMENTS",
+      "TXN"
+    ],
+    "tickers": [
+      "TXN"
+    ]
+  },
+  {
+    "cik": "CIK0001596532",
+    "ticker": "ANET",
+    "names": [
+      "Arista Networks, Inc.",
+      "Arista Networks",
+      "Arista"
+    ],
+    "tickers": [
+      "ANET"
+    ]
+  },
+  {
+    "cik": "CIK0001835632",
+    "ticker": "MRVL",
+    "names": [
+      "Marvell Technology, Inc.",
+      "Marvell Technology",
+      "Marvell"
+    ],
+    "tickers": [
+      "MRVL"
+    ]
+  },
+  {
+    "cik": "CIK0000820313",
+    "ticker": "APH",
+    "names": [
+      "AMPHENOL CORP",
+      "AMPHENOL",
+      "APH"
+    ],
+    "tickers": [
+      "APH"
+    ]
+  },
+  {
+    "cik": "CIK0000006281",
+    "ticker": "ADI",
+    "names": [
+      "ANALOG DEVICES INC",
+      "ANALOG DEVICES",
+      "ADI"
+    ],
+    "tickers": [
+      "ADI"
+    ]
+  },
+  {
+    "cik": "CIK0001137789",
+    "ticker": "STX",
+    "names": [
+      "Seagate Technology Holdings plc",
+      "Seagate Technology",
+      "Seagate",
+      "Seagate Technology plc",
+      "SEAGATE TECHNOLOGY",
+      "SEAGATE TECHNOLOGY HOLDINGS"
+    ],
+    "tickers": [
+      "STX"
+    ]
+  },
+  {
+    "cik": "CIK0000106040",
+    "ticker": "WDC",
+    "names": [
+      "WESTERN DIGITAL CORP",
+      "WESTERN DIGITAL",
+      "WDC"
+    ],
+    "tickers": [
+      "WDC"
+    ]
+  },
+  {
+    "cik": "CIK0000024741",
+    "ticker": "GLW",
+    "names": [
+      "CORNING INC",
+      "CORNING",
+      "GLW"
+    ],
+    "tickers": [
+      "GLW"
+    ]
+  },
+  {
+    "cik": "CIK0001262039",
+    "ticker": "FTNT",
+    "names": [
+      "Fortinet, Inc.",
+      "Fortinet",
+      "FTNT",
+      "FORTINET INC",
+      "FORTINET"
+    ],
+    "tickers": [
+      "FTNT"
+    ]
+  },
+  {
+    "cik": "CIK0001477333",
+    "ticker": "NET",
+    "names": [
+      "Cloudflare, Inc.",
+      "Cloudflare",
+      "NET"
+    ],
+    "tickers": [
+      "NET"
+    ]
+  },
+  {
+    "cik": "CIK0001467373",
+    "ticker": "ACN",
+    "names": [
+      "Accenture plc",
+      "Accenture",
+      "ACN"
+    ],
+    "tickers": [
+      "ACN"
+    ]
+  },
+  {
+    "cik": "CIK0001640147",
+    "ticker": "SNOW",
+    "names": [
+      "Snowflake Inc.",
+      "Snowflake",
+      "SNOW",
+      "Snowflake Computing, Inc.",
+      "Snowflake Computing"
+    ],
+    "tickers": [
+      "SNOW"
+    ]
+  },
+  {
+    "cik": "CIK0001075531",
+    "ticker": "BKNG",
+    "names": [
+      "Booking Holdings Inc.",
+      "Booking",
+      "Booking.com",
+      "Booking com",
+      "Priceline Group Inc.",
+      "Priceline",
+      "PRICELINE COM INC",
+      "PRICELINE COM"
+    ],
+    "tickers": [
+      "BKNG"
+    ]
+  },
+  {
+    "cik": "CIK0000008670",
+    "ticker": "ADP",
+    "names": [
+      "AUTOMATIC DATA PROCESSING INC",
+      "AUTOMATIC DATA PROCESSING",
+      "ADP"
+    ],
+    "tickers": [
+      "ADP"
+    ]
+  },
+  {
+    "cik": "CIK0001783879",
+    "ticker": "HOOD",
+    "names": [
+      "Robinhood Markets, Inc.",
+      "Robinhood Markets",
+      "Robinhood"
+    ],
+    "tickers": [
+      "HOOD"
+    ]
+  },
+  {
+    "cik": "CIK0001561550",
+    "ticker": "DDOG",
+    "names": [
+      "Datadog, Inc.",
+      "Datadog",
+      "DDOG"
+    ],
+    "tickers": [
+      "DDOG"
+    ]
+  },
+  {
+    "cik": "CIK0001559720",
+    "ticker": "ABNB",
+    "names": [
+      "Airbnb, Inc.",
+      "Airbnb",
+      "ABNB"
+    ],
+    "tickers": [
+      "ABNB"
+    ]
+  },
+  {
+    "cik": "CIK0000813672",
+    "ticker": "CDNS",
+    "names": [
+      "CADENCE DESIGN SYSTEMS INC",
+      "CADENCE DESIGN SYSTEMS",
+      "Cadence"
+    ],
+    "tickers": [
+      "CDNS"
+    ]
+  },
+  {
+    "cik": "CIK0000883241",
+    "ticker": "SNPS",
+    "names": [
+      "SYNOPSYS INC",
+      "SYNOPSYS",
+      "SNPS"
+    ],
+    "tickers": [
+      "SNPS"
+    ]
+  },
+  {
+    "cik": "CIK0001645590",
+    "ticker": "HPE",
+    "names": [
+      "Hewlett Packard Enterprise Co",
+      "Hewlett Packard Enterprise",
+      "HPE"
+    ],
+    "tickers": [
+      "HPE",
+      "HPE-PC"
+    ]
+  },
+  {
+    "cik": "CIK0001751008",
+    "ticker": "APP",
+    "names": [
+      "AppLovin Corp",
+      "AppLovin",
+      "APP"
+    ],
+    "tickers": [
+      "APP"
+    ]
+  },
+  {
+    "cik": "CIK0001099590",
+    "ticker": "MELI",
+    "names": [
+      "MERCADOLIBRE INC",
+      "MERCADOLIBRE",
+      "Mercado Libre"
+    ],
+    "tickers": [
+      "MELI"
+    ]
+  },
+  {
+    "cik": "CIK0001792789",
+    "ticker": "DASH",
+    "names": [
+      "DoorDash, Inc.",
+      "DoorDash",
+      "DASH",
+      "DoorDash Inc"
+    ],
+    "tickers": [
+      "DASH"
+    ]
+  },
+  {
+    "cik": "CIK0000068505",
+    "ticker": "MSI",
+    "names": [
+      "Motorola Solutions, Inc.",
+      "Motorola Solutions",
+      "MSI",
+      "MOTOROLA INC",
+      "MOTOROLA"
+    ],
+    "tickers": [
+      "MSI"
+    ]
+  },
+  {
+    "cik": "CIK0001690820",
+    "ticker": "CVNA",
+    "names": [
+      "CARVANA CO.",
+      "CARVANA",
+      "CVNA"
+    ],
+    "tickers": [
+      "CVNA"
+    ]
+  },
+  {
+    "cik": "CIK0001280452",
+    "ticker": "MPWR",
+    "names": [
+      "MONOLITHIC POWER SYSTEMS, INC.",
+      "MONOLITHIC POWER SYSTEMS",
+      "Monolithic Power",
+      "MONOLITHIC POWER SYSTEMS INC"
+    ],
+    "tickers": [
+      "MPWR"
+    ]
+  },
+  {
+    "cik": "CIK0000097210",
+    "ticker": "TER",
+    "names": [
+      "TERADYNE, INC",
+      "TERADYNE",
+      "TER",
+      "TERADYNE INC"
+    ],
+    "tickers": [
+      "TER"
+    ]
+  },
+  {
+    "cik": "CIK0000820318",
+    "ticker": "COHR",
+    "names": [
+      "COHERENT CORP.",
+      "COHERENT",
+      "COHR",
+      "II-VI INC",
+      "II VI"
+    ],
+    "tickers": [
+      "COHR"
+    ]
+  },
+  {
+    "cik": "CIK0001601046",
+    "ticker": "KEYS",
+    "names": [
+      "Keysight Technologies, Inc.",
+      "Keysight Technologies",
+      "Keysight"
+    ],
+    "tickers": [
+      "KEYS"
+    ]
+  },
+  {
+    "cik": "CIK0001385157",
+    "ticker": "TEL",
+    "names": [
+      "TE Connectivity plc",
+      "TE Connectivity",
+      "TEL",
+      "TE Connectivity Ltd.",
+      "Tyco Electronics Ltd.",
+      "Tyco Electronics"
+    ],
+    "tickers": [
+      "TEL"
+    ]
+  },
+  {
+    "cik": "CIK0001050446",
+    "ticker": "MSTR",
+    "names": [
+      "Strategy Inc",
+      "Strategy",
+      "MSTR",
+      "MICROSTRATEGY INC",
+      "MICROSTRATEGY",
+      "MICROSTRATEGY Inc"
+    ],
+    "tickers": [
+      "MSTR",
+      "STRC",
+      "STRD",
+      "STRF",
+      "STRK"
+    ]
+  },
+  {
+    "cik": "CIK0001413447",
+    "ticker": "NXPI",
+    "names": [
+      "NXP Semiconductors N.V.",
+      "NXP Semiconductors N V",
+      "NXP",
+      "KASLION Acquisition B.V.",
+      "KASLION Acquisition B V"
+    ],
+    "tickers": [
+      "NXPI"
+    ]
+  },
+  {
+    "cik": "CIK0000936395",
+    "ticker": "CIEN",
+    "names": [
+      "CIENA CORP",
+      "CIENA",
+      "CIEN"
+    ],
+    "tickers": [
+      "CIEN"
+    ]
+  },
+  {
+    "cik": "CIK0001121788",
+    "ticker": "GRMN",
+    "names": [
+      "GARMIN LTD",
+      "GARMIN",
+      "GRMN"
+    ],
+    "tickers": [
+      "GRMN"
+    ]
+  },
+  {
+    "cik": "CIK0001679788",
+    "ticker": "COIN",
+    "names": [
+      "Coinbase Global, Inc.",
+      "Coinbase Global",
+      "Coinbase"
+    ],
+    "tickers": [
+      "COIN"
+    ]
+  },
+  {
+    "cik": "CIK0001065088",
+    "ticker": "EBAY",
+    "names": [
+      "EBAY INC",
+      "EBAY"
+    ],
+    "tickers": [
+      "EBAY"
+    ]
+  },
+  {
+    "cik": "CIK0001447669",
+    "ticker": "TWLO",
+    "names": [
+      "TWILIO INC",
+      "TWILIO",
+      "TWLO"
+    ],
+    "tickers": [
+      "TWLO"
+    ]
+  },
+  {
+    "cik": "CIK0001327811",
+    "ticker": "WDAY",
+    "names": [
+      "Workday, Inc.",
+      "Workday",
+      "WDAY",
+      "Workday Inc",
+      "North Tahoe Power Tools Inc",
+      "North Tahoe Power Tools"
+    ],
+    "tickers": [
+      "WDAY"
+    ]
+  },
+  {
+    "cik": "CIK0001512673",
+    "ticker": "XYZ",
+    "names": [
+      "Block, Inc.",
+      "Block",
+      "XYZ",
+      "Square, Inc.",
+      "Square"
+    ],
+    "tickers": [
+      "XYZ",
+      "BSQKZ"
+    ]
+  },
+  {
+    "cik": "CIK0001002047",
+    "ticker": "NTAP",
+    "names": [
+      "NetApp, Inc.",
+      "NetApp",
+      "NTAP",
+      "NETWORK APPLIANCE INC",
+      "NETWORK APPLIANCE"
+    ],
+    "tickers": [
+      "NTAP"
+    ]
+  },
+  {
+    "cik": "CIK0000827054",
+    "ticker": "MCHP",
+    "names": [
+      "MICROCHIP TECHNOLOGY INC",
+      "MICROCHIP TECHNOLOGY",
+      "Microchip"
+    ],
+    "tickers": [
+      "MCHP",
+      "MCHPP"
+    ]
+  },
+  {
+    "cik": "CIK0001393052",
+    "ticker": "VEEV",
+    "names": [
+      "VEEVA SYSTEMS INC",
+      "VEEVA SYSTEMS",
+      "Veeva",
+      "VERTICALS ONDEMAND INC",
+      "VERTICALS ONDEMAND"
+    ],
+    "tickers": [
+      "VEEV"
+    ]
+  },
+  {
+    "cik": "CIK0000769397",
+    "ticker": "ADSK",
+    "names": [
+      "Autodesk, Inc.",
+      "Autodesk",
+      "ADSK",
+      "AUTODESK INC",
+      "AUTODESK"
+    ],
+    "tickers": [
+      "ADSK"
+    ]
+  },
+  {
+    "cik": "CIK0000866374",
+    "ticker": "FLEX",
+    "names": [
+      "FLEX LTD.",
+      "FLEX",
+      "FLEXTRONICS INTERNATIONAL LTD.",
+      "FLEXTRONICS INTERNATIONAL",
+      "FLEXTRONICS INTERNATIONAL LTD"
+    ],
+    "tickers": [
+      "FLEX"
+    ]
+  },
+  {
+    "cik": "CIK0000946581",
+    "ticker": "TTWO",
+    "names": [
+      "TAKE TWO INTERACTIVE SOFTWARE INC",
+      "TAKE TWO INTERACTIVE SOFTWARE",
+      "Take-Two",
+      "Take Two"
+    ],
+    "tickers": [
+      "TTWO"
+    ]
+  },
+  {
+    "cik": "CIK0001660134",
+    "ticker": "OKTA",
+    "names": [
+      "Okta, Inc.",
+      "Okta",
+      "OKTA"
+    ],
+    "tickers": [
+      "OKTA"
+    ]
+  },
+  {
+    "cik": "CIK0000723531",
+    "ticker": "PAYX",
+    "names": [
+      "PAYCHEX INC",
+      "PAYCHEX",
+      "PAYX"
+    ],
+    "tickers": [
+      "PAYX"
+    ]
+  },
+  {
+    "cik": "CIK0000882835",
+    "ticker": "ROP",
+    "names": [
+      "ROPER TECHNOLOGIES INC",
+      "ROPER TECHNOLOGIES",
+      "Roper",
+      "ROPER INDUSTRIES INC",
+      "ROPER INDUSTRIES"
+    ],
+    "tickers": [
+      "ROP"
+    ]
+  },
+  {
+    "cik": "CIK0001097864",
+    "ticker": "ON",
+    "names": [
+      "ON SEMICONDUCTOR CORP",
+      "ON SEMICONDUCTOR",
+      "onsemi",
+      "SCG HOLDING CORP",
+      "SCG"
+    ],
+    "tickers": [
+      "ON"
+    ]
+  },
+  {
+    "cik": "CIK0001713683",
+    "ticker": "ZS",
+    "names": [
+      "Zscaler, Inc.",
+      "Zscaler",
+      "ZS"
+    ],
+    "tickers": [
+      "ZS"
+    ]
+  },
+  {
+    "cik": "CIK0000898293",
+    "ticker": "JBL",
+    "names": [
+      "JABIL INC",
+      "JABIL",
+      "JBL",
+      "JABIL CIRCUIT INC",
+      "JABIL CIRCUIT"
+    ],
+    "tickers": [
+      "JBL"
+    ]
+  },
+  {
+    "cik": "CIK0001324424",
+    "ticker": "EXPE",
+    "names": [
+      "Expedia Group, Inc.",
+      "Expedia",
+      "EXPE",
+      "Expedia, Inc."
+    ],
+    "tickers": [
+      "EXPE"
+    ]
+  },
+  {
+    "cik": "CIK0001315098",
+    "ticker": "RBLX",
+    "names": [
+      "Roblox Corp",
+      "Roblox",
+      "RBLX"
+    ],
+    "tickers": [
+      "RBLX"
+    ]
+  },
+  {
+    "cik": "CIK0000047217",
+    "ticker": "HPQ",
+    "names": [
+      "HP INC",
+      "HP",
+      "HPQ",
+      "HEWLETT PACKARD CO",
+      "HEWLETT PACKARD"
+    ],
+    "tickers": [
+      "HPQ"
+    ]
+  },
+  {
+    "cik": "CIK0001375365",
+    "ticker": "SMCI",
+    "names": [
+      "Super Micro Computer, Inc.",
+      "Super Micro Computer",
+      "Supermicro"
+    ],
+    "tickers": [
+      "SMCI",
+      "SMCIP"
+    ]
+  },
+  {
+    "cik": "CIK0001441816",
+    "ticker": "MDB",
+    "names": [
+      "MongoDB, Inc.",
+      "MongoDB",
+      "MDB",
+      "10GEN INC",
+      "10GEN"
+    ],
+    "tickers": [
+      "MDB"
+    ]
+  },
+  {
+    "cik": "CIK0001585521",
+    "ticker": "ZM",
+    "names": [
+      "Zoom Communications, Inc.",
+      "Zoom Communications",
+      "Zoom",
+      "Zoom Video Communications, Inc.",
+      "Zoom Video Communications"
+    ],
+    "tickers": [
+      "ZM"
+    ]
+  },
+  {
+    "cik": "CIK0001058290",
+    "ticker": "CTSH",
+    "names": [
+      "COGNIZANT TECHNOLOGY SOLUTIONS CORP",
+      "COGNIZANT TECHNOLOGY SOLUTIONS",
+      "Cognizant"
+    ],
+    "tickers": [
+      "CTSH"
+    ]
+  },
+  {
+    "cik": "CIK0001014473",
+    "ticker": "VRSN",
+    "names": [
+      "VERISIGN INC",
+      "VERISIGN",
+      "VRSN"
+    ],
+    "tickers": [
+      "VRSN"
+    ]
+  },
+  {
+    "cik": "CIK0001048695",
+    "ticker": "FFIV",
+    "names": [
+      "F5, INC.",
+      "F5",
+      "FFIV",
+      "F5 NETWORKS, INC.",
+      "F5 NETWORKS",
+      "F5 NETWORKS INC"
+    ],
+    "tickers": [
+      "FFIV"
+    ]
+  },
+  {
+    "cik": "CIK0001101302",
+    "ticker": "ENTG",
+    "names": [
+      "ENTEGRIS INC",
+      "ENTEGRIS",
+      "ENTG"
+    ],
+    "tickers": [
+      "ENTG"
+    ]
+  },
+  {
+    "cik": "CIK0001834584",
+    "ticker": "CPNG",
+    "names": [
+      "Coupang, Inc.",
+      "Coupang",
+      "CPNG"
+    ],
+    "tickers": [
+      "CPNG"
+    ]
+  },
+  {
+    "cik": "CIK0001820953",
+    "ticker": "AFRM",
+    "names": [
+      "Affirm Holdings, Inc.",
+      "Affirm",
+      "AFRM"
+    ],
+    "tickers": [
+      "AFRM"
+    ]
+  },
+  {
+    "cik": "CIK0000798354",
+    "ticker": "FISV",
+    "names": [
+      "FISERV INC",
+      "FISERV",
+      "FISV"
+    ],
+    "tickers": [
+      "FISV"
+    ]
+  },
+  {
+    "cik": "CIK0001428439",
+    "ticker": "ROKU",
+    "names": [
+      "ROKU, INC",
+      "ROKU",
+      "ROKU INC"
+    ],
+    "tickers": [
+      "ROKU"
+    ]
+  },
+  {
+    "cik": "CIK0001123360",
+    "ticker": "GPN",
+    "names": [
+      "GLOBAL PAYMENTS INC",
+      "GLOBAL PAYMENTS",
+      "GPN"
+    ],
+    "tickers": [
+      "GPN"
+    ]
+  },
+  {
+    "cik": "CIK0001818874",
+    "ticker": "SOFI",
+    "names": [
+      "SoFi Technologies, Inc.",
+      "SoFi Technologies",
+      "SOFI",
+      "Social Capital Hedosophia Holdings Corp. V",
+      "Social Capital Hedosophia Holdings Corp V"
+    ],
+    "tickers": [
+      "SOFI"
+    ]
+  },
+  {
+    "cik": "CIK0001618732",
+    "ticker": "NTNX",
+    "names": [
+      "Nutanix, Inc.",
+      "Nutanix",
+      "NTNX"
+    ],
+    "tickers": [
+      "NTNX"
+    ]
+  },
+  {
+    "cik": "CIK0001810806",
+    "ticker": "U",
+    "names": [
+      "Unity Software Inc.",
+      "Unity Software",
+      "Unity"
+    ],
+    "tickers": [
+      "U"
+    ]
+  },
+  {
+    "cik": "CIK0000855658",
+    "ticker": "LSCC",
+    "names": [
+      "LATTICE SEMICONDUCTOR CORP",
+      "LATTICE SEMICONDUCTOR",
+      "Lattice"
+    ],
+    "tickers": [
+      "LSCC"
+    ]
+  },
+  {
+    "cik": "CIK0001049502",
+    "ticker": "MKSI",
+    "names": [
+      "MKS INC",
+      "MKS",
+      "MKSI",
+      "MKS INSTRUMENTS INC",
+      "MKS INSTRUMENTS"
+    ],
+    "tickers": [
+      "MKSI"
+    ]
+  },
+  {
+    "cik": "CIK0001274494",
+    "ticker": "FSLR",
+    "names": [
+      "FIRST SOLAR, INC.",
+      "FIRST SOLAR",
+      "FSLR",
+      "FIRST SOLAR HOLDINGS LLC"
+    ],
+    "tickers": [
+      "FSLR"
+    ]
+  },
+  {
+    "cik": "CIK0001402436",
+    "ticker": "SSNC",
+    "names": [
+      "SS&C Technologies Holdings Inc",
+      "SS and C Technologies Holdings Inc",
+      "SS C Technologies",
+      "SS and C Technologies",
+      "SS&C",
+      "SS and C",
+      "SS C"
+    ],
+    "tickers": [
+      "SSNC"
+    ]
+  },
+  {
+    "cik": "CIK0000877212",
+    "ticker": "ZBRA",
+    "names": [
+      "ZEBRA TECHNOLOGIES CORP",
+      "ZEBRA TECHNOLOGIES",
+      "Zebra"
+    ],
+    "tickers": [
+      "ZBRA"
+    ]
+  },
+  {
+    "cik": "CIK0001650164",
+    "ticker": "TOST",
+    "names": [
+      "Toast, Inc.",
+      "Toast",
+      "TOST"
+    ],
+    "tickers": [
+      "TOST"
+    ]
+  },
+  {
+    "cik": "CIK0001773383",
+    "ticker": "DT",
+    "names": [
+      "Dynatrace, Inc.",
+      "Dynatrace",
+      "DT",
+      "Dynatrace Holdings LLC"
+    ],
+    "tickers": [
+      "DT"
+    ]
+  },
+  {
+    "cik": "CIK0001136893",
+    "ticker": "FIS",
+    "names": [
+      "Fidelity National Information Services, Inc.",
+      "Fidelity National Information Services",
+      "FIS",
+      "CERTEGY INC",
+      "CERTEGY",
+      "EQUIFAX PS INC",
+      "EQUIFAX PS"
+    ],
+    "tickers": [
+      "FIS"
+    ]
+  },
+  {
+    "cik": "CIK0001402057",
+    "ticker": "CDW",
+    "names": [
+      "CDW Corp",
+      "CDW",
+      "VH Holdings, Inc.",
+      "VH"
+    ],
+    "tickers": [
+      "CDW"
+    ]
+  },
+  {
+    "cik": "CIK0001086222",
+    "ticker": "AKAM",
+    "names": [
+      "AKAMAI TECHNOLOGIES INC",
+      "AKAMAI TECHNOLOGIES",
+      "Akamai"
+    ],
+    "tickers": [
+      "AKAM"
+    ]
+  },
+  {
+    "cik": "CIK0000857005",
+    "ticker": "PTC",
+    "names": [
+      "PTC INC.",
+      "PTC",
+      "PARAMETRIC TECHNOLOGY CORP",
+      "PARAMETRIC TECHNOLOGY"
+    ],
+    "tickers": [
+      "PTC"
+    ]
+  },
+  {
+    "cik": "CIK0001032975",
+    "ticker": "LOGI",
+    "names": [
+      "LOGITECH INTERNATIONAL S.A.",
+      "LOGITECH INTERNATIONAL S A",
+      "Logitech",
+      "LOGITECH INTERNATIONAL SA",
+      "LOGITECH INTERNATIONAL"
+    ],
+    "tickers": [
+      "LOGI"
+    ]
+  },
+  {
+    "cik": "CIK0000814547",
+    "ticker": "FICO",
+    "names": [
+      "FAIR ISAAC CORP",
+      "FAIR ISAAC",
+      "FICO",
+      "FAIR ISAAC & COMPANY INC",
+      "FAIR ISAAC and COMPANY INC",
+      "FAIR ISAAC and"
+    ],
+    "tickers": [
+      "FICO"
+    ]
+  },
+  {
+    "cik": "CIK0001047127",
+    "ticker": "AMKR",
+    "names": [
+      "AMKOR TECHNOLOGY, INC.",
+      "AMKOR TECHNOLOGY",
+      "Amkor",
+      "AMKOR TECHNOLOGY INC"
+    ],
+    "tickers": [
+      "AMKR"
+    ]
+  },
+  {
+    "cik": "CIK0001616707",
+    "ticker": "W",
+    "names": [
+      "Wayfair Inc.",
+      "Wayfair",
+      "W"
+    ],
+    "tickers": [
+      "W"
+    ]
+  },
+  {
+    "cik": "CIK0000864749",
+    "ticker": "TRMB",
+    "names": [
+      "TRIMBLE INC.",
+      "TRIMBLE",
+      "TRMB",
+      "TRIMBLE NAVIGATION LTD",
+      "TRIMBLE NAVIGATION"
+    ],
+    "tickers": [
+      "TRMB"
+    ]
+  },
+  {
+    "cik": "CIK0000860731",
+    "ticker": "TYL",
+    "names": [
+      "TYLER TECHNOLOGIES INC",
+      "TYLER TECHNOLOGIES",
+      "TYL",
+      "TYLER CORP W/",
+      "TYLER CORP W"
+    ],
+    "tickers": [
+      "TYL"
+    ]
+  },
+  {
+    "cik": "CIK0001261333",
+    "ticker": "DOCU",
+    "names": [
+      "DOCUSIGN, INC.",
+      "DOCUSIGN",
+      "DOCU",
+      "DOCUSIGN INC"
+    ],
+    "tickers": [
+      "DOCU"
+    ]
+  },
+  {
+    "cik": "CIK0000004127",
+    "ticker": "SWKS",
+    "names": [
+      "SKYWORKS SOLUTIONS, INC.",
+      "SKYWORKS SOLUTIONS",
+      "Skyworks",
+      "SKYWORKS SOLUTIONS INC",
+      "ALPHA INDUSTRIES INC",
+      "ALPHA INDUSTRIES"
+    ],
+    "tickers": [
+      "SWKS"
+    ]
+  },
+  {
+    "cik": "CIK0001528396",
+    "ticker": "GWRE",
+    "names": [
+      "Guidewire Software, Inc.",
+      "Guidewire Software",
+      "Guidewire"
+    ],
+    "tickers": [
+      "GWRE"
+    ]
+  },
+  {
+    "cik": "CIK0001609711",
+    "ticker": "GDDY",
+    "names": [
+      "GoDaddy Inc.",
+      "GoDaddy",
+      "GDDY"
+    ],
+    "tickers": [
+      "GDDY"
+    ]
+  },
+  {
+    "cik": "CIK0001056696",
+    "ticker": "MANH",
+    "names": [
+      "MANHATTAN ASSOCIATES INC",
+      "MANHATTAN ASSOCIATES",
+      "MANH"
+    ],
+    "tickers": [
+      "MANH"
     ]
   }
 ]

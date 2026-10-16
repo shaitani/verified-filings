@@ -1,7 +1,7 @@
 {
   "source": "SEC company_tickers.json",
   "corpus_list": "Company Corpus List.txt",
-  "resolved_count": 30,
+  "resolved_count": 129,
   "excluded_count": 0,
   "companies": [
     {
@@ -284,18 +284,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000796343.json"
     },
     {
-      "input_name": "CRM",
-      "title": "Salesforce, Inc.",
-      "ticker": "CRM",
-      "cik": 1108524,
-      "cik_padded": "0001108524",
-      "all_tickers": [
-        "CRM"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001108524.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001108524.json"
-    },
-    {
       "input_name": "NOW",
       "title": "ServiceNow, Inc.",
       "ticker": "NOW",
@@ -378,6 +366,1214 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001543151.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001543151.json"
+    },
+    {
+      "input_name": "V",
+      "title": "VISA INC.",
+      "ticker": "V",
+      "cik": 1403161,
+      "cik_padded": "0001403161",
+      "all_tickers": [
+        "V"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001403161.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001403161.json"
+    },
+    {
+      "input_name": "MA",
+      "title": "Mastercard Inc",
+      "ticker": "MA",
+      "cik": 1141391,
+      "cik_padded": "0001141391",
+      "all_tickers": [
+        "MA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001141391.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001141391.json"
+    },
+    {
+      "input_name": "Palantir",
+      "title": "Palantir Technologies Inc.",
+      "ticker": "PLTR",
+      "cik": 1321655,
+      "cik_padded": "0001321655",
+      "all_tickers": [
+        "PLTR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001321655.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001321655.json"
+    },
+    {
+      "input_name": "LRCX",
+      "title": "LAM RESEARCH CORP",
+      "ticker": "LRCX",
+      "cik": 707549,
+      "cik_padded": "0000707549",
+      "all_tickers": [
+        "LRCX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000707549.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000707549.json"
+    },
+    {
+      "input_name": "AMAT",
+      "title": "APPLIED MATERIALS INC /DE",
+      "ticker": "AMAT",
+      "cik": 6951,
+      "cik_padded": "0000006951",
+      "all_tickers": [
+        "AMAT"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000006951.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000006951.json"
+    },
+    {
+      "input_name": "DELL",
+      "title": "Dell Technologies Inc.",
+      "ticker": "DELL",
+      "cik": 1571996,
+      "cik_padded": "0001571996",
+      "all_tickers": [
+        "DELL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001571996.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001571996.json"
+    },
+    {
+      "input_name": "PANW",
+      "title": "Palo Alto Networks Inc",
+      "ticker": "PANW",
+      "cik": 1327567,
+      "cik_padded": "0001327567",
+      "all_tickers": [
+        "PANW"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001327567.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001327567.json"
+    },
+    {
+      "input_name": "CRWD",
+      "title": "CrowdStrike Holdings, Inc.",
+      "ticker": "CRWD",
+      "cik": 1535527,
+      "cik_padded": "0001535527",
+      "all_tickers": [
+        "CRWD"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001535527.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001535527.json"
+    },
+    {
+      "input_name": "KLAC",
+      "title": "KLA CORP",
+      "ticker": "KLAC",
+      "cik": 319201,
+      "cik_padded": "0000319201",
+      "all_tickers": [
+        "KLAC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000319201.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000319201.json"
+    },
+    {
+      "input_name": "TXN",
+      "title": "TEXAS INSTRUMENTS INC",
+      "ticker": "TXN",
+      "cik": 97476,
+      "cik_padded": "0000097476",
+      "all_tickers": [
+        "TXN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000097476.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000097476.json"
+    },
+    {
+      "input_name": "Arista",
+      "title": "Arista Networks, Inc.",
+      "ticker": "ANET",
+      "cik": 1596532,
+      "cik_padded": "0001596532",
+      "all_tickers": [
+        "ANET"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001596532.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001596532.json"
+    },
+    {
+      "input_name": "Marvell",
+      "title": "Marvell Technology, Inc.",
+      "ticker": "MRVL",
+      "cik": 1835632,
+      "cik_padded": "0001835632",
+      "all_tickers": [
+        "MRVL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001835632.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001835632.json"
+    },
+    {
+      "input_name": "APH",
+      "title": "AMPHENOL CORP /DE/",
+      "ticker": "APH",
+      "cik": 820313,
+      "cik_padded": "0000820313",
+      "all_tickers": [
+        "APH"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000820313.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000820313.json"
+    },
+    {
+      "input_name": "ADI",
+      "title": "ANALOG DEVICES INC",
+      "ticker": "ADI",
+      "cik": 6281,
+      "cik_padded": "0000006281",
+      "all_tickers": [
+        "ADI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000006281.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000006281.json"
+    },
+    {
+      "input_name": "Seagate",
+      "title": "Seagate Technology Holdings plc",
+      "ticker": "STX",
+      "cik": 1137789,
+      "cik_padded": "0001137789",
+      "all_tickers": [
+        "STX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001137789.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001137789.json"
+    },
+    {
+      "input_name": "WDC",
+      "title": "WESTERN DIGITAL CORP",
+      "ticker": "WDC",
+      "cik": 106040,
+      "cik_padded": "0000106040",
+      "all_tickers": [
+        "WDC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000106040.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000106040.json"
+    },
+    {
+      "input_name": "GLW",
+      "title": "CORNING INC /NY",
+      "ticker": "GLW",
+      "cik": 24741,
+      "cik_padded": "0000024741",
+      "all_tickers": [
+        "GLW"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000024741.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000024741.json"
+    },
+    {
+      "input_name": "FTNT",
+      "title": "Fortinet, Inc.",
+      "ticker": "FTNT",
+      "cik": 1262039,
+      "cik_padded": "0001262039",
+      "all_tickers": [
+        "FTNT"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001262039.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001262039.json"
+    },
+    {
+      "input_name": "NET",
+      "title": "Cloudflare, Inc.",
+      "ticker": "NET",
+      "cik": 1477333,
+      "cik_padded": "0001477333",
+      "all_tickers": [
+        "NET"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001477333.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001477333.json"
+    },
+    {
+      "input_name": "ACN",
+      "title": "Accenture plc",
+      "ticker": "ACN",
+      "cik": 1467373,
+      "cik_padded": "0001467373",
+      "all_tickers": [
+        "ACN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001467373.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001467373.json"
+    },
+    {
+      "input_name": "SNOW",
+      "title": "Snowflake Inc.",
+      "ticker": "SNOW",
+      "cik": 1640147,
+      "cik_padded": "0001640147",
+      "all_tickers": [
+        "SNOW"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001640147.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001640147.json"
+    },
+    {
+      "input_name": "Booking.com",
+      "title": "Booking Holdings Inc.",
+      "ticker": "BKNG",
+      "cik": 1075531,
+      "cik_padded": "0001075531",
+      "all_tickers": [
+        "BKNG"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001075531.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001075531.json"
+    },
+    {
+      "input_name": "ADP",
+      "title": "AUTOMATIC DATA PROCESSING INC",
+      "ticker": "ADP",
+      "cik": 8670,
+      "cik_padded": "0000008670",
+      "all_tickers": [
+        "ADP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000008670.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000008670.json"
+    },
+    {
+      "input_name": "Robinhood",
+      "title": "Robinhood Markets, Inc.",
+      "ticker": "HOOD",
+      "cik": 1783879,
+      "cik_padded": "0001783879",
+      "all_tickers": [
+        "HOOD"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001783879.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001783879.json"
+    },
+    {
+      "input_name": "DDOG",
+      "title": "Datadog, Inc.",
+      "ticker": "DDOG",
+      "cik": 1561550,
+      "cik_padded": "0001561550",
+      "all_tickers": [
+        "DDOG"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001561550.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001561550.json"
+    },
+    {
+      "input_name": "ABNB",
+      "title": "Airbnb, Inc.",
+      "ticker": "ABNB",
+      "cik": 1559720,
+      "cik_padded": "0001559720",
+      "all_tickers": [
+        "ABNB"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001559720.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001559720.json"
+    },
+    {
+      "input_name": "Cadence",
+      "title": "CADENCE DESIGN SYSTEMS INC",
+      "ticker": "CDNS",
+      "cik": 813672,
+      "cik_padded": "0000813672",
+      "all_tickers": [
+        "CDNS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000813672.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000813672.json"
+    },
+    {
+      "input_name": "SNPS",
+      "title": "SYNOPSYS INC",
+      "ticker": "SNPS",
+      "cik": 883241,
+      "cik_padded": "0000883241",
+      "all_tickers": [
+        "SNPS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000883241.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000883241.json"
+    },
+    {
+      "input_name": "HPE",
+      "title": "Hewlett Packard Enterprise Co",
+      "ticker": "HPE",
+      "cik": 1645590,
+      "cik_padded": "0001645590",
+      "all_tickers": [
+        "HPE",
+        "HPE-PC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001645590.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001645590.json"
+    },
+    {
+      "input_name": "APP",
+      "title": "AppLovin Corp",
+      "ticker": "APP",
+      "cik": 1751008,
+      "cik_padded": "0001751008",
+      "all_tickers": [
+        "APP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001751008.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001751008.json"
+    },
+    {
+      "input_name": "Mercado Libre",
+      "title": "MERCADOLIBRE INC",
+      "ticker": "MELI",
+      "cik": 1099590,
+      "cik_padded": "0001099590",
+      "all_tickers": [
+        "MELI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001099590.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001099590.json"
+    },
+    {
+      "input_name": "DASH",
+      "title": "DoorDash, Inc.",
+      "ticker": "DASH",
+      "cik": 1792789,
+      "cik_padded": "0001792789",
+      "all_tickers": [
+        "DASH"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001792789.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001792789.json"
+    },
+    {
+      "input_name": "MSI",
+      "title": "Motorola Solutions, Inc.",
+      "ticker": "MSI",
+      "cik": 68505,
+      "cik_padded": "0000068505",
+      "all_tickers": [
+        "MSI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000068505.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000068505.json"
+    },
+    {
+      "input_name": "CVNA",
+      "title": "CARVANA CO.",
+      "ticker": "CVNA",
+      "cik": 1690820,
+      "cik_padded": "0001690820",
+      "all_tickers": [
+        "CVNA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001690820.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001690820.json"
+    },
+    {
+      "input_name": "Monolithic Power",
+      "title": "MONOLITHIC POWER SYSTEMS, INC.",
+      "ticker": "MPWR",
+      "cik": 1280452,
+      "cik_padded": "0001280452",
+      "all_tickers": [
+        "MPWR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001280452.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001280452.json"
+    },
+    {
+      "input_name": "TER",
+      "title": "TERADYNE, INC",
+      "ticker": "TER",
+      "cik": 97210,
+      "cik_padded": "0000097210",
+      "all_tickers": [
+        "TER"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000097210.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000097210.json"
+    },
+    {
+      "input_name": "COHR",
+      "title": "COHERENT CORP.",
+      "ticker": "COHR",
+      "cik": 820318,
+      "cik_padded": "0000820318",
+      "all_tickers": [
+        "COHR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000820318.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000820318.json"
+    },
+    {
+      "input_name": "Keysight",
+      "title": "Keysight Technologies, Inc.",
+      "ticker": "KEYS",
+      "cik": 1601046,
+      "cik_padded": "0001601046",
+      "all_tickers": [
+        "KEYS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001601046.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001601046.json"
+    },
+    {
+      "input_name": "TEL",
+      "title": "TE Connectivity plc",
+      "ticker": "TEL",
+      "cik": 1385157,
+      "cik_padded": "0001385157",
+      "all_tickers": [
+        "TEL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001385157.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001385157.json"
+    },
+    {
+      "input_name": "MSTR",
+      "title": "Strategy Inc",
+      "ticker": "MSTR",
+      "cik": 1050446,
+      "cik_padded": "0001050446",
+      "all_tickers": [
+        "MSTR",
+        "STRC",
+        "STRD",
+        "STRF",
+        "STRK"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001050446.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001050446.json"
+    },
+    {
+      "input_name": "NXP",
+      "title": "NXP Semiconductors N.V.",
+      "ticker": "NXPI",
+      "cik": 1413447,
+      "cik_padded": "0001413447",
+      "all_tickers": [
+        "NXPI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001413447.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001413447.json"
+    },
+    {
+      "input_name": "CIEN",
+      "title": "CIENA CORP",
+      "ticker": "CIEN",
+      "cik": 936395,
+      "cik_padded": "0000936395",
+      "all_tickers": [
+        "CIEN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000936395.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000936395.json"
+    },
+    {
+      "input_name": "GRMN",
+      "title": "GARMIN LTD",
+      "ticker": "GRMN",
+      "cik": 1121788,
+      "cik_padded": "0001121788",
+      "all_tickers": [
+        "GRMN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001121788.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001121788.json"
+    },
+    {
+      "input_name": "Coinbase",
+      "title": "Coinbase Global, Inc.",
+      "ticker": "COIN",
+      "cik": 1679788,
+      "cik_padded": "0001679788",
+      "all_tickers": [
+        "COIN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001679788.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001679788.json"
+    },
+    {
+      "input_name": "EBAY",
+      "title": "EBAY INC",
+      "ticker": "EBAY",
+      "cik": 1065088,
+      "cik_padded": "0001065088",
+      "all_tickers": [
+        "EBAY"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001065088.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001065088.json"
+    },
+    {
+      "input_name": "TWLO",
+      "title": "TWILIO INC",
+      "ticker": "TWLO",
+      "cik": 1447669,
+      "cik_padded": "0001447669",
+      "all_tickers": [
+        "TWLO"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001447669.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001447669.json"
+    },
+    {
+      "input_name": "WDAY",
+      "title": "Workday, Inc.",
+      "ticker": "WDAY",
+      "cik": 1327811,
+      "cik_padded": "0001327811",
+      "all_tickers": [
+        "WDAY"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001327811.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001327811.json"
+    },
+    {
+      "input_name": "XYZ",
+      "title": "Block, Inc.",
+      "ticker": "XYZ",
+      "cik": 1512673,
+      "cik_padded": "0001512673",
+      "all_tickers": [
+        "BSQKZ",
+        "XYZ"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001512673.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001512673.json"
+    },
+    {
+      "input_name": "NTAP",
+      "title": "NetApp, Inc.",
+      "ticker": "NTAP",
+      "cik": 1002047,
+      "cik_padded": "0001002047",
+      "all_tickers": [
+        "NTAP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001002047.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001002047.json"
+    },
+    {
+      "input_name": "Microchip",
+      "title": "MICROCHIP TECHNOLOGY INC",
+      "ticker": "MCHP",
+      "cik": 827054,
+      "cik_padded": "0000827054",
+      "all_tickers": [
+        "MCHP",
+        "MCHPP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000827054.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000827054.json"
+    },
+    {
+      "input_name": "Veeva",
+      "title": "VEEVA SYSTEMS INC",
+      "ticker": "VEEV",
+      "cik": 1393052,
+      "cik_padded": "0001393052",
+      "all_tickers": [
+        "VEEV"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001393052.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001393052.json"
+    },
+    {
+      "input_name": "ADSK",
+      "title": "Autodesk, Inc.",
+      "ticker": "ADSK",
+      "cik": 769397,
+      "cik_padded": "0000769397",
+      "all_tickers": [
+        "ADSK"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000769397.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000769397.json"
+    },
+    {
+      "input_name": "FLEX",
+      "title": "FLEX LTD.",
+      "ticker": "FLEX",
+      "cik": 866374,
+      "cik_padded": "0000866374",
+      "all_tickers": [
+        "FLEX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000866374.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000866374.json"
+    },
+    {
+      "input_name": "Take-Two",
+      "title": "TAKE TWO INTERACTIVE SOFTWARE INC",
+      "ticker": "TTWO",
+      "cik": 946581,
+      "cik_padded": "0000946581",
+      "all_tickers": [
+        "TTWO"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000946581.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000946581.json"
+    },
+    {
+      "input_name": "OKTA",
+      "title": "Okta, Inc.",
+      "ticker": "OKTA",
+      "cik": 1660134,
+      "cik_padded": "0001660134",
+      "all_tickers": [
+        "OKTA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001660134.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001660134.json"
+    },
+    {
+      "input_name": "PAYX",
+      "title": "PAYCHEX INC",
+      "ticker": "PAYX",
+      "cik": 723531,
+      "cik_padded": "0000723531",
+      "all_tickers": [
+        "PAYX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000723531.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000723531.json"
+    },
+    {
+      "input_name": "Roper",
+      "title": "ROPER TECHNOLOGIES INC",
+      "ticker": "ROP",
+      "cik": 882835,
+      "cik_padded": "0000882835",
+      "all_tickers": [
+        "ROP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000882835.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000882835.json"
+    },
+    {
+      "input_name": "onsemi",
+      "title": "ON SEMICONDUCTOR CORP",
+      "ticker": "ON",
+      "cik": 1097864,
+      "cik_padded": "0001097864",
+      "all_tickers": [
+        "ON"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001097864.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001097864.json"
+    },
+    {
+      "input_name": "ZS",
+      "title": "Zscaler, Inc.",
+      "ticker": "ZS",
+      "cik": 1713683,
+      "cik_padded": "0001713683",
+      "all_tickers": [
+        "ZS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001713683.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001713683.json"
+    },
+    {
+      "input_name": "JBL",
+      "title": "JABIL INC",
+      "ticker": "JBL",
+      "cik": 898293,
+      "cik_padded": "0000898293",
+      "all_tickers": [
+        "JBL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000898293.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000898293.json"
+    },
+    {
+      "input_name": "EXPE",
+      "title": "Expedia Group, Inc.",
+      "ticker": "EXPE",
+      "cik": 1324424,
+      "cik_padded": "0001324424",
+      "all_tickers": [
+        "EXPE"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001324424.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001324424.json"
+    },
+    {
+      "input_name": "RBLX",
+      "title": "Roblox Corp",
+      "ticker": "RBLX",
+      "cik": 1315098,
+      "cik_padded": "0001315098",
+      "all_tickers": [
+        "RBLX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001315098.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001315098.json"
+    },
+    {
+      "input_name": "HPQ",
+      "title": "HP INC",
+      "ticker": "HPQ",
+      "cik": 47217,
+      "cik_padded": "0000047217",
+      "all_tickers": [
+        "HPQ"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000047217.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000047217.json"
+    },
+    {
+      "input_name": "Supermicro",
+      "title": "Super Micro Computer, Inc.",
+      "ticker": "SMCI",
+      "cik": 1375365,
+      "cik_padded": "0001375365",
+      "all_tickers": [
+        "SMCI",
+        "SMCIP"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001375365.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001375365.json"
+    },
+    {
+      "input_name": "MDB",
+      "title": "MongoDB, Inc.",
+      "ticker": "MDB",
+      "cik": 1441816,
+      "cik_padded": "0001441816",
+      "all_tickers": [
+        "MDB"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001441816.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001441816.json"
+    },
+    {
+      "input_name": "Zoom",
+      "title": "Zoom Communications, Inc.",
+      "ticker": "ZM",
+      "cik": 1585521,
+      "cik_padded": "0001585521",
+      "all_tickers": [
+        "ZM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001585521.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001585521.json"
+    },
+    {
+      "input_name": "Cognizant",
+      "title": "COGNIZANT TECHNOLOGY SOLUTIONS CORP",
+      "ticker": "CTSH",
+      "cik": 1058290,
+      "cik_padded": "0001058290",
+      "all_tickers": [
+        "CTSH"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001058290.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001058290.json"
+    },
+    {
+      "input_name": "VRSN",
+      "title": "VERISIGN INC/CA",
+      "ticker": "VRSN",
+      "cik": 1014473,
+      "cik_padded": "0001014473",
+      "all_tickers": [
+        "VRSN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001014473.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001014473.json"
+    },
+    {
+      "input_name": "FFIV",
+      "title": "F5, INC.",
+      "ticker": "FFIV",
+      "cik": 1048695,
+      "cik_padded": "0001048695",
+      "all_tickers": [
+        "FFIV"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001048695.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001048695.json"
+    },
+    {
+      "input_name": "ENTG",
+      "title": "ENTEGRIS INC",
+      "ticker": "ENTG",
+      "cik": 1101302,
+      "cik_padded": "0001101302",
+      "all_tickers": [
+        "ENTG"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001101302.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001101302.json"
+    },
+    {
+      "input_name": "CPNG",
+      "title": "Coupang, Inc.",
+      "ticker": "CPNG",
+      "cik": 1834584,
+      "cik_padded": "0001834584",
+      "all_tickers": [
+        "CPNG"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001834584.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001834584.json"
+    },
+    {
+      "input_name": "AFRM",
+      "title": "Affirm Holdings, Inc.",
+      "ticker": "AFRM",
+      "cik": 1820953,
+      "cik_padded": "0001820953",
+      "all_tickers": [
+        "AFRM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001820953.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001820953.json"
+    },
+    {
+      "input_name": "FISV",
+      "title": "FISERV INC",
+      "ticker": "FISV",
+      "cik": 798354,
+      "cik_padded": "0000798354",
+      "all_tickers": [
+        "FISV"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000798354.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000798354.json"
+    },
+    {
+      "input_name": "ROKU",
+      "title": "ROKU, INC",
+      "ticker": "ROKU",
+      "cik": 1428439,
+      "cik_padded": "0001428439",
+      "all_tickers": [
+        "ROKU"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001428439.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001428439.json"
+    },
+    {
+      "input_name": "GPN",
+      "title": "GLOBAL PAYMENTS INC",
+      "ticker": "GPN",
+      "cik": 1123360,
+      "cik_padded": "0001123360",
+      "all_tickers": [
+        "GPN"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001123360.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001123360.json"
+    },
+    {
+      "input_name": "SOFI",
+      "title": "SoFi Technologies, Inc.",
+      "ticker": "SOFI",
+      "cik": 1818874,
+      "cik_padded": "0001818874",
+      "all_tickers": [
+        "SOFI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001818874.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001818874.json"
+    },
+    {
+      "input_name": "NTNX",
+      "title": "Nutanix, Inc.",
+      "ticker": "NTNX",
+      "cik": 1618732,
+      "cik_padded": "0001618732",
+      "all_tickers": [
+        "NTNX"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001618732.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001618732.json"
+    },
+    {
+      "input_name": "Unity",
+      "title": "Unity Software Inc.",
+      "ticker": "U",
+      "cik": 1810806,
+      "cik_padded": "0001810806",
+      "all_tickers": [
+        "U"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001810806.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001810806.json"
+    },
+    {
+      "input_name": "Lattice",
+      "title": "LATTICE SEMICONDUCTOR CORP",
+      "ticker": "LSCC",
+      "cik": 855658,
+      "cik_padded": "0000855658",
+      "all_tickers": [
+        "LSCC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000855658.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000855658.json"
+    },
+    {
+      "input_name": "MKSI",
+      "title": "MKS INC",
+      "ticker": "MKSI",
+      "cik": 1049502,
+      "cik_padded": "0001049502",
+      "all_tickers": [
+        "MKSI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001049502.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001049502.json"
+    },
+    {
+      "input_name": "FSLR",
+      "title": "FIRST SOLAR, INC.",
+      "ticker": "FSLR",
+      "cik": 1274494,
+      "cik_padded": "0001274494",
+      "all_tickers": [
+        "FSLR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001274494.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001274494.json"
+    },
+    {
+      "input_name": "SS&C",
+      "title": "SS&C Technologies Holdings Inc",
+      "ticker": "SSNC",
+      "cik": 1402436,
+      "cik_padded": "0001402436",
+      "all_tickers": [
+        "SSNC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001402436.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001402436.json"
+    },
+    {
+      "input_name": "Zebra",
+      "title": "ZEBRA TECHNOLOGIES CORP",
+      "ticker": "ZBRA",
+      "cik": 877212,
+      "cik_padded": "0000877212",
+      "all_tickers": [
+        "ZBRA"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000877212.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000877212.json"
+    },
+    {
+      "input_name": "TOST",
+      "title": "Toast, Inc.",
+      "ticker": "TOST",
+      "cik": 1650164,
+      "cik_padded": "0001650164",
+      "all_tickers": [
+        "TOST"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001650164.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001650164.json"
+    },
+    {
+      "input_name": "DT",
+      "title": "Dynatrace, Inc.",
+      "ticker": "DT",
+      "cik": 1773383,
+      "cik_padded": "0001773383",
+      "all_tickers": [
+        "DT"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001773383.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001773383.json"
+    },
+    {
+      "input_name": "FIS",
+      "title": "Fidelity National Information Services, Inc.",
+      "ticker": "FIS",
+      "cik": 1136893,
+      "cik_padded": "0001136893",
+      "all_tickers": [
+        "FIS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001136893.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001136893.json"
+    },
+    {
+      "input_name": "CDW",
+      "title": "CDW Corp",
+      "ticker": "CDW",
+      "cik": 1402057,
+      "cik_padded": "0001402057",
+      "all_tickers": [
+        "CDW"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001402057.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001402057.json"
+    },
+    {
+      "input_name": "Akamai",
+      "title": "AKAMAI TECHNOLOGIES INC",
+      "ticker": "AKAM",
+      "cik": 1086222,
+      "cik_padded": "0001086222",
+      "all_tickers": [
+        "AKAM"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001086222.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001086222.json"
+    },
+    {
+      "input_name": "PTC",
+      "title": "PTC INC.",
+      "ticker": "PTC",
+      "cik": 857005,
+      "cik_padded": "0000857005",
+      "all_tickers": [
+        "PTC"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000857005.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000857005.json"
+    },
+    {
+      "input_name": "Logitech",
+      "title": "LOGITECH INTERNATIONAL S.A.",
+      "ticker": "LOGI",
+      "cik": 1032975,
+      "cik_padded": "0001032975",
+      "all_tickers": [
+        "LOGI"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001032975.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001032975.json"
+    },
+    {
+      "input_name": "FICO",
+      "title": "FAIR ISAAC CORP",
+      "ticker": "FICO",
+      "cik": 814547,
+      "cik_padded": "0000814547",
+      "all_tickers": [
+        "FICO"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000814547.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000814547.json"
+    },
+    {
+      "input_name": "Amkor",
+      "title": "AMKOR TECHNOLOGY, INC.",
+      "ticker": "AMKR",
+      "cik": 1047127,
+      "cik_padded": "0001047127",
+      "all_tickers": [
+        "AMKR"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001047127.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001047127.json"
+    },
+    {
+      "input_name": "W",
+      "title": "Wayfair Inc.",
+      "ticker": "W",
+      "cik": 1616707,
+      "cik_padded": "0001616707",
+      "all_tickers": [
+        "W"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001616707.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001616707.json"
+    },
+    {
+      "input_name": "TRMB",
+      "title": "TRIMBLE INC.",
+      "ticker": "TRMB",
+      "cik": 864749,
+      "cik_padded": "0000864749",
+      "all_tickers": [
+        "TRMB"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000864749.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000864749.json"
+    },
+    {
+      "input_name": "TYL",
+      "title": "TYLER TECHNOLOGIES INC",
+      "ticker": "TYL",
+      "cik": 860731,
+      "cik_padded": "0000860731",
+      "all_tickers": [
+        "TYL"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000860731.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000860731.json"
+    },
+    {
+      "input_name": "DOCU",
+      "title": "DOCUSIGN, INC.",
+      "ticker": "DOCU",
+      "cik": 1261333,
+      "cik_padded": "0001261333",
+      "all_tickers": [
+        "DOCU"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001261333.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001261333.json"
+    },
+    {
+      "input_name": "Skyworks",
+      "title": "SKYWORKS SOLUTIONS, INC.",
+      "ticker": "SWKS",
+      "cik": 4127,
+      "cik_padded": "0000004127",
+      "all_tickers": [
+        "SWKS"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0000004127.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000004127.json"
+    },
+    {
+      "input_name": "Guidewire",
+      "title": "Guidewire Software, Inc.",
+      "ticker": "GWRE",
+      "cik": 1528396,
+      "cik_padded": "0001528396",
+      "all_tickers": [
+        "GWRE"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001528396.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001528396.json"
+    },
+    {
+      "input_name": "GDDY",
+      "title": "GoDaddy Inc.",
+      "ticker": "GDDY",
+      "cik": 1609711,
+      "cik_padded": "0001609711",
+      "all_tickers": [
+        "GDDY"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001609711.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001609711.json"
+    },
+    {
+      "input_name": "MANH",
+      "title": "MANHATTAN ASSOCIATES INC",
+      "ticker": "MANH",
+      "cik": 1056696,
+      "cik_padded": "0001056696",
+      "all_tickers": [
+        "MANH"
+      ],
+      "submissions_url": "https://data.sec.gov/submissions/CIK0001056696.json",
+      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001056696.json"
     }
   ],
   "excluded": [],
