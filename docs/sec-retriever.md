@@ -45,7 +45,9 @@ already loaded and any filer without 10-K/10-Q (a 20-F filer like HSBC), shows
 the plan and **waits for yes**, then adds the entries here, runs
 `get-submission` and `get-xbrl`, loads, embeds, and checks each company: its
 facts loaded, readable as `vf_retrieval_role`, every concept it uses embedded,
-and the mapper finding it by name and binding `assets` for it. `--dry-run`
+no 10-K or 10-Q fiscal label used twice (the filer's labels disagreeing with
+their dates, [FUTURE.md](FUTURE.md#data-and-ingest)), and the mapper finding it
+by name and binding `assets` for it. `--dry-run`
 stops at the plan; `--diagram` prints the graph as Mermaid.
 
 - **Names.** A ticker or CIK maps to one company, so nothing is guessed. `--as

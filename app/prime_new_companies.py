@@ -53,7 +53,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy, interrupt
 from sqlalchemy import func, literal, select
 
-from app.db import Concept, Fact, LoadRun
+from app.db import Concept, Fact, Filing, LoadRun
 from app.db.embedder import build_source_text, embed_stale_concepts, source_hash
 from app.db.loader import LoadBatchError, load_batch
 from app.db.session import RetrievalSessionLocal, SessionLocal
@@ -429,6 +429,13 @@ async def company_checks(company: dict[str, Any]) -> list[dict[str, Any]]:
         )
         used = select(Fact.concept_id).where(Fact.company_cik == cik)
         concepts = list(await session.scalars(select(Concept).where(Concept.id.in_(used))))
+        labels = (
+            await session.execute(
+                select(Filing.form, Filing.fiscal_year, Filing.fiscal_period).where(
+                    Filing.company_cik == cik, Filing.form.in_(FORMS_IN_SCOPE)
+                )
+            )
+        ).all()
     async with RetrievalSessionLocal() as session:
         # One row, not a count: counting synthesizes every fourth quarter, which
         # took 4.9 s for AAPL and passed the role's 10 s timeout for NFLX.
@@ -461,6 +468,14 @@ async def company_checks(company: dict[str, Any]) -> list[dict[str, Any]]:
             "its rows read from xbrl.reported_fact as vf_retrieval_role",
         ),
     ]
+    repeats = repeated_labels(labels)
+    checks.append(
+        _check(
+            "fiscal labels",
+            not repeats,
+            "; ".join(repeats) if repeats else "each 10-K and 10-Q label used once",
+        )
+    )
     plans = {
         text: await map_query(_probe(text, ticker=company["ticker"]))
         for text in dict.fromkeys([company["input_name"], company["ticker"]])
@@ -472,6 +487,24 @@ async def company_checks(company: dict[str, Any]) -> list[dict[str, Any]]:
     detail = "the mapper binds it for the latest year, with no model"
     checks.append(_check(f"answers {PROBE_METRIC!r}", bound, detail))
     return checks
+
+
+def repeated_labels(labels: list[tuple[str, int, str]]) -> list[str]:
+    """Each ``(form, fiscal year, fiscal period)`` more than one filing carries.
+
+    A repeat means the filer's fiscal-year label disagrees with the dates: the
+    mapper keeps one window per label, so one of the two periods is unreachable
+    and the other can answer under the wrong year's name -- Salesforce's
+    FY2026 10-K is labelled FY2025, so "fiscal 2025" read fiscal 2026's dates
+    (docs/FUTURE.md, Data and ingest)."""
+    counts: dict[tuple[str, int, str], int] = {}
+    for label in labels:
+        counts[tuple(label)] = counts.get(tuple(label), 0) + 1
+    return [
+        f"{form} {period} {year} on {n} filings"
+        for (form, year, period), n in sorted(counts.items(), key=lambda item: item[0][1:])
+        if n > 1
+    ]
 
 
 def _probe(text: str, *, ticker: str) -> QueryIn:

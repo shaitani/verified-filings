@@ -17,6 +17,7 @@ from app.ingest.corpus import CORPUS_FILE
 from app.prime_new_companies import (
     filing_problem,
     prime,
+    repeated_labels,
     resolve_identifiers,
     ticker_clash,
     write_corpus,
@@ -100,6 +101,21 @@ def test_a_foreign_issuer_is_out_and_says_why() -> None:
         "files 20-F as a foreign issuer, not 10-K/10-Q"
     )
     assert filing_problem(_submissions("8-K")) == "no 10-K or 10-Q among its recent filings"
+
+
+def test_a_fiscal_label_two_filings_share_is_reported() -> None:
+    """Salesforce's FY2025 and FY2026 10-Ks both say FY2025 (2026-10-16), so one
+    year is unreachable and the other answers under the wrong name."""
+    labels = [
+        ("10-K", 2024, "FY"),
+        ("10-K", 2025, "FY"),
+        ("10-K", 2025, "FY"),
+        ("10-Q", 2025, "Q1"),
+        ("10-Q", 2025, "Q1"),
+        ("10-Q", 2025, "Q2"),
+    ]
+    assert repeated_labels(labels) == ["10-K FY 2025 on 2 filings", "10-Q Q1 2025 on 2 filings"]
+    assert repeated_labels([("10-K", 2024, "FY"), ("10-Q", 2024, "Q1")]) == []
 
 
 def test_a_ticker_another_corpus_company_answers_to_is_refused() -> None:
