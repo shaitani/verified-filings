@@ -162,7 +162,10 @@ Stop `_wrong_unit` skipping rows because the model labelled them derived.
     "latest year" does not resolve), Coherent (COHR — no FY2021), Marvell (MRVL —
     no FY2021: it re-registered under a new CIK in 2021).
   The likely fix for both: take a window's label from its dates and the filer's
-  fiscal year end rather than from `fy`.
+  fiscal year end rather than from `fy`. Every company named here except
+  NVIDIA was removed from the corpus and dev on 2026-10-16 (Salesforce from
+  production too; none of the others had reached it); prime them again once
+  this is fixed.
 - **Submissions overflow** for JPM and BAC (G9), if a five-year analysis of
   their submissions is ever needed.
 - **Loader:** cross-check a file's `cik` against its ticker; model the
