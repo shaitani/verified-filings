@@ -489,21 +489,6 @@
     ]
   },
   {
-    "cik": "CIK0001571996",
-    "ticker": "DELL",
-    "names": [
-      "Dell Technologies Inc.",
-      "Dell Technologies",
-      "DELL",
-      "Dell Technologies Inc",
-      "Denali Holding Inc.",
-      "Denali"
-    ],
-    "tickers": [
-      "DELL"
-    ]
-  },
-  {
     "cik": "CIK0001327567",
     "ticker": "PANW",
     "names": [
@@ -513,18 +498,6 @@
     ],
     "tickers": [
       "PANW"
-    ]
-  },
-  {
-    "cik": "CIK0001535527",
-    "ticker": "CRWD",
-    "names": [
-      "CrowdStrike Holdings, Inc.",
-      "CrowdStrike",
-      "CRWD"
-    ],
-    "tickers": [
-      "CRWD"
     ]
   },
   {
@@ -568,18 +541,6 @@
     ]
   },
   {
-    "cik": "CIK0001835632",
-    "ticker": "MRVL",
-    "names": [
-      "Marvell Technology, Inc.",
-      "Marvell Technology",
-      "Marvell"
-    ],
-    "tickers": [
-      "MRVL"
-    ]
-  },
-  {
     "cik": "CIK0000820313",
     "ticker": "APH",
     "names": [
@@ -601,21 +562,6 @@
     ],
     "tickers": [
       "ADI"
-    ]
-  },
-  {
-    "cik": "CIK0001137789",
-    "ticker": "STX",
-    "names": [
-      "Seagate Technology Holdings plc",
-      "Seagate Technology",
-      "Seagate",
-      "Seagate Technology plc",
-      "SEAGATE TECHNOLOGY",
-      "SEAGATE TECHNOLOGY HOLDINGS"
-    ],
-    "tickers": [
-      "STX"
     ]
   },
   {
@@ -860,19 +806,6 @@
     ]
   },
   {
-    "cik": "CIK0001280452",
-    "ticker": "MPWR",
-    "names": [
-      "MONOLITHIC POWER SYSTEMS, INC.",
-      "MONOLITHIC POWER SYSTEMS",
-      "Monolithic Power",
-      "MONOLITHIC POWER SYSTEMS INC"
-    ],
-    "tickers": [
-      "MPWR"
-    ]
-  },
-  {
     "cik": "CIK0000097210",
     "ticker": "TER",
     "names": [
@@ -883,20 +816,6 @@
     ],
     "tickers": [
       "TER"
-    ]
-  },
-  {
-    "cik": "CIK0000820318",
-    "ticker": "COHR",
-    "names": [
-      "COHERENT CORP.",
-      "COHERENT",
-      "COHR",
-      "II-VI INC",
-      "II VI"
-    ],
-    "tickers": [
-      "COHR"
     ]
   },
   {
@@ -1019,21 +938,6 @@
     ]
   },
   {
-    "cik": "CIK0001327811",
-    "ticker": "WDAY",
-    "names": [
-      "Workday, Inc.",
-      "Workday",
-      "WDAY",
-      "Workday Inc",
-      "North Tahoe Power Tools Inc",
-      "North Tahoe Power Tools"
-    ],
-    "tickers": [
-      "WDAY"
-    ]
-  },
-  {
     "cik": "CIK0001512673",
     "ticker": "XYZ",
     "names": [
@@ -1049,20 +953,6 @@
     ]
   },
   {
-    "cik": "CIK0001002047",
-    "ticker": "NTAP",
-    "names": [
-      "NetApp, Inc.",
-      "NetApp",
-      "NTAP",
-      "NETWORK APPLIANCE INC",
-      "NETWORK APPLIANCE"
-    ],
-    "tickers": [
-      "NTAP"
-    ]
-  },
-  {
     "cik": "CIK0000827054",
     "ticker": "MCHP",
     "names": [
@@ -1073,20 +963,6 @@
     "tickers": [
       "MCHP",
       "MCHPP"
-    ]
-  },
-  {
-    "cik": "CIK0001393052",
-    "ticker": "VEEV",
-    "names": [
-      "VEEVA SYSTEMS INC",
-      "VEEVA SYSTEMS",
-      "Veeva",
-      "VERTICALS ONDEMAND INC",
-      "VERTICALS ONDEMAND"
-    ],
-    "tickers": [
-      "VEEV"
     ]
   },
   {
@@ -1115,19 +991,6 @@
     ],
     "tickers": [
       "FLEX"
-    ]
-  },
-  {
-    "cik": "CIK0000946581",
-    "ticker": "TTWO",
-    "names": [
-      "TAKE TWO INTERACTIVE SOFTWARE INC",
-      "TAKE TWO INTERACTIVE SOFTWARE",
-      "Take-Two",
-      "Take Two"
-    ],
-    "tickers": [
-      "TTWO"
     ]
   },
   {
@@ -1180,18 +1043,6 @@
     ],
     "tickers": [
       "ON"
-    ]
-  },
-  {
-    "cik": "CIK0001713683",
-    "ticker": "ZS",
-    "names": [
-      "Zscaler, Inc.",
-      "Zscaler",
-      "ZS"
-    ],
-    "tickers": [
-      "ZS"
     ]
   },
   {
@@ -1301,18 +1152,6 @@
     ]
   },
   {
-    "cik": "CIK0001014473",
-    "ticker": "VRSN",
-    "names": [
-      "VERISIGN INC",
-      "VERISIGN",
-      "VRSN"
-    ],
-    "tickers": [
-      "VRSN"
-    ]
-  },
-  {
     "cik": "CIK0001048695",
     "ticker": "FFIV",
     "names": [
@@ -1411,18 +1250,6 @@
     ],
     "tickers": [
       "SOFI"
-    ]
-  },
-  {
-    "cik": "CIK0001618732",
-    "ticker": "NTNX",
-    "names": [
-      "Nutanix, Inc.",
-      "Nutanix",
-      "NTNX"
-    ],
-    "tickers": [
-      "NTNX"
     ]
   },
   {
@@ -1571,19 +1398,6 @@
     ]
   },
   {
-    "cik": "CIK0000857005",
-    "ticker": "PTC",
-    "names": [
-      "PTC INC.",
-      "PTC",
-      "PARAMETRIC TECHNOLOGY CORP",
-      "PARAMETRIC TECHNOLOGY"
-    ],
-    "tickers": [
-      "PTC"
-    ]
-  },
-  {
     "cik": "CIK0001032975",
     "ticker": "LOGI",
     "names": [
@@ -1676,21 +1490,6 @@
     ],
     "tickers": [
       "DOCU"
-    ]
-  },
-  {
-    "cik": "CIK0000004127",
-    "ticker": "SWKS",
-    "names": [
-      "SKYWORKS SOLUTIONS, INC.",
-      "SKYWORKS SOLUTIONS",
-      "Skyworks",
-      "SKYWORKS SOLUTIONS INC",
-      "ALPHA INDUSTRIES INC",
-      "ALPHA INDUSTRIES"
-    ],
-    "tickers": [
-      "SWKS"
     ]
   },
   {

@@ -1,7 +1,7 @@
 {
   "source": "SEC company_tickers.json",
   "corpus_list": "Company Corpus List.txt",
-  "resolved_count": 129,
+  "resolved_count": 114,
   "excluded_count": 0,
   "companies": [
     {
@@ -428,18 +428,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000006951.json"
     },
     {
-      "input_name": "DELL",
-      "title": "Dell Technologies Inc.",
-      "ticker": "DELL",
-      "cik": 1571996,
-      "cik_padded": "0001571996",
-      "all_tickers": [
-        "DELL"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001571996.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001571996.json"
-    },
-    {
       "input_name": "PANW",
       "title": "Palo Alto Networks Inc",
       "ticker": "PANW",
@@ -450,18 +438,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001327567.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001327567.json"
-    },
-    {
-      "input_name": "CRWD",
-      "title": "CrowdStrike Holdings, Inc.",
-      "ticker": "CRWD",
-      "cik": 1535527,
-      "cik_padded": "0001535527",
-      "all_tickers": [
-        "CRWD"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001535527.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001535527.json"
     },
     {
       "input_name": "KLAC",
@@ -500,18 +476,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001596532.json"
     },
     {
-      "input_name": "Marvell",
-      "title": "Marvell Technology, Inc.",
-      "ticker": "MRVL",
-      "cik": 1835632,
-      "cik_padded": "0001835632",
-      "all_tickers": [
-        "MRVL"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001835632.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001835632.json"
-    },
-    {
       "input_name": "APH",
       "title": "AMPHENOL CORP /DE/",
       "ticker": "APH",
@@ -534,18 +498,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000006281.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000006281.json"
-    },
-    {
-      "input_name": "Seagate",
-      "title": "Seagate Technology Holdings plc",
-      "ticker": "STX",
-      "cik": 1137789,
-      "cik_padded": "0001137789",
-      "all_tickers": [
-        "STX"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001137789.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001137789.json"
     },
     {
       "input_name": "WDC",
@@ -777,18 +729,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001690820.json"
     },
     {
-      "input_name": "Monolithic Power",
-      "title": "MONOLITHIC POWER SYSTEMS, INC.",
-      "ticker": "MPWR",
-      "cik": 1280452,
-      "cik_padded": "0001280452",
-      "all_tickers": [
-        "MPWR"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001280452.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001280452.json"
-    },
-    {
       "input_name": "TER",
       "title": "TERADYNE, INC",
       "ticker": "TER",
@@ -799,18 +739,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000097210.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000097210.json"
-    },
-    {
-      "input_name": "COHR",
-      "title": "COHERENT CORP.",
-      "ticker": "COHR",
-      "cik": 820318,
-      "cik_padded": "0000820318",
-      "all_tickers": [
-        "COHR"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0000820318.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000820318.json"
     },
     {
       "input_name": "Keysight",
@@ -925,18 +853,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001447669.json"
     },
     {
-      "input_name": "WDAY",
-      "title": "Workday, Inc.",
-      "ticker": "WDAY",
-      "cik": 1327811,
-      "cik_padded": "0001327811",
-      "all_tickers": [
-        "WDAY"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001327811.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001327811.json"
-    },
-    {
       "input_name": "XYZ",
       "title": "Block, Inc.",
       "ticker": "XYZ",
@@ -950,18 +866,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001512673.json"
     },
     {
-      "input_name": "NTAP",
-      "title": "NetApp, Inc.",
-      "ticker": "NTAP",
-      "cik": 1002047,
-      "cik_padded": "0001002047",
-      "all_tickers": [
-        "NTAP"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001002047.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001002047.json"
-    },
-    {
       "input_name": "Microchip",
       "title": "MICROCHIP TECHNOLOGY INC",
       "ticker": "MCHP",
@@ -973,18 +877,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000827054.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000827054.json"
-    },
-    {
-      "input_name": "Veeva",
-      "title": "VEEVA SYSTEMS INC",
-      "ticker": "VEEV",
-      "cik": 1393052,
-      "cik_padded": "0001393052",
-      "all_tickers": [
-        "VEEV"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001393052.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001393052.json"
     },
     {
       "input_name": "ADSK",
@@ -1009,18 +901,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0000866374.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000866374.json"
-    },
-    {
-      "input_name": "Take-Two",
-      "title": "TAKE TWO INTERACTIVE SOFTWARE INC",
-      "ticker": "TTWO",
-      "cik": 946581,
-      "cik_padded": "0000946581",
-      "all_tickers": [
-        "TTWO"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0000946581.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000946581.json"
     },
     {
       "input_name": "OKTA",
@@ -1069,18 +949,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001097864.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001097864.json"
-    },
-    {
-      "input_name": "ZS",
-      "title": "Zscaler, Inc.",
-      "ticker": "ZS",
-      "cik": 1713683,
-      "cik_padded": "0001713683",
-      "all_tickers": [
-        "ZS"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001713683.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001713683.json"
     },
     {
       "input_name": "JBL",
@@ -1180,18 +1048,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001058290.json"
     },
     {
-      "input_name": "VRSN",
-      "title": "VERISIGN INC/CA",
-      "ticker": "VRSN",
-      "cik": 1014473,
-      "cik_padded": "0001014473",
-      "all_tickers": [
-        "VRSN"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001014473.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001014473.json"
-    },
-    {
       "input_name": "FFIV",
       "title": "F5, INC.",
       "ticker": "FFIV",
@@ -1286,18 +1142,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001818874.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001818874.json"
-    },
-    {
-      "input_name": "NTNX",
-      "title": "Nutanix, Inc.",
-      "ticker": "NTNX",
-      "cik": 1618732,
-      "cik_padded": "0001618732",
-      "all_tickers": [
-        "NTNX"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0001618732.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001618732.json"
     },
     {
       "input_name": "Unity",
@@ -1432,18 +1276,6 @@
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001086222.json"
     },
     {
-      "input_name": "PTC",
-      "title": "PTC INC.",
-      "ticker": "PTC",
-      "cik": 857005,
-      "cik_padded": "0000857005",
-      "all_tickers": [
-        "PTC"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0000857005.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000857005.json"
-    },
-    {
       "input_name": "Logitech",
       "title": "LOGITECH INTERNATIONAL S.A.",
       "ticker": "LOGI",
@@ -1526,18 +1358,6 @@
       ],
       "submissions_url": "https://data.sec.gov/submissions/CIK0001261333.json",
       "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001261333.json"
-    },
-    {
-      "input_name": "Skyworks",
-      "title": "SKYWORKS SOLUTIONS, INC.",
-      "ticker": "SWKS",
-      "cik": 4127,
-      "cik_padded": "0000004127",
-      "all_tickers": [
-        "SWKS"
-      ],
-      "submissions_url": "https://data.sec.gov/submissions/CIK0000004127.json",
-      "companyfacts_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000004127.json"
     },
     {
       "input_name": "Guidewire",

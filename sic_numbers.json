@@ -238,25 +238,11 @@
     "sic_description": "Semiconductors & Related Devices"
   },
   {
-    "cik": "CIK0001571996",
-    "ticker": "DELL",
-    "company_name": "Dell Technologies Inc.",
-    "sic": "3571",
-    "sic_description": "Electronic Computers"
-  },
-  {
     "cik": "CIK0001327567",
     "ticker": "PANW",
     "company_name": "Palo Alto Networks Inc",
     "sic": "3577",
     "sic_description": "Computer Peripheral Equipment, NEC"
-  },
-  {
-    "cik": "CIK0001535527",
-    "ticker": "CRWD",
-    "company_name": "CrowdStrike Holdings, Inc.",
-    "sic": "7372",
-    "sic_description": "Services-Prepackaged Software"
   },
   {
     "cik": "CIK0000319201",
@@ -280,13 +266,6 @@
     "sic_description": "Computer Communications Equipment"
   },
   {
-    "cik": "CIK0001835632",
-    "ticker": "MRVL",
-    "company_name": "Marvell Technology, Inc.",
-    "sic": "3674",
-    "sic_description": "Semiconductors & Related Devices"
-  },
-  {
     "cik": "CIK0000820313",
     "ticker": "APH",
     "company_name": "AMPHENOL CORP /DE/",
@@ -299,13 +278,6 @@
     "company_name": "ANALOG DEVICES INC",
     "sic": "3674",
     "sic_description": "Semiconductors & Related Devices"
-  },
-  {
-    "cik": "CIK0001137789",
-    "ticker": "STX",
-    "company_name": "Seagate Technology Holdings plc",
-    "sic": "3572",
-    "sic_description": "Computer Storage Devices"
   },
   {
     "cik": "CIK0000106040",
@@ -441,25 +413,11 @@
     "sic_description": "Retail-Auto Dealers & Gasoline Stations"
   },
   {
-    "cik": "CIK0001280452",
-    "ticker": "MPWR",
-    "company_name": "MONOLITHIC POWER SYSTEMS, INC.",
-    "sic": "3674",
-    "sic_description": "Semiconductors & Related Devices"
-  },
-  {
     "cik": "CIK0000097210",
     "ticker": "TER",
     "company_name": "TERADYNE, INC",
     "sic": "3825",
     "sic_description": "Instruments For Meas & Testing of  Electricity & Elec Signals"
-  },
-  {
-    "cik": "CIK0000820318",
-    "ticker": "COHR",
-    "company_name": "COHERENT CORP.",
-    "sic": "3827",
-    "sic_description": "Optical Instruments & Lenses"
   },
   {
     "cik": "CIK0001601046",
@@ -525,13 +483,6 @@
     "sic_description": "Services-Prepackaged Software"
   },
   {
-    "cik": "CIK0001327811",
-    "ticker": "WDAY",
-    "company_name": "Workday, Inc.",
-    "sic": "7374",
-    "sic_description": "Services-Computer Processing & Data Preparation"
-  },
-  {
     "cik": "CIK0001512673",
     "ticker": "XYZ",
     "company_name": "Block, Inc.",
@@ -539,25 +490,11 @@
     "sic_description": "Services-Prepackaged Software"
   },
   {
-    "cik": "CIK0001002047",
-    "ticker": "NTAP",
-    "company_name": "NetApp, Inc.",
-    "sic": "3572",
-    "sic_description": "Computer Storage Devices"
-  },
-  {
     "cik": "CIK0000827054",
     "ticker": "MCHP",
     "company_name": "MICROCHIP TECHNOLOGY INC",
     "sic": "3674",
     "sic_description": "Semiconductors & Related Devices"
-  },
-  {
-    "cik": "CIK0001393052",
-    "ticker": "VEEV",
-    "company_name": "VEEVA SYSTEMS INC",
-    "sic": "7372",
-    "sic_description": "Services-Prepackaged Software"
   },
   {
     "cik": "CIK0000769397",
@@ -572,13 +509,6 @@
     "company_name": "FLEX LTD.",
     "sic": "3672",
     "sic_description": "Printed Circuit Boards"
-  },
-  {
-    "cik": "CIK0000946581",
-    "ticker": "TTWO",
-    "company_name": "TAKE TWO INTERACTIVE SOFTWARE INC",
-    "sic": "7372",
-    "sic_description": "Services-Prepackaged Software"
   },
   {
     "cik": "CIK0001660134",
@@ -607,13 +537,6 @@
     "company_name": "ON SEMICONDUCTOR CORP",
     "sic": "3674",
     "sic_description": "Semiconductors & Related Devices"
-  },
-  {
-    "cik": "CIK0001713683",
-    "ticker": "ZS",
-    "company_name": "Zscaler, Inc.",
-    "sic": "7371",
-    "sic_description": "Services-Computer Programming Services"
   },
   {
     "cik": "CIK0000898293",
@@ -672,13 +595,6 @@
     "sic_description": "Services-Computer Programming Services"
   },
   {
-    "cik": "CIK0001014473",
-    "ticker": "VRSN",
-    "company_name": "VERISIGN INC/CA",
-    "sic": "7371",
-    "sic_description": "Services-Computer Programming Services"
-  },
-  {
     "cik": "CIK0001048695",
     "ticker": "FFIV",
     "company_name": "F5, INC.",
@@ -733,13 +649,6 @@
     "company_name": "SoFi Technologies, Inc.",
     "sic": "6199",
     "sic_description": "Finance Services"
-  },
-  {
-    "cik": "CIK0001618732",
-    "ticker": "NTNX",
-    "company_name": "Nutanix, Inc.",
-    "sic": "7372",
-    "sic_description": "Services-Prepackaged Software"
   },
   {
     "cik": "CIK0001810806",
@@ -819,13 +728,6 @@
     "sic_description": "Services-Business Services, NEC"
   },
   {
-    "cik": "CIK0000857005",
-    "ticker": "PTC",
-    "company_name": "PTC INC.",
-    "sic": "7372",
-    "sic_description": "Services-Prepackaged Software"
-  },
-  {
     "cik": "CIK0001032975",
     "ticker": "LOGI",
     "company_name": "LOGITECH INTERNATIONAL S.A.",
@@ -873,13 +775,6 @@
     "company_name": "DOCUSIGN, INC.",
     "sic": "7372",
     "sic_description": "Services-Prepackaged Software"
-  },
-  {
-    "cik": "CIK0000004127",
-    "ticker": "SWKS",
-    "company_name": "SKYWORKS SOLUTIONS, INC.",
-    "sic": "3674",
-    "sic_description": "Semiconductors & Related Devices"
   },
   {
     "cik": "CIK0001528396",
