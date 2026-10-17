@@ -106,13 +106,6 @@ questions:
   - id: q015
     question: Show me every company whose gross margin fell three years running.
     expect: [answered]  # gross margin
-    known_gap: >-
-      A filter over a computed sequence -- nine companies, a ratio per year, then
-      a three-step monotonic comparison. qwen2.5-coder:7b generates until it hits
-      the 4096-token ceiling and the truncated statement is refused. Measured
-      2026-09-23. Not a prompt bug: the hardest shape in the set, and a capability
-      limit of a 7B model. Skipped by default so it stops costing a run; pass
-      --include-known-gaps to run it anyway.
     needs: [retrieval, growth, multi_step]
     notes: A filter over a computed sequence, not over a stored value.
 
@@ -421,12 +414,6 @@ questions:
       -- sic_numbers.json carries code and description only. The SEC assigns
       offices by SIC range, so it is derivable given that mapping, which this
       project does not have.
-    known_gap: >-
-      The parser invents fiscal_year 2024 for "both quarterly and yearly" when
-      the question names no year, keeps it on the retry, and accept() rejects
-      it -- 10 of 10 cold runs, 2026-09-26. The question never reaches the
-      mapper, where "sic office" would be refused. A parser period problem, set
-      aside to be fixed separately.
 
   - id: q051
     question: "What is <Company>'s cash flow: operating, investing, financing"
