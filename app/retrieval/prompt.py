@@ -635,114 +635,59 @@ def needs_the_model(plan: QueryPlan) -> bool:
     return plan.intent == "derive" and not plan.over_time
 
 
-_FIGURES_JOB_DERIVE = """This question asks for a value COMPUTED from the figures -- a change, a
-share of a total, a growth rate. Compute it from `f.value` with a window
-function over `figures`, alias the result `value`, set `unit` to what the
-result is ('pure' for a ratio or a growth rate, the figures' own unit for a
-difference) and `derivation` to a short name for what you computed.
-Keep every row: the first period of a series has nothing before it, so its
-result is NULL, which is expected. No LIMIT 1."""
-
-#: Filled in per plan: ``{limit}`` is ``statement_limit``.
-_FIGURES_EXAMPLE_DERIVE = f"""WORKED EXAMPLE (invented name -- copy the FORM)
-
-  SELECT f.element_id, f.company_cik, f.ticker, f.entity_name,
-         f.fiscal_year, f.fiscal_period, f.period_start, f.period_end, f.is_instant,
-         f.value - LAG(f.value) OVER (
-           PARTITION BY f.element_id, f.company_cik ORDER BY f.period_end) AS value,
-         f.unit, 'change_from_prior' AS derivation
-  FROM {FIGURES_NAME} f
-  ORDER BY value ASC
-  LIMIT {{limit}}"""
+#: The result columns a row keeps from ``figures`` unchanged; the model computes
+#: the other three.
+_KEPT_COLUMNS = tuple(c for c in RESULT_COLUMNS if c not in ("value", "unit", "derivation"))
 
 
 def _figures_prompt(plan: QueryPlan) -> str:
-    """The prompt for a derivation over ``figures``.
+    """The prompt for a derivation over ``figures``: what the data is, what to
+    compute and what to return, in words. The model writes the SQL.
 
-    Short on purpose: no relation, no coordinates, no join and no operands --
-    ``figures`` already holds every value, computed. What is left is the layer
-    the model is for.
+    What is left for the model is an aggregate across companies -- the only
+    derivation the presenter can show (``AGGREGATES``); it refuses any other
+    label.
+
+    Measured 2026-10-16 on q040: a sentence offering the label 'unsupported'
+    for any other question led the model to write the aggregate into
+    `derivation` inside a CASE, and the statement was refused. Without it the
+    statement came back as intended on every run.
     """
-    spec = plan.result
-    cells = plan_cells(plan)
-    notes = _plan_notes(plan)
-    units = sorted({(cell.element_id, cell.result_unit) for cell in cells})
-    unit_lines = chr(10).join(f"      {element}: unit '{unit}'" for element, unit in units)
-    threshold_line = ""
+    condition = ""
     if plan.thresholds:
-        tests = "; ".join(
-            f"{t.element_id} {t.operator} {t.value:f} (from {t.element_text!r})"
-            for t in plan.thresholds
-        )
-        threshold_line = (
-            f"{chr(10)}  - Only rows meeting the question's condition are in `figures`: "
-            f"{tests}.{chr(10)}    It is already applied. Do not filter again."
-        )
-    # Only a derivation reaches here, and never over an over-time metric
-    # (`needs_the_model`), so `figures` carries no `derivation` column.
-    job = _FIGURES_JOB_DERIVE
-    limit = statement_limit(plan)
-    example = _FIGURES_EXAMPLE_DERIVE.format(limit=limit)
-    signature = "unit)"
-    return f"""You write the SELECT half of one PostgreSQL statement. SQL only, nothing else.
+        tests = ", ".join(repr(t.element_text) for t in plan.thresholds)
+        condition = f"{NEWLINE}Rows that fail the question's condition ({tests}) are already left out."
+    return f"""You write one PostgreSQL SELECT statement. Reply with the SQL only.
 
 QUESTION
 {plan.question}
 
-WHAT THE ANSWER MUST CONTAIN
-shape={spec.shape}, varies along {spec.axes or ["nothing"]}, {spec.row_count} row(s) of
-underlying data ({spec.companies} compan(ies) x {spec.periods} period(s) x
-{spec.metrics} metric(s)). Do not collapse an axis the answer varies along.
+THE DATA
+`{FIGURES_NAME}` holds the figures this question is about, one row per company,
+metric and period. They are already fetched, already computed, and already
+limited to what the question asks about:{condition}
 
-EVERYTHING YOU NEED IS IN ONE CTE: `{FIGURES_NAME}`
-It is already written above whatever you write. Do NOT write `WITH`. Begin
-your reply at `SELECT`, and read FROM `{FIGURES_NAME}`.
+  {FIGURES_NAME}({", ".join(_KEPT_COLUMNS)}, value, unit)
 
-  {FIGURES_NAME}(element_id, company_cik, ticker, entity_name, fiscal_year,
-          fiscal_period, period_start, period_end, is_instant, value, {signature}
+`element_id` identifies the metric, `value` is the figure, `unit` is its unit.
 
-  - One row per company, period and metric the question needs.
-  - `value` is each metric's figure ALREADY COMPUTED -- a margin is already
-    divided, free cash flow already subtracted -- in `unit`:
-{unit_lines}
-    Never recompute a metric from other figures, and never join anything to
-    get one. Read `value`.{threshold_line}
-  - `ticker` and `entity_name` are for display only. Never filter on them.
+WHAT TO COMPUTE
+The question asks for one figure computed across companies: an average, a
+sum, a median, a minimum or a maximum of `value`, for each metric and period.
+Use a window function so every row carries the result.
 
-{example}
+WHAT TO RETURN
+Every row of `{FIGURES_NAME}`, so the reader can see which figures went into the
+result, with exactly these columns:
+  - {", ".join(_KEPT_COLUMNS)}: the row's own, unchanged
+  - value: the computed figure, the same on every row of its metric and period
+  - unit: the row's own unit
+  - derivation: what you computed: 'average', 'sum', 'median', 'min' or 'max'
 
-YOUR JOB
-{job}
-
-OUTPUT
-Project exactly these column names, in any order:
-  {", ".join(RESULT_COLUMNS)}
-
-RULES (the statement is rejected if it breaks one)
-1. Begin at SELECT and read FROM `{FIGURES_NAME}`. No `WITH`, no `VALUES`.
-   SELECT only: no SET, no set_config(), no SELECT INTO, no locking clause.
-2. End with `LIMIT {limit}`.
-3. Give every projected column an explicit alias unless it is a bare column
-   reference. `NULL::text` without an alias is a column named "text".
-4. Never write a number, a date or a company name into the SQL as a literal.
-5. Always project `unit`: `f.unit` for figures, or for a sum, average or
-   difference of figures in one unit; 'pure' for a ratio or a growth rate.
-   Measured: an average left it out and the statement was refused.
-6. `{FIGURES_NAME}` is already the complete row selection. Add no WHERE of your
-   own -- no year, no company -- unless the question's own condition needs one.
-
-CAVEATS ALREADY ATTACHED TO THIS PLAN (do not drop rows because of them)
-{chr(10).join(notes) if notes else "- none"}
+`{FIGURES_NAME}` is already defined: do not write WITH, read only from `{FIGURES_NAME}`,
+and do not filter its rows. End with LIMIT {statement_limit(plan)}.
 
 SQL:"""
-
-
-def _plan_notes(plan: QueryPlan) -> list[str]:
-    notes = [f"- {note.kind}: {note.message}" for note in plan.notes]
-    for index, binding in enumerate(plan.bindings):
-        for note in binding.notes:
-            notes.append(f"- binding {index} ({binding.element_id}) {note.kind}: {note.message}")
-    return notes
 
 
 #: Characters of *this* prompt per token, measured 2026-09-24: the 378-cell

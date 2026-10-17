@@ -192,7 +192,7 @@ def test_a_multi_operand_metric_never_reaches_the_model_as_operands() -> None:
     )
     plain = _plan([_binding()], [_annual()])
     text = build_prompt(ratio)
-    assert "EVERYTHING YOU NEED IS IN ONE CTE: `figures`" in text
+    assert "`figures` holds the figures this question is about" in text
     for leak in ("operand", "SOME ROWS COMBINE", "COMBINED ANSWER", "c0 / c1", "NULLIF"):
         assert leak not in text, leak
     assert "operand" not in build_prompt(plain)
@@ -232,14 +232,12 @@ async def test_a_statement_s_limit_is_one_row_past_its_plan(monkeypatch) -> None
 
 
 def test_the_model_is_told_the_plan_s_own_limit() -> None:
-    """In the worked example and in the rule; nothing else reaches the model
-    as a number it may copy."""
+    """Once, in the closing instruction; nothing else reaches the model as a
+    number it may copy."""
     import re
 
     prompt = build_prompt(_plan([_binding()], _years(2023, 2024), intent="derive"))
-    limits = re.findall(r"LIMIT (\d+)", prompt)
-    assert limits.count("3") == 2, limits
-    assert set(limits) <= {"1", "3"}, limits  # "No LIMIT 1." is the other
+    assert re.findall(r"LIMIT (\d+)", prompt) == ["3"]
 
 
 async def test_a_plan_past_the_ceiling_is_refused_before_the_model(monkeypatch) -> None:
@@ -276,20 +274,36 @@ def test_a_result_cut_at_the_limit_is_refused_by_every_verdict() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_prompt_states_the_row_count_the_answer_needs() -> None:
-    plan = _plan(
-        [_binding(company_cik=APPLE), _binding(company_cik=NVIDIA)],
-        [_annual(APPLE, 2024), _annual(NVIDIA, 2024)],
-        companies=2,
-        shape="table",
-    )
-    assert "2 row(s) of" in build_prompt(plan)
-
-
-def test_plan_notes_reach_the_prompt() -> None:
+def test_plan_notes_stay_out_of_the_prompt() -> None:
+    """Notes reach the reader directly. Measured 2026-10-16 on q040: shown to
+    the model as caveats, they led it to add a filter of its own."""
     note = Note(kind="concept_switch", message="tag changed")
     plan = _plan([_binding(notes=[note])], [_annual()])
-    assert "tag changed" in build_prompt(plan)
+    assert "tag changed" not in build_prompt(plan)
+
+
+def test_the_prompt_offers_only_labels_the_presenter_shows() -> None:
+    """Measured 2026-10-16 on q040: offering 'unsupported' for any other
+    question led the model to write the aggregate into `derivation`."""
+    import re
+
+    from app.presenter import AGGREGATES
+
+    prompt = build_prompt(_plan([_binding()], [_annual()], intent="derive"))
+    line = next(line for line in prompt.splitlines() if "- derivation:" in line)
+    labels = set(re.findall(r"'([^']+)'", line))
+    assert labels and labels <= AGGREGATES, labels
+    assert "unsupported" not in prompt
+
+
+def test_the_prompt_shows_the_model_no_sql_to_copy() -> None:
+    """The model writes the statement from a description of the data and the
+    answer; no statement, example or fragment of one is in the prompt."""
+    import re
+
+    prompt = build_prompt(_plan([_binding()], [_annual()], intent="derive"))
+    for fragment in (r"\bFROM\b", r"\bOVER\s*\(", r"\bGROUP BY\b", r"\bAVG\s*\("):
+        assert not re.search(fragment, prompt), fragment
 
 
 def _cell(**overrides) -> prompt_module.PlanCell:
@@ -347,16 +361,6 @@ def test_the_emitted_cte_copies_the_plan_s_dates_verbatim() -> None:
     cte = prompt_module.emit_cte(cells)
     assert "DATE '2020-06-01'" in cte and "DATE '2020-08-31'" in cte
     assert "2021-06-01" not in cte
-
-
-def test_every_example_begins_at_select() -> None:
-    """The model is told to begin at SELECT, so no example may show it
-    anything else -- a `WITH` or `VALUES` in one is copied."""
-    from app.retrieval.prompt import _FIGURES_EXAMPLE_DERIVE
-
-    body = _FIGURES_EXAMPLE_DERIVE.split("copy the FORM)", 1)[1]
-    assert body.strip().startswith("SELECT"), body[:60]
-    assert "WITH" not in body and "VALUES" not in body
 
 
 # --------------------------------------------------------------------------- #
@@ -616,12 +620,12 @@ def test_a_threshold_is_applied_in_the_statement_not_by_the_model() -> None:
     figures = emit_figures(plan)
     assert "WHERE (w.element_id <> 'e1' OR (v.value) > 100)" in figures
     text = build_prompt(plan)
-    assert "Only rows meeting the question's condition are in `figures`" in text
-    assert "more than a hundred" in text and "Do not filter again" in text
+    assert "Rows that fail the question's condition ('more than a hundred')" in text
+    assert "are already left out" in text and "do not filter its rows" in text
 
 
 def test_the_prompt_says_nothing_about_thresholds_when_there_are_none() -> None:
-    assert "FEWER rows" not in build_prompt(_plan([_binding()], [_annual()]))
+    assert "the question's condition" not in build_prompt(_plan([_binding()], [_annual()]))
 
 
 # --------------------------------------------------------------------------- #
