@@ -68,6 +68,25 @@ Qwen improvises today stop working until listed; and it is another parser
 prompt change, so re-measure the colon-list questions (q044, q045, q048,
 q051) cold.
 
+### A median across companies
+
+Asked for, but never answered; both failures refuse, neither answers wrongly.
+
+- **The statement.** The SQL prompt asks Qwen for the aggregate as a window
+  function, so every row of `figures` carries it — without that sentence it
+  averaged each company with itself. PostgreSQL has no median window:
+  `percentile_cont(0.5) WITHIN GROUP (ORDER BY value)` is an ordered-set
+  aggregate and refuses `OVER (...)` (`FeatureNotSupported`). "What was the
+  median R&D spend of Apple, Microsoft and Alphabet in 2023?" fails there.
+  Average, sum, min and max work as windows. A median needs a grouped
+  subquery joined back to every row, or the aggregate written in Python
+  (above).
+- **The parse.** "What was the median net income across these companies in
+  2024?" never reaches the SQL: the parser emits a `metric_qualifier` without
+  `qualifies` and `accept()` refuses it.
+
+Neither question is in the eval set; add them when this is fixed.
+
 ### Relationships between metrics (G5)
 
 In order: a way for `QueryIn` to carry a relation between element ids
