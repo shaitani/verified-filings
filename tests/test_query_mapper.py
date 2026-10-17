@@ -311,6 +311,20 @@ def test_gaps_name_a_whole_year_or_the_quarters_missing_from_it() -> None:
     )
 
 
+async def test_a_message_names_few_companies_counts_many_and_omits_all(monkeypatch) -> None:
+    """At 113 companies, naming every filer with no "R&D spend" overflowed a
+    Note's 512 characters and the mapper crashed (q040, q042)."""
+
+    async def _scope(ciks, _session):
+        return f"cik {', '.join(map(str, ciks))}"
+
+    monkeypatch.setattr(query_mapper, "_describe_scope", _scope)
+    every = list(range(1, 114))
+    assert await query_mapper._some_of([3, 7], None, among=every) == "cik 3, 7"
+    assert await query_mapper._some_of(every[:43], None, among=every) == "43 of the companies"
+    assert await query_mapper._some_of(every, None, among=every) is None
+
+
 async def test_a_gap_over_many_companies_never_states_the_dataset_s_size() -> None:
     """"Since 2020" over every filer is a note about fiscal 2020, not about "the
     20 companies that resolved". Past four, a subset is counted, never totalled.

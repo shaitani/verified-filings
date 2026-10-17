@@ -26,7 +26,7 @@ retrieval role deliberately lacks. See ``app/db/roles.py``.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -569,13 +569,21 @@ def _over_time(
         covered = {now.company_cik for now, _ in pairs}
         left_out = sorted({p.company_cik for p in asked if key(p) in have} - covered)
         if left_out:
+            # As `_some_of`, without a session to name them: listed while four
+            # or fewer, then counted -- the sentence is never cut to fit. Some
+            # company always has a pair here, so it is never every one.
+            who = (
+                f"cik {', '.join(map(str, left_out))}"
+                if len(left_out) <= 4
+                else f"{len(left_out)} of the companies"
+            )
             notes.append(
                 Note(
                     kind="partial_coverage",
                     message=(
-                        f"No {kind} of {element.text!r} for cik {', '.join(map(str, left_out))}: "
+                        f"No {kind} of {element.text!r} for {who}: "
                         "there is no earlier period loaded to measure it against"
-                    )[:512],
+                    ),
                 )
             )
     return entries, problems, notes
@@ -913,6 +921,25 @@ async def _describe_scope(ciks: list[int], session: AsyncSession) -> str:
     return await _describe_companies(ciks, session)
 
 
+async def _some_of(
+    ciks: list[int], session: AsyncSession, *, among: Collection[int]
+) -> str | None:
+    """The companies a reader's message is about, out of ``among``.
+
+    Named while there are four or fewer. Past that, counted but never totalled:
+    a total would tell the reader how many companies the dataset holds
+    (presenter DESIGN §2), and a list of names has no length while a ``Note``
+    or a reason holds 512 characters -- at 113 companies "R&D spend" and
+    "total debt" named enough of them to fail validation (q040, q042). None
+    when it is every company in ``among``: the message need not name any.
+    """
+    if len(ciks) <= 4:
+        return await _describe_scope(ciks, session)  # names them
+    if set(ciks) >= set(among):
+        return None
+    return f"{len(ciks)} of the companies"
+
+
 async def _describe_companies(ciks: list[int], session: AsyncSession) -> str:
     """``"Alphabet Inc. (GOOGL), Apple Inc. (AAPL)"`` -- the companies behind a
     list of ciks, for a message a person has to act on.
@@ -1179,13 +1206,9 @@ async def _range_gap_notes(
         companies_by_gaps[described].append(company_cik)
 
     async def whose(company_ciks: list[int]) -> str:
-        """Named while few; past that never a total, which would tell the reader
-        how many companies the dataset holds (presenter DESIGN §2)."""
-        if len(company_ciks) <= 4:
-            return f" for {await _describe_scope(company_ciks, session)}"  # names them
-        if set(company_ciks) == set(asked_by_company):
-            return ""  # every company asked about: it is the period that is missing
-        return f" for {len(company_ciks)} of the companies"
+        # Every company asked about: it is the period that is missing.
+        who = await _some_of(company_ciks, session, among=asked_by_company)
+        return f" for {who}" if who else ""
 
     return [
         Note(
@@ -1622,7 +1645,8 @@ async def _resolve_metrics(
             uncovered_ciks=uncovered,
         )
         if uncovered:
-            dropped = await _describe_companies(uncovered, session)
+            # None only when every company is uncovered, which is the last branch.
+            dropped = await _some_of(uncovered, session, among=ciks)
             kept = sorted({b.company_cik for b in bindings[bound_before:]})
             if kept and _one_sided(intent, named=named, kept=len(kept)):
                 # Same rule as a company that is not loaded at all: one side
@@ -1649,15 +1673,15 @@ async def _resolve_metrics(
                     )
                 )
             else:
-                # Nothing bound anywhere. One refusal naming every company,
-                # not one per company: "total debt" over twenty filers used to
-                # produce twenty near-identical reasons for one phrase.
+                # Nothing bound anywhere. One refusal for the phrase, not one per
+                # company: "total debt" over twenty filers used to produce twenty
+                # near-identical reasons for one phrase.
                 problems.append(
                     Unresolved(
                         element_id=element.id,
                         reason=f"No filed figure for {element.text!r} covers the periods "
-                        f"asked about, for {dropped}: the filings in this dataset do not "
-                        f"report it",
+                        f"asked about{f', for {dropped}' if dropped else ''}: the filings "
+                        f"in this dataset do not report it",
                     )
                 )
 
