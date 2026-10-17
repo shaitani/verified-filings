@@ -557,3 +557,14 @@ questions:
     question: how much money did google make in 2025?
     expect: [asked]
     needs: [retrieval]
+
+  # --- aggregates across companies -------------------------------------------
+  - id: q067
+    question: What was the average operating income across these companies in 2023 and 2024?
+    expect: [answered]  # operating income, one average per year
+    needs: [retrieval, aggregation, cross_company_total]
+
+  - id: q068
+    question: What was the average revenue of AMD, Intel and NVIDIA in 2024?
+    expect: [answered]  # revenue
+    needs: [retrieval, aggregation]
